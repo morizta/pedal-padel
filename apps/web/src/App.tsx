@@ -48,6 +48,7 @@ import {
   deleteEvent,
   leagueStandings,
   globalStats,
+  playerHistory,
   type DbEvent,
 } from "./db";
 import { useAsync } from "./useAsync";
@@ -58,6 +59,7 @@ type View =
   | { t: "create"; leagueId: string | null }
   | { t: "session"; id: string }
   | { t: "leaderboard" }
+  | { t: "player"; name: string }
   | { t: "profile" };
 
 export function App() {
@@ -108,7 +110,17 @@ export function App() {
           />
         )}
         {view.t === "leaderboard" && (
-          <LeaderboardScreen onBack={() => setView({ t: "home" })} />
+          <LeaderboardScreen
+            onBack={() => setView({ t: "home" })}
+            onOpenPlayer={(name) => setView({ t: "player", name })}
+          />
+        )}
+        {view.t === "player" && (
+          <PlayerProfileScreen
+            key={view.name}
+            name={view.name}
+            onBack={() => setView({ t: "leaderboard" })}
+          />
         )}
         {view.t === "profile" && (
           <ProfileScreen user={user} onBack={() => setView({ t: "home" })} />
@@ -542,7 +554,13 @@ function RankBadge({ rank }: { rank: number }) {
  * sesi user), plus daftar/hapus pemain. Yang sudah main diperingkat; yang belum
  * tampil di bawah. Rating dihitung ulang dari hasil match (keyed by nama).
  */
-function LeaderboardScreen({ onBack }: { onBack: () => void }) {
+function LeaderboardScreen({
+  onBack,
+  onOpenPlayer,
+}: {
+  onBack: () => void;
+  onOpenPlayer: (name: string) => void;
+}) {
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
   const [newName, setNewName] = useState("");
@@ -667,6 +685,10 @@ function LeaderboardScreen({ onBack }: { onBack: () => void }) {
                     –
                   </span>
                 )}
+                <button
+                  onClick={() => onOpenPlayer(r.name)}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
                 <TeamAvatar name={r.name} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -697,6 +719,7 @@ function LeaderboardScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
                 </div>
+                </button>
                 <button
                   onClick={() => remove(r.id, r.name)}
                   className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-slate-300 hover:bg-red-50 hover:text-red-600"
@@ -714,6 +737,145 @@ function LeaderboardScreen({ onBack }: { onBack: () => void }) {
             {playedCount} pemain sudah main · {rows.length} terdaftar
           </p>
         )}
+      </section>
+    </div>
+  );
+}
+
+function ProfileStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2 text-center">
+      <div className="text-lg font-bold tabular-nums">{value}</div>
+      <div className="text-[11px] text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+/** Profil pemain (by nama): rating ELO, statistik, dan riwayat pertandingan. */
+function PlayerProfileScreen({
+  name,
+  onBack,
+}: {
+  name: string;
+  onBack: () => void;
+}) {
+  const stats = useAsync(() => globalStats(), []);
+  const hist = useAsync(() => playerHistory(name), [name]);
+
+  const me = (() => {
+    if (!stats.data) return null;
+    const r = computeRatings(stats.data.names, stats.data.results).find(
+      (x) => x.name === name
+    );
+    const s = computeStandings(stats.data.results, { compensate: false }).find(
+      (x) => x.playerId === name
+    );
+    return { rating: r?.rating ?? null, played: r?.matchesPlayed ?? 0, st: s ?? null };
+  })();
+
+  const history = hist.data ?? [];
+  const rel = me ? Math.round(reliability(me.played) * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="text-sm text-slate-500 hover:text-slate-900"
+      >
+        ← Kembali
+      </button>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-4">
+          <span
+            className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-lg font-bold ${avatarColor(
+              name
+            )}`}
+          >
+            {initialsOf(name)}
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-bold">{name}</h2>
+            <p className="text-sm text-slate-400">
+              {me && me.played > 0
+                ? rel < 100
+                  ? `Keandalan ${rel}% · ${me.played} match`
+                  : `Rating stabil · ${me.played} match`
+                : "Belum main"}
+            </p>
+          </div>
+          <div className="ml-auto shrink-0 text-right">
+            <div className="text-2xl font-bold tabular-nums">
+              {me?.rating != null ? Math.round(me.rating) : 1000}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-slate-400">
+              ELO
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <ProfileStat label="Match" value={me?.played ?? 0} />
+          <ProfileStat
+            label="Menang–Kalah"
+            value={me?.st ? `${me.st.wins}–${me.st.losses}` : "0–0"}
+          />
+          <ProfileStat
+            label="Win Rate"
+            value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
+          />
+          <ProfileStat label="Poin" value={me?.st?.points ?? 0} />
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-3 font-semibold">Riwayat Pertandingan</h3>
+        <StateText
+          loading={hist.loading}
+          error={hist.error}
+          empty={!hist.loading && !hist.error && history.length === 0}
+          emptyText="Belum ada pertandingan."
+        />
+        <ul className="space-y-1.5">
+          {history.map((m, i) => {
+            const [label, cls] =
+              m.result === "win"
+                ? ["Menang", "bg-emerald-100 text-emerald-700"]
+                : m.result === "loss"
+                  ? ["Kalah", "bg-rose-100 text-rose-700"]
+                  : ["Seri", "bg-slate-100 text-slate-600"];
+            return (
+              <li
+                key={i}
+                className="rounded-xl border border-slate-200 p-2.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm">
+                    <b className="tabular-nums">
+                      {m.scoreFor}–{m.scoreAgainst}
+                    </b>{" "}
+                    <span className="text-slate-400">vs</span>{" "}
+                    {m.opponents.join(" & ")}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}
+                  >
+                    {label}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-xs text-slate-400">
+                  bareng {m.partner} · {m.eventName} · {fmtDate(m.date)}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </section>
     </div>
   );

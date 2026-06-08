@@ -437,3 +437,45 @@ export async function globalStats(): Promise<{
   const names = Array.from(new Set(events.flatMap((e) => e.players)));
   return { results, names, eventCount: events.length };
 }
+
+/** Satu pertandingan dari sudut pandang seorang pemain (untuk riwayat profil). */
+export interface PlayerMatch {
+  eventId: string;
+  eventName: string;
+  date: number;
+  format: Format;
+  partner: string;
+  opponents: string[];
+  scoreFor: number;
+  scoreAgainst: number;
+  result: "win" | "loss" | "tie";
+}
+
+/** Riwayat match seorang pemain (by nama) lintas semua sesi, terbaru dulu. */
+export async function playerHistory(name: string): Promise<PlayerMatch[]> {
+  const events = await listEvents();
+  const out: PlayerMatch[] = [];
+  for (const e of events) {
+    for (const { match, scoreA, scoreB } of eventResults(e)) {
+      const onA = match.teamA.includes(name);
+      const onB = match.teamB.includes(name);
+      if (!onA && !onB) continue;
+      const mine = onA ? match.teamA : match.teamB;
+      const opp = onA ? match.teamB : match.teamA;
+      const sf = onA ? scoreA : scoreB;
+      const sa = onA ? scoreB : scoreA;
+      out.push({
+        eventId: e.id,
+        eventName: e.name,
+        date: e.createdAt,
+        format: e.format,
+        partner: mine.find((x) => x !== name) ?? name,
+        opponents: [...opp],
+        scoreFor: sf,
+        scoreAgainst: sa,
+        result: sf > sa ? "win" : sf < sa ? "loss" : "tie",
+      });
+    }
+  }
+  return out.sort((a, b) => b.date - a.date);
+}
