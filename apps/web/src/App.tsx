@@ -1956,73 +1956,71 @@ function EventList({
   onDelete: (id: string) => void;
 }) {
   if (events.length === 0)
-    return <p className="text-sm text-slate-400">Belum ada turnamen.</p>;
+    return (
+      <p className="text-sm text-on-surface-variant">Belum ada turnamen.</p>
+    );
   return (
     <ul className="space-y-2">
-      {events.map((e) => (
-        <li
-          key={e.id}
-          className="group flex items-center gap-2 rounded-xl border border-slate-200 p-3 hover:border-lime-400 hover:bg-lime-50/40"
-        >
-          <button
-            onClick={() => onOpen(e.id)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+      {events.map((e) => {
+        const upcoming =
+          e.status !== "finished" && !!e.startAt && e.startAt > Date.now();
+        return (
+          <li
+            key={e.id}
+            className="group flex items-center gap-2 rounded-xl border border-outline-variant/50 p-2.5 transition hover:border-primary-fixed-dim hover:bg-surface-container-low"
           >
-            <span className="min-w-0">
-              <span className="block truncate font-semibold">
-                {e.visibility === "public"
-                  ? "🌐 "
-                  : e.visibility === "private"
-                    ? "🔒 "
-                    : ""}
-                {e.name}
-              </span>
-              {e.description && (
-                <span className="block truncate text-xs text-slate-400">
-                  {e.description}
-                </span>
-              )}
-              <span className="text-xs text-slate-400">
-                {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
-                {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                {e.visibility === "private" ? "lock" : "sports_tennis"}
               </span>
             </span>
-            {(() => {
-              const upcoming =
-                e.status !== "finished" &&
-                !!e.startAt &&
-                e.startAt > Date.now();
-              return (
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    e.status === "finished"
-                      ? "bg-slate-100 text-slate-500"
-                      : upcoming
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-lime-100 text-lime-700"
-                  }`}
-                >
-                  {e.status === "finished"
-                    ? "selesai"
-                    : upcoming
-                      ? "mendatang"
-                      : "berjalan"}
+            <button
+              onClick={() => onOpen(e.id)}
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{e.name}</span>
+                {e.description && (
+                  <span className="block truncate text-xs text-on-surface-variant">
+                    {e.description}
+                  </span>
+                )}
+                <span className="text-xs text-on-surface-variant">
+                  {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                  {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
                 </span>
-              );
-            })()}
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Hapus turnamen "${e.name}"?`)) onDelete(e.id);
-            }}
-            className="shrink-0 rounded-lg px-2 py-1 text-slate-300 hover:bg-red-50 hover:text-red-600"
-            aria-label="Hapus"
-            title="Hapus"
-          >
-            🗑
-          </button>
-        </li>
-      ))}
+              </span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
+                  e.status === "finished"
+                    ? "bg-surface-container text-on-surface-variant"
+                    : upcoming
+                      ? "bg-elo-gold/20 text-elo-bronze"
+                      : "bg-primary-container text-on-primary-container"
+                }`}
+              >
+                {e.status === "finished"
+                  ? "SELESAI"
+                  : upcoming
+                    ? "MENDATANG"
+                    : "LIVE"}
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`Hapus turnamen "${e.name}"?`)) onDelete(e.id);
+              }}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
+              aria-label="Hapus"
+              title="Hapus"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                delete
+              </span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -2049,80 +2047,113 @@ function LeagueScreen({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-white">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-bold">{league.name}</h2>
-          {league.description && (
-            <p className="mt-0.5 text-sm text-slate-300">{league.description}</p>
-          )}
-          <p className="text-xs text-slate-400">
-            {events.length} sesi · dibuat {fmtDate(league.createdAt)}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="rounded-full bg-white/10 px-2 py-0.5">
-              {league.visibility === "private" ? "🔒 Private" : "🌐 Public"}
+      <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary-fixed/10 blur-3xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <span className="font-label-caps text-label-caps text-primary-fixed">
+              {league.visibility === "private" ? "LIGA PRIVAT" : "LIGA PUBLIK"}
             </span>
-            {league.visibility === "private" && league.joinCode && (
-              <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(league.joinCode!);
-                  alert(`Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`);
-                }}
-                className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono font-semibold tracking-wider text-lime-300 hover:bg-lime-400/30"
-                title="Salin kode join"
-              >
-                {league.joinCode} 📋
-              </button>
+            <h2 className="mt-1 truncate font-display text-2xl font-bold">
+              {league.name}
+            </h2>
+            {league.description && (
+              <p className="mt-0.5 text-sm text-white/60">
+                {league.description}
+              </p>
             )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-white/10 px-2.5 py-1 font-label-caps text-label-caps">
+                {events.length} SESI
+              </span>
+              <span className="rounded-full bg-white/10 px-2.5 py-1 font-label-caps text-label-caps">
+                🗓 {fmtDate(league.createdAt)}
+              </span>
+              {league.visibility === "private" && league.joinCode && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(league.joinCode!);
+                    alert(
+                      `Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`
+                    );
+                  }}
+                  className="flex items-center gap-1 rounded-full bg-primary-fixed/15 px-2.5 py-1 font-data-mono text-data-mono font-bold tracking-wider text-primary-fixed hover:bg-primary-fixed/25"
+                  title="Salin kode join"
+                >
+                  {league.joinCode}
+                  <span className="material-symbols-outlined text-[14px]">
+                    content_copy
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
+          <button
+            onClick={() => onNavigate({ t: "create", leagueId })}
+            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Tambah Sesi
+          </button>
         </div>
-        <button
-          onClick={() => onNavigate({ t: "create", leagueId })}
-          className="ml-2 shrink-0 rounded-lg bg-lime-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-lime-300"
-        >
-          + Tambah Sesi
-        </button>
-      </div>
+      </section>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card title="📊 Klasemen Liga (akumulasi pemain)">
           {standings.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="rounded-xl bg-surface-container-low px-3 py-6 text-center text-sm text-on-surface-variant">
               Belum ada skor. Tambah sesi & input skor untuk mengisi klasemen.
             </p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-outline-variant/30 text-left font-label-caps text-label-caps text-on-surface-variant">
                   <th className="pb-2 pr-2">#</th>
-                  <th className="pb-2">Pemain</th>
+                  <th className="pb-2">PEMAIN</th>
                   <th className="pb-2 text-right">P</th>
                   <th className="pb-2 text-right" title="Menang-Kalah-Seri">
                     W-L-T
                   </th>
                   <th className="pb-2 text-right" title="Jumlah match dimainkan">
-                    Main
+                    MAIN
                   </th>
                   <th className="pb-2 text-right" title="Selisih poin">
-                    Diff
+                    DIFF
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {standings.map((s, i) => (
-                  <tr key={s.playerId} className="border-t border-slate-100">
-                    <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
-                    <td className="py-1.5 font-medium">{s.playerId}</td>
-                    <td className="py-1.5 text-right font-bold tabular-nums">
+                  <tr
+                    key={s.playerId}
+                    className="border-b border-outline-variant/15 last:border-0"
+                  >
+                    <td className="py-2 pr-2">
+                      <span
+                        className={`grid h-6 w-6 place-items-center rounded-full font-data-mono text-xs font-bold ${
+                          i === 0
+                            ? "bg-elo-gold/20 text-elo-bronze"
+                            : i === 1
+                              ? "bg-elo-silver/20 text-on-surface-variant"
+                              : i === 2
+                                ? "bg-elo-bronze/15 text-elo-bronze"
+                                : "text-on-surface-variant"
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                    </td>
+                    <td className="py-2 font-semibold">{s.playerId}</td>
+                    <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                       {s.points}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
+                    <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                       {s.wins}-{s.losses}-{s.ties}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
+                    <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                       {s.played}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
+                    <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                       {s.gamesDiff > 0 ? `+${s.gamesDiff}` : s.gamesDiff}
                     </td>
                   </tr>
@@ -3754,8 +3785,8 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 font-semibold">{title}</h3>
+    <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+      <h3 className="mb-4 font-display text-base font-bold">{title}</h3>
       {children}
     </section>
   );
