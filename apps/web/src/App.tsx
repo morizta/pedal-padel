@@ -191,6 +191,11 @@ function ProfileScreen({
 }) {
   const profileQ = useAsync(() => getMyProfile(), []);
   const profile = profileQ.data;
+  const statsQ = useAsync(() => globalStats(), []);
+  const histQ = useAsync(
+    () => (user ? playerHistory(displayName(user)) : Promise.resolve([])),
+    [user]
+  );
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -212,6 +217,21 @@ function ProfileScreen({
   const shownName = profile?.name || displayName(u);
   const shownUser = profile?.username || handle(u);
   const shownAvatar = profile?.avatarUrl || null;
+
+  // Statistik & riwayat akun (by nama, dari semua sesi).
+  const myName = displayName(u);
+  const me = (() => {
+    if (!statsQ.data) return null;
+    const r = computeRatings(statsQ.data.names, statsQ.data.results).find(
+      (x) => x.name === myName
+    );
+    const s = computeStandings(statsQ.data.results, { compensate: false }).find(
+      (x) => x.playerId === myName
+    );
+    return { rating: r?.rating ?? null, played: r?.matchesPlayed ?? 0, st: s ?? null };
+  })();
+  const history = histQ.data ?? [];
+  const rel = me && me.played > 0 ? Math.round(reliability(me.played) * 100) : 0;
 
   function startEdit() {
     setName(profile?.name || displayName(u));
@@ -327,8 +347,8 @@ function ProfileScreen({
       <Card title="📈 Rating">
         <div className="grid grid-cols-2 gap-3 text-center">
           {[
-            { k: "Solo", v: "–" },
-            { k: "Team", v: "–" },
+            { k: "ELO", v: me && me.played > 0 ? Math.round(me.rating!) : "–" },
+            { k: "Keandalan", v: me && me.played > 0 ? `${rel}%` : "–" },
           ].map((r) => (
             <div key={r.k} className="rounded-xl bg-slate-50 py-4">
               <div className="text-xs uppercase tracking-wide text-slate-400">
@@ -344,9 +364,12 @@ function ProfileScreen({
       <Card title="📊 Statistik">
         <div className="grid grid-cols-3 gap-3 text-center">
           {[
-            { k: "Main", v: 0 },
-            { k: "Menang", v: 0 },
-            { k: "Win %", v: "0%" },
+            { k: "Main", v: me?.played ?? 0 },
+            { k: "Menang", v: me?.st?.wins ?? 0 },
+            {
+              k: "Win %",
+              v: me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%",
+            },
           ].map((s) => (
             <div key={s.k} className="rounded-xl bg-slate-50 py-4">
               <div className="text-xs uppercase tracking-wide text-slate-400">
@@ -360,13 +383,43 @@ function ProfileScreen({
 
       {/* Riwayat */}
       <Card title="🎾 Pertandingan Terakhir">
-        <p className="rounded-xl bg-slate-50 py-8 text-center text-sm text-slate-400">
-          Belum ada pertandingan.
-          <br />
-          <span className="text-xs">
-            Riwayat & statistik terisi setelah data pindah ke cloud.
-          </span>
-        </p>
+        <StateText
+          loading={histQ.loading}
+          error={histQ.error}
+          empty={!histQ.loading && !histQ.error && history.length === 0}
+          emptyText="Belum ada pertandingan."
+        />
+        <ul className="space-y-1.5">
+          {history.slice(0, 10).map((m, i) => {
+            const [label, cls] =
+              m.result === "win"
+                ? ["Menang", "bg-emerald-100 text-emerald-700"]
+                : m.result === "loss"
+                  ? ["Kalah", "bg-rose-100 text-rose-700"]
+                  : ["Seri", "bg-slate-100 text-slate-600"];
+            return (
+              <li key={i} className="rounded-xl border border-slate-200 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm">
+                    <b className="tabular-nums">
+                      {m.scoreFor}–{m.scoreAgainst}
+                    </b>{" "}
+                    <span className="text-slate-400">vs</span>{" "}
+                    {m.opponents.join(" & ")}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}
+                  >
+                    {label}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-xs text-slate-400">
+                  bareng {m.partner} · {m.eventName} · {fmtDate(m.date)}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </Card>
 
       <button
@@ -677,6 +730,7 @@ function LeaderboardScreen({
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
   const [newName, setNewName] = useState("");
+  const [limit, setLimit] = useState(10);
 
   async function register() {
     if (await createPlayer(newName)) {
@@ -776,7 +830,7 @@ function LeaderboardScreen({
         />
 
         <ol className="space-y-1.5">
-          {rows.map((r) => {
+          {rows.slice(0, limit).map((r) => {
             const played = r.played > 0;
             if (played) rank += 1;
             const rel = Math.round(reliability(r.played) * 100);
@@ -844,6 +898,15 @@ function LeaderboardScreen({
             );
           })}
         </ol>
+
+        {rows.length > limit && (
+          <button
+            onClick={() => setLimit((n) => n + 10)}
+            className="mt-2 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
+          >
+            Muat lebih banyak ({rows.length - limit} lagi)
+          </button>
+        )}
 
         {playedCount > 0 && (
           <p className="mt-3 text-center text-xs text-slate-400">
