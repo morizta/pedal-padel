@@ -1060,7 +1060,7 @@ function CreateScreen({
           <Field label="Susun tim">
             <ManualTeamEditor
               players={selected}
-              teams={validManualTeams}
+              teams={manualTeams}
               onChange={setManualTeams}
             />
           </Field>
@@ -2038,6 +2038,138 @@ function Toggle({
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+type ManualPlayer = { id: string; name: string };
+
+/**
+ * Susun tim manual (format tim): kartu Tim dengan 2 kursi. Ketuk pemain dari
+ * pool untuk mengisi kursi kosong berikutnya; ketuk kursi terisi untuk
+ * mengosongkannya. Controlled — sumber kebenaran ada di `teams` (mentah,
+ * boleh berisi tim separuh terisi). Posisi tim stabil agar tidak melompat.
+ */
+function ManualTeamEditor({
+  players,
+  teams,
+  onChange,
+}: {
+  players: ManualPlayer[];
+  teams: ManualPlayer[][];
+  onChange: (teams: ManualPlayer[][]) => void;
+}) {
+  const inSel = (p: ManualPlayer) => players.some((s) => s.id === p.id);
+  const teamCount = Math.floor(players.length / 2);
+
+  // Normalisasi tanpa mengubah urutan: buang pemain yang tak lagi dipilih,
+  // cap 2/tim, ambil sebanyak teamCount, lalu pad dengan kursi kosong.
+  const slots: ManualPlayer[][] = teams
+    .slice(0, teamCount)
+    .map((t) => t.filter(inSel).slice(0, 2));
+  while (slots.length < teamCount) slots.push([]);
+
+  const assigned = new Set(slots.flatMap((t) => t.map((p) => p.id)));
+  const pool = players.filter((p) => !assigned.has(p.id));
+
+  // Kursi kosong pertama (target ketuk pool + highlight).
+  let nextSeat: { team: number; seat: number } | null = null;
+  for (let i = 0; i < slots.length && !nextSeat; i++) {
+    if (slots[i]!.length < 2) nextSeat = { team: i, seat: slots[i]!.length };
+  }
+
+  function fill(p: ManualPlayer) {
+    if (!nextSeat) return;
+    const next = slots.map((t) => [...t]);
+    next[nextSeat.team]!.push(p);
+    onChange(next);
+  }
+
+  function clearSeat(teamIdx: number, seatIdx: number) {
+    const next = slots.map((t) => [...t]);
+    next[teamIdx]!.splice(seatIdx, 1);
+    onChange(next);
+  }
+
+  function autoFill() {
+    const next = slots.map((t) => [...t]);
+    const rest = [...pool];
+    for (const t of next) while (t.length < 2 && rest.length) t.push(rest.shift()!);
+    onChange(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      {slots.map((team, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-2 rounded-xl border border-slate-200 p-2"
+        >
+          <span className="w-12 shrink-0 text-xs font-semibold text-slate-500">
+            Tim {i + 1}
+          </span>
+          <div className="flex flex-1 gap-2">
+            {[0, 1].map((seat) => {
+              const p = team[seat];
+              const isNext =
+                !!nextSeat && nextSeat.team === i && nextSeat.seat === seat;
+              return p ? (
+                <button
+                  key={seat}
+                  onClick={() => clearSeat(i, seat)}
+                  className="flex flex-1 items-center justify-between rounded-lg bg-lime-100 px-3 py-2 text-sm hover:bg-lime-200"
+                >
+                  <span className="truncate">{p.name}</span>
+                  <span className="ml-1 text-slate-400">×</span>
+                </button>
+              ) : (
+                <div
+                  key={seat}
+                  className={`flex-1 rounded-lg border border-dashed px-3 py-2 text-center text-sm ${
+                    isNext
+                      ? "border-lime-400 bg-lime-50 text-lime-600"
+                      : "border-slate-200 text-slate-300"
+                  }`}
+                >
+                  {isNext ? "← kursi berikutnya" : "kosong"}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {pool.length > 0 ? (
+        <div className="pt-1">
+          <p className="mb-1.5 text-xs text-slate-400">
+            {nextSeat
+              ? "Ketuk pemain untuk mengisi kursi berikutnya:"
+              : "Kursi penuh. Jumlah pemain harus genap agar semua masuk tim."}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {pool.map((p) => (
+              <Chip
+                key={p.id}
+                active={false}
+                onClick={() => fill(p)}
+                label={p.name}
+              />
+            ))}
+          </div>
+          {pool.length >= 2 && nextSeat && (
+            <button
+              onClick={autoFill}
+              className="mt-2 text-xs font-medium text-lime-700 hover:underline"
+            >
+              Isi otomatis sisanya
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="pt-1 text-xs text-emerald-600">
+          Semua pemain sudah masuk tim.
+        </p>
+      )}
     </div>
   );
 }
