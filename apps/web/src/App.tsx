@@ -410,6 +410,9 @@ function HomeScreen({
   const standalone = useAsync(() => listEvents(null), []);
   const me = useAsync(() => globalStats(), []);
   const [newLeague, setNewLeague] = useState("");
+  const [newVisibility, setNewVisibility] = useState<"private" | "public">(
+    "private"
+  );
   const [tab, setTab] = useState<"all" | "active" | "past">("all");
 
   if (!user) {
@@ -426,7 +429,7 @@ function HomeScreen({
   async function addLeague() {
     const name = newLeague.trim();
     if (!name) return;
-    const lg = await createLeague(name);
+    const lg = await createLeague(name, newVisibility);
     setNewLeague("");
     onNavigate({ t: "league", id: lg.id });
   }
@@ -474,7 +477,7 @@ function HomeScreen({
       </button>
 
       <Card title="🏆 Liga">
-        <div className="mb-4 flex gap-2">
+        <div className="mb-2 flex gap-2">
           <input
             value={newLeague}
             onChange={(e) => setNewLeague(e.target.value)}
@@ -488,6 +491,19 @@ function HomeScreen({
           >
             + Liga
           </button>
+        </div>
+        <div className="mb-4 flex items-center gap-2">
+          <Toggle
+            value={newVisibility === "private"}
+            onChange={(v) => setNewVisibility(v ? "private" : "public")}
+            onLabel="🔒 Private"
+            offLabel="🌐 Public"
+          />
+          <span className="text-xs text-slate-400">
+            {newVisibility === "private"
+              ? "Gabung lewat kode / undangan."
+              : "Bisa ditemukan & di-request gabung (perlu approval)."}
+          </span>
         </div>
         <StateText
           loading={leagues.loading}
@@ -1011,15 +1027,32 @@ function LeagueScreen({
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-white">
-        <div>
-          <h2 className="text-lg font-bold">{league.name}</h2>
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-bold">{league.name}</h2>
           <p className="text-xs text-slate-300">
             {events.length} sesi · dibuat {fmtDate(league.createdAt)}
           </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="rounded-full bg-white/10 px-2 py-0.5">
+              {league.visibility === "private" ? "🔒 Private" : "🌐 Public"}
+            </span>
+            {league.visibility === "private" && league.joinCode && (
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(league.joinCode!);
+                  alert(`Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`);
+                }}
+                className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono font-semibold tracking-wider text-lime-300 hover:bg-lime-400/30"
+                title="Salin kode join"
+              >
+                {league.joinCode} 📋
+              </button>
+            )}
+          </div>
         </div>
         <button
           onClick={() => onNavigate({ t: "create", leagueId })}
-          className="rounded-lg bg-lime-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-lime-300"
+          className="ml-2 shrink-0 rounded-lg bg-lime-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-lime-300"
         >
           + Tambah Sesi
         </button>

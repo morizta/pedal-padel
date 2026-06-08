@@ -210,7 +210,12 @@ export interface League {
   name: string;
   createdAt: number;
   memberIds: string[];
+  visibility: "private" | "public";
+  joinCode: string | null;
 }
+
+const LEAGUE_COLS =
+  "id,name,created_at,visibility,join_code,league_members(player_id)";
 
 function mapLeague(r: any): League {
   return {
@@ -218,7 +223,17 @@ function mapLeague(r: any): League {
     name: r.name,
     createdAt: Date.parse(r.created_at),
     memberIds: (r.league_members ?? []).map((m: any) => m.player_id),
+    visibility: r.visibility ?? "private",
+    joinCode: r.join_code ?? null,
   };
+}
+
+/** Kode join liga private — 6 huruf/angka tanpa karakter ambigu. */
+function genJoinCode(): string {
+  const ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += ABC[Math.floor(Math.random() * ABC.length)];
+  return s;
 }
 
 export async function listLeagues(): Promise<League[]> {
@@ -226,7 +241,7 @@ export async function listLeagues(): Promise<League[]> {
   if (!owner) return [];
   const { data, error } = await db()
     .from("leagues")
-    .select("id,name,created_at,league_members(player_id)")
+    .select(LEAGUE_COLS)
     .eq("owner_id", owner)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -236,20 +251,28 @@ export async function listLeagues(): Promise<League[]> {
 export async function getLeague(id: string): Promise<League | undefined> {
   const { data, error } = await db()
     .from("leagues")
-    .select("id,name,created_at,league_members(player_id)")
+    .select(LEAGUE_COLS)
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
   return data ? mapLeague(data) : undefined;
 }
 
-export async function createLeague(name: string): Promise<League> {
+export async function createLeague(
+  name: string,
+  visibility: "private" | "public" = "private"
+): Promise<League> {
   const owner = await currentUserId();
   if (!owner) throw new Error("Harus login untuk membuat liga.");
   const { data, error } = await db()
     .from("leagues")
-    .insert({ name: name.trim() || "Liga Tanpa Nama", owner_id: owner })
-    .select("id,name,created_at")
+    .insert({
+      name: name.trim() || "Liga Tanpa Nama",
+      owner_id: owner,
+      visibility,
+      join_code: visibility === "private" ? genJoinCode() : null,
+    })
+    .select(LEAGUE_COLS)
     .single();
   if (error) throw error;
   return mapLeague(data!);
