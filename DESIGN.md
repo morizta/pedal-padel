@@ -116,6 +116,12 @@ RatingHistory            # jejak perubahan ELO (untuk grafik & leaderboard globa
 Catatan: untuk format **individual** (Americano/Mexicano), kolom "team" di `Match`
 hanya menyimpan dua pemain yang kebetulan jadi pasangan di ronde itu — bukan tim tetap.
 
+> Skema nyata (lihat [`supabase/schema.sql`](supabase/schema.sql)) lebih ringkas:
+> `events` menyimpan `rounds`/`scores`/`teams` sebagai **jsonb** + `player_ids`/
+> `player_names` (bukan tabel `Match`/`EventPlayer` terpisah), keanggotaan user
+> di `league_users`. Semua tabel punya kolom audit `created_at`/`created_by`/
+> `updated_at`/`updated_by` (trigger `stamp_audit`, lihat §19.5).
+
 ---
 
 ## 5. Algoritma Matchmaking
@@ -564,8 +570,9 @@ Diurutkan kira-kira berdasarkan nilai & ketergantungan.
 - [ ] **Persist RatingHistory di DB** — simpan delta ELO per match (tabel
       `rating_history` + `players.rating`), tak hitung ulang dari nol tiap load.
       Prasyarat leaderboard lintas-user yang cepat & benar.
-- [ ] **Leaderboard global lintas-user** — setelah persist, ranking gabungan
-      semua user (bukan hanya sesi sendiri).
+- [x] **Leaderboard global lintas-user** — ranking gabungan semua user (bukan
+      hanya sesi sendiri). Lihat §19. Masih dihitung di klien dari hasil match
+      (belum di-persist); optimasi DB di atas masih relevan untuk skala besar.
 - [ ] **Leaderboard ELO per-liga** — filter ranking per komunitas.
 - [ ] **Grafik progres rating** per pemain (sparkline dari RatingHistory).
 - [ ] **Rating Solo vs Team terpisah** (opsional) — atau lanjut satu ELO.
@@ -596,3 +603,84 @@ Diurutkan kira-kira berdasarkan nilai & ketergantungan.
 - [ ] **Mobile app (Expo)** memakai engine & Supabase yang sama.
 - [ ] **Badge/achievement** ringan (tanpa koin, sesuai keputusan §9.4).
 - [ ] **PWA / offline cache** untuk dipakai di lapangan tanpa sinyal stabil.
+
+---
+
+## 19. Routing URL, Visibilitas Global & Audit — terimplementasi
+
+Revamp terakhir: navigasi tersinkron ke URL, data dibuka global (private hanya
+membatasi gabung), beberapa halaman "Saya" baru, sesi bisa dilanjut, dan kolom
+audit di semua tabel.
+
+### 19.1 Routing berbasis URL
+Navigasi tetap memakai state machine `View` (discriminated union di `App.tsx`),
+tapi kini **tersinkron ke URL** lewat History API (`useRoutedView`): `setView`
+melakukan `pushState`, tombol back/forward browser meng-update view (`popstate`),
+dan URL bisa di-share / di-refresh. Pemetaan `viewToPath`/`pathToView`:
+
+| View | Path |
+|---|---|
+| home | `/` |
+| leagues (Jelajah) | `/jelajah` |
+| league | `/liga/:id` |
+| createLeague | `/liga/baru` |
+| create | `/main/baru` (`?liga=:id`) |
+| session | `/main/:id` |
+| leaderboard | `/ranking` |
+| player | `/pemain/:nama` |
+| myLeagues | `/liga-saya` |
+| myEvents | `/turnamen-saya` |
+| myMatches | `/pertandingan-saya` |
+| profile | `/profil` |
+
+nginx (`apps/web/nginx.conf`) sudah punya SPA fallback (`try_files … /index.html`),
+jadi akses langsung / refresh URL dalam tidak 404.
+
+### 19.2 Visibilitas global (private = gating gabung, bukan sembunyi)
+RLS `events_read` diubah jadi `using (true)` (baca publik), sejajar dengan
+`leagues`/`players`/`profiles`. Konsekuensinya **semua turnamen — termasuk dari
+liga private — ikut terhitung di ranking & daftar global**. "Private" murni
+membatasi siapa yang boleh *bergabung* (kode/undangan), bukan menyembunyikan
+hasil. Tulis tetap hanya owner (`events_write`).
+
+Fungsi data baru di `db.ts`:
+- `listVisibleEvents()` — semua event yang boleh dibaca (RLS menyaring); dipakai
+  `globalStats()` (leaderboard) & `playerHistory()`.
+- `latestLeagues()` — semua liga terbaru (private + public) untuk Beranda.
+- `myInvolvedEvents()` — turnamen yang **kubuat ATAU kuikuti** (owner_id = aku
+  **atau** `player_ids` overlap self-player-ku); dua query digabung.
+
+Ranking global & tab "Pemain" di Jelajah kini dibangun dari **semua nama yang
+muncul di event** (identitas per nama, konsisten dgn engine), bukan roster
+sendiri. Tombol hapus pemain dihapus dari halaman ranking (tak relevan saat
+global).
+
+### 19.3 Beranda bertab & halaman "Saya"
+- **Beranda**: dua kartu bertab `[Liga | Turnamen]` — **Terbaru** (global) dan
+  **Saya** (liga/turnamen milikku). Kartu liga 1 baris penuh + detail
+  (visibilitas, jumlah anggota, tanggal, badge peran/status).
+- **Profil**: section **Turnamen Terakhir** (limit 5, dgn peringkatku per
+  turnamen) + **Pertandingan Terakhir** (limit 5), masing-masing "Lihat semua".
+- Halaman baru: **`/liga-saya`** (dikelola owner/admin vs diikuti),
+  **`/turnamen-saya`** (berlangsung vs selesai, peringkat per turnamen),
+  **`/pertandingan-saya`** (semua match). Helper `myRankInEvent()` menghitung
+  peringkat pemain di satu turnamen dari `computeStandings(eventResults(e))`.
+
+### 19.4 Lanjut ronde tanpa sesi baru
+Format terjadwal (Americano/Team Americano) habis setelah satu siklus
+round-robin. `session.ts` menambah `extendSchedule()` (+ `canExtend`) yang
+men-generate **satu siklus jadwal baru** (jumlah ronde = total ronde),
+me-reindex agar lanjut dari ronde terakhir, lalu append. UI: tombol
+**"Tambah ronde +"** (selalu aktif untuk format terjadwal). Format dinamis
+(Mexicano) sudah bisa "Ronde berikutnya" tanpa batas.
+
+### 19.5 Kolom audit di semua tabel
+Section 5 di `schema.sql` menambah `created_at`, `created_by`, `updated_at`,
+`updated_by` ke **semua tabel** (profiles, players, leagues, league_members,
+events, league_users). Trigger `stamp_audit` (BEFORE INSERT/UPDATE) mengisi
+otomatis: `created_*` sekali saat insert (`auth.uid()`), `updated_*` tiap update.
+Idempotent + backfill `created_by` dari pembuat yang diketahui.
+
+### 19.6 Deploy produksi
+Image di-push ke Docker Hub **`akhaza/pedalpadel-client:latest`** (multi-arch
+amd64+arm64). Detail di [docs/deployment.md](docs/deployment.md).

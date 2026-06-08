@@ -69,7 +69,9 @@ docker compose up --build
 # Web tersedia di http://localhost:8080
 ```
 
-Build multi-stage: Vite build statis → disajikan via nginx. Env Supabase di-*inline* saat build (build args). Detail di [docs/deployment.md](docs/deployment.md).
+Build multi-stage: Vite build statis → disajikan via nginx. Env Supabase di-*inline* saat build (build args). 
+
+Produksi: image di-push ke Docker Hub **`akhaza/pedalpadel-client:latest`** (multi-arch), server tinggal `docker pull` + `docker run -p 8080:80`. Detail & gotcha (jangan pakai `...` di build-arg) di [docs/deployment.md](docs/deployment.md).
 
 ---
 
@@ -115,9 +117,13 @@ Build multi-stage: Vite build statis → disajikan via nginx. Env Supabase di-*i
 - [x] Format Team (auto/manual pairing + preview tim)
 - [x] Integrasi Supabase (skema, auth, persistensi)
 - [x] Leaderboard ELO global + profil pemain & riwayat match
-- [x] Home dashboard: rank-mu + filter turnamen All/Aktif/Selesai
+- [x] Home dashboard: 2 kartu bertab (Terbaru global + Saya), rank-mu
 - [x] Sosial: liga Private/Public, gabung via kode/invite/approval ([DESIGN.md §14](DESIGN.md))
+- [x] Routing URL (back/forward + link share) + halaman Saya: `/liga-saya`, `/turnamen-saya`, `/pertandingan-saya` ([DESIGN.md §19](DESIGN.md))
+- [x] Visibilitas global: turnamen liga private ikut ranking (private = gating gabung) ([DESIGN.md §19.2](DESIGN.md))
+- [x] Lanjut ronde tanpa sesi baru (Tambah ronde) untuk format terjadwal
+- [x] Kolom audit (`created_at/by`, `updated_at/by`) di semua tabel
 - [ ] Format King of the Hill di UI
 - [ ] Live scoreboard + share link publik (Supabase Realtime)
 
-Roadmap & status detail ada di [DESIGN.md §11](DESIGN.md).
+Roadmap & status detail ada di [DESIGN.md §11 & §18](DESIGN.md).

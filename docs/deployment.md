@@ -42,6 +42,35 @@ docker build \
 docker run -p 8080:80 pedal-padel-web
 ```
 
+## 3b. Produksi: Docker Hub + server Linux
+
+Image produksi: **`akhaza/pedalpadel-client:latest`**.
+
+**Build & push (multi-arch amd64+arm64).** Vite mem-*bake* env saat build, jadi
+build-arg **wajib** diisi nilai asli dari `.env` — **jangan** pakai placeholder
+`...` (pernah keliru → image dengan `VITE_SUPABASE_URL="..."` yang gagal connect
+Supabase). Build dari Mac (arm64) ke server amd64 → harus multi-arch:
+
+```bash
+set -a && . ./.env && set +a
+docker buildx build --builder pedalbuilder --platform linux/amd64,linux/arm64 \
+  --build-arg VITE_SUPABASE_URL="$VITE_SUPABASE_URL" \
+  --build-arg VITE_SUPABASE_ANON_KEY="$VITE_SUPABASE_ANON_KEY" \
+  -t akhaza/pedalpadel-client:latest --push .
+```
+
+**Jalankan di server** (env sudah di-bake, tak perlu `.env` di server):
+
+```bash
+docker pull akhaza/pedalpadel-client:latest
+docker rm -f pedalpadel
+docker run -d --name pedalpadel -p 8080:80 --restart unless-stopped \
+  akhaza/pedalpadel-client:latest
+# → http://SERVER:8080  (8080 = host, 80 = nginx di dalam container)
+```
+
+Verifikasi versi terpull: `docker image inspect akhaza/pedalpadel-client:latest --format '{{index .RepoDigests 0}}'`.
+
 ## 4. Deploy ke host statis (Vercel / Netlify / Cloudflare Pages)
 
 ```bash

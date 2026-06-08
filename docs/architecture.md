@@ -28,9 +28,9 @@ Pedal Padel adalah **monorepo npm workspaces** dengan tiga bagian yang dipisah t
 
 | File | Tanggung jawab |
 |---|---|
-| `apps/web/src/App.tsx` | Komponen UI utama (setup event, ronde, input skor, leaderboard) |
-| `apps/web/src/session.ts` | State sesi/event di sisi klien (ronde, skor berjalan) |
-| `apps/web/src/db.ts` | Layer data — baca/tulis ke Supabase |
+| `apps/web/src/App.tsx` | Komponen UI utama + routing. Navigasi = state machine `View` yang **tersinkron ke URL** via History API (`useRoutedView`: `pushState` + `popstate`); `viewToPath`/`pathToView` memetakan View ↔ path. |
+| `apps/web/src/session.ts` | State sesi/event di sisi klien (ronde, skor berjalan); `extendSchedule()` menambah siklus jadwal baru utk format terjadwal |
+| `apps/web/src/db.ts` | Layer data — baca/tulis ke Supabase. Termasuk `listVisibleEvents`/`globalStats` (global), `latestLeagues`, `myInvolvedEvents` (turnamen yang dibuat/diikuti) |
 | `apps/web/src/auth.tsx` | Auth (login/daftar) + konteks user |
 | `apps/web/src/supabase.ts` | Inisialisasi client supabase-js dari env |
 | `apps/web/src/ratings.ts` | Glue antara hasil match dan `rateMatch` engine |
@@ -46,4 +46,6 @@ Detail algoritma di [engine.md](engine.md). Model data lengkap di [../DESIGN.md 
 
 ## Database (Supabase)
 
-Skema didefinisikan di [`supabase/schema.sql`](../supabase/schema.sql). Tabel inti: `profiles`, `players` (akun atau tamu), `leagues`, `league_members`, `events`, `event_players`, `matches`. Akses diatur per-baris lewat **Row Level Security** — owner bisa edit, publik bisa lihat lewat link share.
+Skema didefinisikan di [`supabase/schema.sql`](../supabase/schema.sql). Tabel inti: `profiles`, `players` (akun atau tamu), `leagues`, `league_members` (roster pemain), `league_users` (keanggotaan user + status/role), `events`. Ronde/skor/tim disimpan sebagai **jsonb** di dalam `events` (`rounds`/`scores`/`teams`) + `player_ids`/`player_names` — bukan tabel `matches`/`event_players` terpisah.
+
+Akses diatur per-baris lewat **Row Level Security**: baca **publik** (semua tabel `using (true)`) sehingga ranking/turnamen global ikut menghitung liga private — "private" hanya membatasi *gabung* (kode/undangan), bukan menyembunyikan; tulis hanya owner (`owner_id = auth.uid()`). Insert keanggotaan sensitif lewat RPC `security definer` (`request_join`/`join_with_code`/`invite_user`). Semua tabel punya kolom audit `created_at/by` + `updated_at/by` (trigger `stamp_audit`).
