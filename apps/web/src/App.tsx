@@ -1769,7 +1769,8 @@ function CreateScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [startMode, setStartMode] = useState<"now" | "schedule">("now");
-  const [startAt, setStartAt] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [startTime, setStartTime] = useState("");
   const [format, setFormat] = useState<Format>("americano");
   const [courts, setCourts] = useState(1);
   const [scoringType, setScoringType] = useState<"point" | "normal">("point");
@@ -1894,8 +1895,8 @@ function CreateScreen({
         visibility,
         description,
         startAt:
-          startMode === "schedule" && startAt
-            ? new Date(startAt).getTime()
+          startMode === "schedule" && startDate
+            ? new Date(`${startDate}T${startTime || "00:00"}`).getTime()
             : null,
       });
       onCreated(event.id);
@@ -1943,20 +1944,34 @@ function CreateScreen({
             value={startMode === "now"}
             onChange={(v) => setStartMode(v ? "now" : "schedule")}
             onLabel="Sekarang"
-            offLabel="Jadwalkan"
+            offLabel="Pilih tanggal"
           />
           {startMode === "schedule" && (
-            <input
-              type="datetime-local"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-              className="input mt-2"
-            />
+            <div className="mt-2 flex flex-wrap gap-2">
+              <label className="flex-1">
+                <span className="mb-1 block text-xs text-slate-400">Tanggal</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="input w-full"
+                />
+              </label>
+              <label className="flex-1">
+                <span className="mb-1 block text-xs text-slate-400">Jam</span>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="input w-full"
+                />
+              </label>
+            </div>
           )}
           <p className="mt-1 text-xs text-slate-400">
             {startMode === "now"
               ? "Sesi dimulai sekarang."
-              : startAt
+              : startDate
                 ? "Dijadwalkan — tampil sebagai sesi mendatang sampai waktunya."
                 : "Pilih tanggal & jam mulai."}
           </p>
