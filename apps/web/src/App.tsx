@@ -12,11 +12,12 @@ import {
   computeStandings,
   computeTeamStandings,
   teamKey,
+  reliability,
   type Standing,
   type TeamStanding,
   type Pair,
 } from "@pedal/engine";
-// import { computeRatings } from "./ratings"; // disembunyikan sementara (Rating ELO)
+import { computeRatings } from "./ratings";
 import {
   useSession,
   isTeamFormat,
@@ -32,7 +33,6 @@ import {
   listEvents,
   listPlayers,
   createPlayer,
-  deletePlayer,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -46,6 +46,7 @@ import {
   updateEvent,
   deleteEvent,
   leagueStandings,
+  globalStats,
   type DbEvent,
 } from "./db";
 import { useAsync } from "./useAsync";
@@ -55,6 +56,7 @@ type View =
   | { t: "league"; id: string }
   | { t: "create"; leagueId: string | null }
   | { t: "session"; id: string }
+  | { t: "leaderboard" }
   | { t: "profile" };
 
 export function App() {
@@ -103,6 +105,9 @@ export function App() {
               )
             }
           />
+        )}
+        {view.t === "leaderboard" && (
+          <LeaderboardScreen onBack={() => setView({ t: "home" })} />
         )}
         {view.t === "profile" && (
           <ProfileScreen user={user} onBack={() => setView({ t: "home" })} />
@@ -414,6 +419,19 @@ function HomeScreen({
   const lgList = leagues.data ?? [];
   return (
     <div className="space-y-6">
+      <button
+        onClick={() => onNavigate({ t: "leaderboard" })}
+        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-lime-400 hover:bg-lime-50/40"
+      >
+        <span className="min-w-0">
+          <span className="block font-semibold">🏅 Leaderboard ELO</span>
+          <span className="block text-sm text-slate-400">
+            Ranking pemain dari semua sesimu
+          </span>
+        </span>
+        <span className="shrink-0 text-xl text-slate-300">›</span>
+      </button>
+
       <Card title="🏆 Liga">
         <div className="mb-4 flex gap-2">
           <input
@@ -496,76 +514,110 @@ function HomeScreen({
           }}
         />
       </Card>
-
-      <RegisteredPlayers />
     </div>
   );
 }
 
-function RegisteredPlayers() {
-  const players = useAsync(() => listPlayers(), []);
-  const [name, setName] = useState("");
+function RankBadge({ rank }: { rank: number }) {
+  const style =
+    rank === 1
+      ? "bg-amber-300 text-amber-900"
+      : rank === 2
+        ? "bg-slate-300 text-slate-700"
+        : rank === 3
+          ? "bg-orange-300 text-orange-900"
+          : "bg-slate-100 text-slate-500";
+  return (
+    <span
+      className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums ${style}`}
+    >
+      {rank}
+    </span>
+  );
+}
 
-  async function add() {
-    if (await createPlayer(name)) {
-      setName("");
-      players.reload();
-    }
-  }
-  async function remove(id: string) {
-    await deletePlayer(id);
-    players.reload();
-  }
-  const list = players.data ?? [];
+/** Leaderboard ELO global — ranking pemain dari semua sesi user (hitung ulang). */
+function LeaderboardScreen({ onBack }: { onBack: () => void }) {
+  const q = useAsync(() => globalStats(), []);
+
+  const rows = (() => {
+    if (!q.data) return [];
+    const { results, names } = q.data;
+    const st = new Map(
+      computeStandings(results, { compensate: false }).map((s) => [
+        s.playerId,
+        s,
+      ])
+    );
+    return computeRatings(names, results)
+      .filter((r) => r.matchesPlayed > 0)
+      .map((r) => ({ ...r, st: st.get(r.name) }));
+  })();
 
   return (
-    <Card title="👤 Pemain Terdaftar">
-      <p className="mb-3 text-xs text-slate-400">
-        Daftarkan pemain sekali, lalu tinggal pilih saat buat sesi (tak perlu
-        ketik ulang). Pemain belum terdaftar bisa ditambah sebagai tamu di
-        halaman buat sesi.
-      </p>
-      <div className="mb-3 flex gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          placeholder="Nama pemain baru…"
-          className="input flex-1"
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="text-sm text-slate-500 hover:text-slate-900"
+      >
+        ← Kembali
+      </button>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-lg font-bold">🏅 Leaderboard ELO</h2>
+          {q.data && (
+            <span className="text-xs text-slate-400">{q.data.eventCount} sesi</span>
+          )}
+        </div>
+        <p className="mb-4 text-sm text-slate-400">
+          Ranking gabungan dari semua sesimu. Rating awal 1000; makin banyak main,
+          makin stabil.
+        </p>
+
+        <StateText
+          loading={q.loading}
+          error={q.error}
+          empty={!q.loading && !q.error && rows.length === 0}
+          emptyText="Belum ada match selesai. Main dulu, ranking muncul otomatis."
         />
-        <button
-          onClick={add}
-          className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          Daftar
-        </button>
-      </div>
-      <StateText
-        loading={players.loading}
-        error={players.error}
-        empty={list.length === 0}
-        emptyText="Belum ada pemain terdaftar."
-      />
-      {list.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
-          {list.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-1.5 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm"
-            >
-              {p.name}
-              <button
-                onClick={() => remove(p.id)}
-                className="grid h-5 w-5 place-items-center rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-                aria-label={`Hapus ${p.name}`}
+
+        <ol className="space-y-1.5">
+          {rows.map((r, i) => {
+            const rel = Math.round(reliability(r.matchesPlayed) * 100);
+            const wl = r.st
+              ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
+              : "0–0";
+            const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
+            return (
+              <li
+                key={r.id}
+                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5"
               >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+                <RankBadge rank={i + 1} />
+                <TeamAvatar name={r.name} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold text-slate-800">
+                    {r.name}
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    {r.matchesPlayed} match · {wl} · {wr}% menang
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-bold tabular-nums">
+                    {Math.round(r.rating)}
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    {rel < 100 ? `andal ${rel}%` : "stabil"}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </div>
   );
 }
 
@@ -854,15 +906,20 @@ function CreateScreen({
   const [manualTeams, setManualTeams] = useState<
     { id: string; name: string }[][]
   >([]);
-
-  // Peserta sesi = {id, name}. Default: anggota liga (resolved dari registry).
-  const [picked, setPicked] = useState<{ id: string; name: string }[] | null>(
-    null
+  // Pasangan otomatis (preview sebelum mulai). Disusun ulang tiap pemain/acak
+  // berubah; tombol "Acak ulang" me-roll ulang.
+  const [autoTeams, setAutoTeams] = useState<{ id: string; name: string }[][]>(
+    []
   );
+
+  // Peserta sesi = {id, name, isGuest}. Default: anggota liga (dari registry).
+  const [picked, setPicked] = useState<
+    { id: string; name: string; isGuest: boolean }[] | null
+  >(null);
   const defaultSelected = (inLeague?.memberIds ?? [])
     .map((id) => registeredList.find((p) => p.id === id))
     .filter((p): p is (typeof registeredList)[number] => Boolean(p))
-    .map((p) => ({ id: p.id, name: p.name }));
+    .map((p) => ({ id: p.id, name: p.name, isGuest: p.isGuest }));
   const selected = picked ?? defaultSelected;
   const names = selected.map((s) => s.name);
 
@@ -886,6 +943,32 @@ function CreateScreen({
     !isManual ||
     (validManualTeams.length * 2 === selected.length && selected.length >= 4);
 
+  // ── Pasangan otomatis (preview) ──────────────────────────────────────
+  const isAuto = isTeamFormat(format) && pairing === "auto";
+  const selectedKey = selected.map((s) => s.id).join(",");
+
+  // Susun ulang preview auto saat peserta/urutan/acak berubah.
+  useEffect(() => {
+    if (!isAuto) return;
+    const list = randomize ? shuffle(selected) : selected;
+    setAutoTeams(chunkPairs(list));
+    // selectedKey & randomize jadi pemicu; selected stabil di dalam render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuto, selectedKey, randomize]);
+
+  const reshuffleAuto = () => setAutoTeams(chunkPairs(shuffle(selected)));
+  // Pemain yang belum kebagian tim (jumlah ganjil) — tetap ditampilkan.
+  const autoLeftover = selected.filter(
+    (s) => !autoTeams.some((t) => t.some((p) => p.id === s.id))
+  );
+
+  // Tim final yang dipakai saat mulai: manual atau auto (keduanya di-preview).
+  const finalTeams = isManual
+    ? validManualTeams
+    : isAuto
+      ? autoTeams.filter((t) => t.length === 2)
+      : null;
+
   const canStart =
     names.length >= 4 && evenOk && manualComplete && !busy;
   const startLabel = busy
@@ -902,9 +985,9 @@ function CreateScreen({
     const n = rawName.trim();
     if (!n || names.includes(n)) return;
     const p = await createPlayer(n, { guest: true }); // jadi record (untuk history)
-    if (p) setPicked([...selected, { id: p.id, name: p.name }]);
+    if (p) setPicked([...selected, { id: p.id, name: p.name, isGuest: true }]);
   }
-  function togglePlayer(p: { id: string; name: string }) {
+  function togglePlayer(p: { id: string; name: string; isGuest: boolean }) {
     setPicked(
       selected.some((s) => s.id === p.id)
         ? selected.filter((s) => s.id !== p.id)
@@ -924,8 +1007,8 @@ function CreateScreen({
         scoring,
         randomizeStart: randomize,
         participants: selected,
-        teams: isManual
-          ? validManualTeams.map(
+        teams: finalTeams
+          ? finalTeams.map(
               (t) => [t[0]!.name, t[1]!.name] as [string, string]
             )
           : undefined,
@@ -1056,13 +1139,21 @@ function CreateScreen({
           </Field>
         )}
 
-        {isManual && (
-          <Field label="Susun tim">
-            <ManualTeamEditor
-              players={selected}
-              teams={manualTeams}
-              onChange={setManualTeams}
-            />
+        {isTeamFormat(format) && (
+          <Field label={isAuto ? "Pratinjau tim" : "Susun tim"}>
+            {isManual ? (
+              <ManualTeamEditor
+                players={selected}
+                teams={manualTeams}
+                onChange={setManualTeams}
+              />
+            ) : (
+              <AutoTeamPreview
+                teams={autoTeams}
+                leftover={autoLeftover}
+                onReshuffle={reshuffleAuto}
+              />
+            )}
           </Field>
         )}
 
@@ -1084,32 +1175,57 @@ function CreateScreen({
         </button>
       </Card>
 
+      {/* Mobile: pilih pemain dulu (di atas), baru pengaturan + susun tim.
+          Desktop: tetap di kolom kanan. */}
+      <div className="order-first lg:order-none">
       <Card title={`Pemain (${names.length})`}>
-        {/* Pemain terpilih */}
+        {/* Cari & tambah dulu, daftar pemain terpilih di bawahnya. */}
+        <PlayerPicker
+          registered={registeredList}
+          selectedIds={selected.map((s) => s.id)}
+          onToggle={togglePlayer}
+          onAddGuest={addGuest}
+        />
+
         {names.length === 0 ? (
-          <p className="mb-3 text-sm text-slate-400">
-            Belum ada pemain. Pilih dari terdaftar di bawah, atau tambah tamu.
+          <p className="mt-3 text-sm text-slate-400">
+            Belum ada pemain. Cari nama lalu tambahkan, atau buat tamu.
           </p>
         ) : (
-          <ul className="mb-4 flex flex-wrap gap-2">
+          <ul className="mt-4 space-y-0.5 rounded-xl border border-slate-200 p-1">
             {selected.map((sel) => {
-              const guest = registeredList.find((p) => p.id === sel.id)?.isGuest;
+              const guest = sel.isGuest;
               return (
                 <li
                   key={sel.id}
-                  className={`flex items-center gap-1.5 rounded-full py-1 pl-3 pr-1 text-sm ${
-                    guest ? "bg-amber-100" : "bg-lime-100"
-                  }`}
+                  className="flex items-center gap-2.5 rounded-lg bg-lime-50 px-2 py-1.5 text-sm"
                 >
-                  {sel.name}
-                  {guest && (
-                    <span className="text-[10px] uppercase text-amber-600">
-                      tamu
+                  <span
+                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                      guest
+                        ? "bg-slate-200 text-slate-600"
+                        : "bg-sky-100 text-sky-700"
+                    }`}
+                  >
+                    {sel.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate font-medium text-slate-800">
+                      {sel.name}
                     </span>
-                  )}
+                    <span
+                      className={`rounded px-1 text-[10px] font-semibold uppercase ${
+                        guest
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-sky-100 text-sky-700"
+                      }`}
+                    >
+                      {guest ? "tamu" : "akun"}
+                    </span>
+                  </span>
                   <button
                     onClick={() => togglePlayer(sel)}
-                    className="grid h-5 w-5 place-items-center rounded-full text-slate-400 hover:bg-black/10 hover:text-slate-700"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-slate-400 hover:bg-black/10 hover:text-slate-700"
                     aria-label={`Hapus ${sel.name}`}
                   >
                     ×
@@ -1119,14 +1235,8 @@ function CreateScreen({
             })}
           </ul>
         )}
-
-        <PlayerPicker
-          registered={registeredList}
-          selectedIds={selected.map((s) => s.id)}
-          onToggle={togglePlayer}
-          onAddGuest={addGuest}
-        />
       </Card>
+      </div>
       </div>
     </div>
   );
@@ -1155,7 +1265,7 @@ function PlayerPicker({
 }: {
   registered: { id: string; name: string; isGuest: boolean }[];
   selectedIds: string[];
-  onToggle: (p: { id: string; name: string }) => void;
+  onToggle: (p: { id: string; name: string; isGuest: boolean }) => void;
   onAddGuest: (name: string) => void | Promise<void>;
 }) {
   const [q, setQ] = useState("");
@@ -1194,27 +1304,32 @@ function PlayerPicker({
     return () => clearTimeout(t);
   }, [term, enoughChars]);
 
-  // Daftar yang ditampilkan.
+  // Hanya tampil saat mengetik: cocokkan nama terdaftar (+ hasil akun),
+  // lalu buang yang sudah ditambahkan ("sisanya" yang bisa di-add).
   const lower = term.toLowerCase();
-  const localMatches: PickResult[] = registered
-    .filter((p) => (enoughChars ? p.name.toLowerCase().includes(lower) : true))
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      isGuest: p.isGuest,
-      isAccount: !p.isGuest,
-    }));
+  const open = term.length >= 3;
+  const localMatches: PickResult[] = open
+    ? registered
+        .filter((p) => p.name.toLowerCase().includes(lower))
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          isGuest: p.isGuest,
+          isAccount: !p.isGuest,
+        }))
+    : [];
   const merged: PickResult[] = [];
   const seen = new Set<string>();
   for (const p of [...localMatches, ...accounts]) {
-    if (!seen.has(p.id)) {
+    if (!seen.has(p.id) && !selectedIds.includes(p.id)) {
       seen.add(p.id);
       merged.push(p);
     }
   }
+  const exactExists = registered.some((p) => p.name.toLowerCase() === lower);
 
   return (
-    <div>
+    <div className="relative">
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
           🔍
@@ -1223,104 +1338,112 @@ function PlayerPicker({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Cari nama / @username, atau tambah…"
-          className="input w-full pl-9"
+          className="input w-full pl-9 pr-9"
         />
-      </div>
-
-      {term.length > 0 && term.length < 3 && (
-        <p className="mt-1 text-xs text-slate-400">Ketik minimal 3 huruf…</p>
-      )}
-
-      {/* Tambah tamu — selalu di atas saat ngetik */}
-      {enoughChars && (
-        <button
-          onClick={async () => {
-            await onAddGuest(term);
-            setQ("");
-          }}
-          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100"
-        >
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-amber-200 text-amber-800">
-            +
-          </span>
-          Tambah “{term}” sebagai tamu
-        </button>
-      )}
-
-      {/* Header daftar */}
-      <div className="mt-3 mb-1 flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-        <span>{enoughChars ? "Hasil pencarian" : `Pemain terdaftar`}</span>
-        {loading ? (
-          <span className="normal-case">mencari…</span>
-        ) : (
-          <span className="normal-case">{merged.length}</span>
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            aria-label="Bersihkan pencarian"
+            className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          >
+            ×
+          </button>
         )}
       </div>
 
-      {merged.length === 0 ? (
-        <p className="rounded-xl bg-slate-50 px-3 py-5 text-center text-xs text-slate-400">
-          {enoughChars
-            ? `Tidak ada "${term}". Tambahkan sebagai tamu di atas.`
-            : "Belum ada pemain. Ketik nama untuk menambah."}
-        </p>
-      ) : (
-        <ul className="max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 p-1">
-          {merged.map((p) => {
-            const on = selectedIds.includes(p.id);
-            return (
-              <li key={p.id}>
-                <button
-                  onClick={() => onToggle({ id: p.id, name: p.name })}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition ${
-                    on ? "bg-lime-50" : "hover:bg-slate-100"
-                  }`}
-                >
-                  {p.avatarUrl ? (
-                    <img
-                      src={p.avatarUrl}
-                      alt=""
-                      className="h-8 w-8 shrink-0 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span
-                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
-                        p.isAccount
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-slate-200 text-slate-600"
-                      }`}
-                    >
-                      {p.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate font-medium text-slate-800">
-                        {p.name}
+      {/* Hint sebelum cukup huruf. */}
+      {term.length > 0 && term.length < 3 && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-400 shadow-lg">
+          Ketik minimal 3 huruf…
+        </div>
+      )}
+
+      {/* Dropdown hasil — mulai 3 huruf. */}
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div className="flex items-center justify-between px-3 pt-2 text-[11px] text-slate-400">
+            <span>Hasil pencarian</span>
+            {loading ? <span>mencari…</span> : <span>{merged.length}</span>}
+          </div>
+
+          {merged.length > 0 && (
+            <ul className="max-h-64 space-y-0.5 overflow-y-auto p-1">
+              {merged.map((p) => (
+                <li key={p.id}>
+                  <button
+                    onClick={() => {
+                      onToggle({ id: p.id, name: p.name, isGuest: p.isGuest });
+                      setQ("");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-lime-50"
+                  >
+                    {p.avatarUrl ? (
+                      <img
+                        src={p.avatarUrl}
+                        alt=""
+                        className="h-8 w-8 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                          p.isAccount
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {p.name.charAt(0).toUpperCase()}
                       </span>
-                      {p.isAccount && (
-                        <span className="rounded bg-sky-100 px-1 text-[10px] font-semibold uppercase text-sky-700">
-                          akun
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-medium text-slate-800">
+                          {p.name}
+                        </span>
+                        <span
+                          className={`rounded px-1 text-[10px] font-semibold uppercase ${
+                            p.isAccount
+                              ? "bg-sky-100 text-sky-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {p.isAccount ? "akun" : "tamu"}
+                        </span>
+                      </span>
+                      {p.isAccount && p.username && (
+                        <span className="block truncate text-xs text-slate-400">
+                          @{p.username}
                         </span>
                       )}
                     </span>
-                    {p.isAccount && p.username && (
-                      <span className="block truncate text-xs text-slate-400">
-                        @{p.username}
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    className={`shrink-0 text-lg ${
-                      on ? "text-lime-600" : "text-slate-300"
-                    }`}
-                  >
-                    {on ? "✓" : "+"}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                    <span className="shrink-0 text-lg text-slate-300">+</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Tambah tamu bila nama belum terdaftar persis. */}
+          {!exactExists && (
+            <button
+              onClick={async () => {
+                await onAddGuest(term);
+                setQ("");
+              }}
+              className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50"
+            >
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-amber-200 text-amber-800">
+                +
+              </span>
+              Tambah “{term}” sebagai tamu
+            </button>
+          )}
+
+          {merged.length === 0 && exactExists && (
+            <p className="px-3 py-3 text-center text-xs text-slate-400">
+              Sudah ditambahkan.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -2044,11 +2167,156 @@ function Toggle({
 
 type ManualPlayer = { id: string; name: string };
 
+// ── Util pasangan tim ──────────────────────────────────────────────────
+function shuffle<T>(arr: readonly T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
+
+/** Pasangkan berurutan jadi tim berisi 2 (sisa ganjil diabaikan). */
+function chunkPairs<T>(arr: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i + 1 < arr.length; i += 2) out.push([arr[i]!, arr[i + 1]!]);
+  return out;
+}
+
+const AVATAR_COLORS = [
+  "bg-rose-200 text-rose-700",
+  "bg-amber-200 text-amber-700",
+  "bg-lime-200 text-lime-700",
+  "bg-emerald-200 text-emerald-700",
+  "bg-sky-200 text-sky-700",
+  "bg-violet-200 text-violet-700",
+  "bg-fuchsia-200 text-fuchsia-700",
+];
+function avatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]!;
+}
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const s =
+    parts.length > 1 ? (parts[0]![0] ?? "") + (parts[1]![0] ?? "") : name.slice(0, 2);
+  return s.toUpperCase();
+}
+
+/** Avatar inisial berwarna (konsisten per nama). */
+function TeamAvatar({ name }: { name: string }) {
+  return (
+    <span
+      className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${avatarColor(
+        name
+      )}`}
+    >
+      {initialsOf(name)}
+    </span>
+  );
+}
+
+/** Kerangka kartu tim — header "Tim N" + isi (2 baris kursi). */
+function TeamCard({
+  index,
+  children,
+}: {
+  index: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
+      <div className="mb-1.5 text-xs font-semibold text-lime-600">
+        Tim {index + 1}
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+const TEAM_GRID = "grid grid-cols-1 gap-2 sm:grid-cols-2";
+const EMPTY_HINT =
+  "rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-400";
+
 /**
- * Susun tim manual (format tim): kartu Tim dengan 2 kursi. Ketuk pemain dari
- * pool untuk mengisi kursi kosong berikutnya; ketuk kursi terisi untuk
- * mengosongkannya. Controlled — sumber kebenaran ada di `teams` (mentah,
- * boleh berisi tim separuh terisi). Posisi tim stabil agar tidak melompat.
+ * Pratinjau pasangan otomatis (read-only) — kartu tim grid + tombol acak ulang.
+ * Tim yang tampil di sini persis yang dipakai saat sesi dibuat.
+ */
+function AutoTeamPreview({
+  teams,
+  leftover,
+  onReshuffle,
+}: {
+  teams: ManualPlayer[][];
+  leftover: ManualPlayer[];
+  onReshuffle: () => void;
+}) {
+  const hasLeftover = leftover.length > 0;
+  return (
+    <div className="space-y-2">
+      {teams.length === 0 && !hasLeftover ? (
+        <p className={EMPTY_HINT}>Pilih minimal 4 pemain untuk membentuk tim.</p>
+      ) : (
+        <div className={TEAM_GRID}>
+          {teams.map((t, i) => (
+            <TeamCard key={i} index={i}>
+              {t.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-lg bg-slate-50 px-2 py-1.5 text-sm"
+                >
+                  <TeamAvatar name={p.name} />
+                  <span className="truncate">{p.name}</span>
+                </div>
+              ))}
+            </TeamCard>
+          ))}
+
+          {/* Kartu untuk pemain sisa (jumlah ganjil) — kursi kedua menunggu. */}
+          {hasLeftover && (
+            <TeamCard index={teams.length}>
+              {leftover.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-lg bg-slate-50 px-2 py-1.5 text-sm"
+                >
+                  <TeamAvatar name={p.name} />
+                  <span className="truncate">{p.name}</span>
+                </div>
+              ))}
+              <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-2 py-1.5 text-center text-xs text-amber-600">
+                menunggu pasangan
+              </div>
+            </TeamCard>
+          )}
+        </div>
+      )}
+      <div className="flex items-center justify-between pt-1">
+        <p className="text-xs text-slate-400">
+          {hasLeftover
+            ? `${leftover.length} pemain belum kebagian tim (butuh jumlah genap).`
+            : "Pasangan dibentuk otomatis."}
+        </p>
+        {(teams.length > 0 || hasLeftover) && (
+          <button
+            onClick={onReshuffle}
+            className="shrink-0 text-xs font-medium text-lime-700 hover:underline"
+          >
+            ↻ Acak ulang
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Susun tim manual (format tim): kartu Tim grid dengan 2 kursi. Ketuk kursi
+ * untuk membuka daftar pemain (dropdown di tempat) lalu pilih — bisa isi kursi
+ * mana saja, urutan bebas. Ketuk × untuk mengosongkan.
+ * Controlled — sumber kebenaran ada di `teams` (mentah, boleh separuh terisi).
  */
 function ManualTeamEditor({
   players,
@@ -2059,6 +2327,8 @@ function ManualTeamEditor({
   teams: ManualPlayer[][];
   onChange: (teams: ManualPlayer[][]) => void;
 }) {
+  const [open, setOpen] = useState<{ team: number; seat: number } | null>(null);
+
   const inSel = (p: ManualPlayer) => players.some((s) => s.id === p.id);
   const teamCount = Math.floor(players.length / 2);
 
@@ -2071,23 +2341,14 @@ function ManualTeamEditor({
 
   const assigned = new Set(slots.flatMap((t) => t.map((p) => p.id)));
   const pool = players.filter((p) => !assigned.has(p.id));
+  const allPaired = pool.length === 0;
 
-  // Kursi kosong pertama (target ketuk pool + highlight).
-  let nextSeat: { team: number; seat: number } | null = null;
-  for (let i = 0; i < slots.length && !nextSeat; i++) {
-    if (slots[i]!.length < 2) nextSeat = { team: i, seat: slots[i]!.length };
-  }
-
-  function fill(p: ManualPlayer) {
-    if (!nextSeat) return;
+  // Isi/ganti/kosongkan satu kursi (compact agar tak ada celah di tengah).
+  function setSeat(teamIdx: number, seatIdx: number, p: ManualPlayer | null) {
     const next = slots.map((t) => [...t]);
-    next[nextSeat.team]!.push(p);
-    onChange(next);
-  }
-
-  function clearSeat(teamIdx: number, seatIdx: number) {
-    const next = slots.map((t) => [...t]);
-    next[teamIdx]!.splice(seatIdx, 1);
+    if (p === null) next[teamIdx]!.splice(seatIdx, 1);
+    else next[teamIdx]![seatIdx] = p;
+    next[teamIdx] = next[teamIdx]!.filter(Boolean);
     onChange(next);
   }
 
@@ -2095,81 +2356,125 @@ function ManualTeamEditor({
     const next = slots.map((t) => [...t]);
     const rest = [...pool];
     for (const t of next) while (t.length < 2 && rest.length) t.push(rest.shift()!);
+    setOpen(null);
     onChange(next);
   }
 
   return (
     <div className="space-y-2">
-      {slots.map((team, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-2 rounded-xl border border-slate-200 p-2"
-        >
-          <span className="w-12 shrink-0 text-xs font-semibold text-slate-500">
-            Tim {i + 1}
-          </span>
-          <div className="flex flex-1 gap-2">
-            {[0, 1].map((seat) => {
-              const p = team[seat];
-              const isNext =
-                !!nextSeat && nextSeat.team === i && nextSeat.seat === seat;
-              return p ? (
-                <button
-                  key={seat}
-                  onClick={() => clearSeat(i, seat)}
-                  className="flex flex-1 items-center justify-between rounded-lg bg-lime-100 px-3 py-2 text-sm hover:bg-lime-200"
-                >
-                  <span className="truncate">{p.name}</span>
-                  <span className="ml-1 text-slate-400">×</span>
-                </button>
-              ) : (
-                <div
-                  key={seat}
-                  className={`flex-1 rounded-lg border border-dashed px-3 py-2 text-center text-sm ${
-                    isNext
-                      ? "border-lime-400 bg-lime-50 text-lime-600"
-                      : "border-slate-200 text-slate-300"
-                  }`}
-                >
-                  {isNext ? "← kursi berikutnya" : "kosong"}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {pool.length > 0 ? (
-        <div className="pt-1">
-          <p className="mb-1.5 text-xs text-slate-400">
-            {nextSeat
-              ? "Ketuk pemain untuk mengisi kursi berikutnya:"
-              : "Kursi penuh. Jumlah pemain harus genap agar semua masuk tim."}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {pool.map((p) => (
-              <Chip
-                key={p.id}
-                active={false}
-                onClick={() => fill(p)}
-                label={p.name}
-              />
-            ))}
-          </div>
-          {pool.length >= 2 && nextSeat && (
-            <button
-              onClick={autoFill}
-              className="mt-2 text-xs font-medium text-lime-700 hover:underline"
-            >
-              Isi otomatis sisanya
-            </button>
-          )}
-        </div>
+      {teamCount === 0 ? (
+        <p className={EMPTY_HINT}>Pilih minimal 4 pemain untuk membentuk tim.</p>
       ) : (
-        <p className="pt-1 text-xs text-emerald-600">
-          Semua pemain sudah masuk tim.
-        </p>
+        <div className={TEAM_GRID}>
+          {slots.map((team, i) => (
+            <TeamCard key={i} index={i}>
+              {[0, 1].map((seat) => {
+                const p = team[seat];
+                const isOpen = open?.team === i && open?.seat === seat;
+                return (
+                  <div key={seat} className="relative">
+                    {p ? (
+                      <div
+                        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
+                          isOpen ? "bg-lime-100 ring-1 ring-lime-300" : "bg-lime-50"
+                        }`}
+                      >
+                        <TeamAvatar name={p.name} />
+                        <button
+                          onClick={() =>
+                            setOpen(isOpen ? null : { team: i, seat })
+                          }
+                          className="flex-1 truncate text-left"
+                        >
+                          {p.name}
+                        </button>
+                        <button
+                          onClick={() => setSeat(i, seat, null)}
+                          className="text-slate-400 hover:text-slate-700"
+                          aria-label="Kosongkan kursi"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setOpen(isOpen ? null : { team: i, seat })}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg border border-dashed px-2 py-1.5 text-sm ${
+                          isOpen
+                            ? "border-lime-400 bg-lime-50 text-lime-600"
+                            : "border-slate-300 text-slate-400 hover:border-slate-400"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-dashed border-current text-current">
+                            +
+                          </span>
+                          Pilih pemain
+                        </span>
+                        <span aria-hidden>▾</span>
+                      </button>
+                    )}
+
+                    {isOpen && (
+                      <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                        {pool.length === 0 ? (
+                          <p className="px-2 py-1.5 text-xs text-slate-400">
+                            Tak ada pemain tersisa.
+                          </p>
+                        ) : (
+                          pool.map((op) => (
+                            <button
+                              key={op.id}
+                              onClick={() => {
+                                setSeat(i, seat, op);
+                                setOpen(null);
+                              }}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                            >
+                              <TeamAvatar name={op.name} />
+                              <span className="truncate">{op.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </TeamCard>
+          ))}
+        </div>
       )}
+
+      {/* Backdrop transparan: ketuk di luar untuk menutup dropdown. */}
+      {open && (
+        <button
+          aria-hidden
+          tabIndex={-1}
+          onClick={() => setOpen(null)}
+          className="fixed inset-0 z-10 cursor-default"
+        />
+      )}
+
+      <div className="flex items-center justify-between pt-1">
+        <p
+          className={`text-xs ${
+            allPaired ? "text-emerald-600" : "text-slate-400"
+          }`}
+        >
+          {allPaired
+            ? "Semua pemain sudah masuk tim."
+            : `${pool.length} pemain belum masuk tim.`}
+        </p>
+        {pool.length >= 1 && (
+          <button
+            onClick={autoFill}
+            className="shrink-0 text-xs font-medium text-lime-700 hover:underline"
+          >
+            Isi otomatis sisanya
+          </button>
+        )}
+      </div>
     </div>
   );
 }

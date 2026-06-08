@@ -422,3 +422,18 @@ export async function leagueStandings(
   const results = events.flatMap(eventResults);
   return { standings: computeStandings(results), eventCount: events.length };
 }
+
+/**
+ * Agregat semua sesi user (lintas liga + lepas) untuk leaderboard ELO global.
+ * Mengembalikan hasil match mentah + daftar nama unik; rating dihitung di UI.
+ */
+export async function globalStats(): Promise<{
+  results: MatchResult[];
+  names: string[];
+  eventCount: number;
+}> {
+  const events = await listEvents();
+  const results = events.flatMap(eventResults);
+  const names = Array.from(new Set(events.flatMap((e) => e.players)));
+  return { results, names, eventCount: events.length };
+}
