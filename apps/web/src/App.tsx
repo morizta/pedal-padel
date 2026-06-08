@@ -3815,7 +3815,7 @@ function Field({
 }) {
   return (
     <div className="mb-4">
-      <label className="mb-1.5 block text-sm font-medium text-slate-600">
+      <label className="mb-1.5 block font-label-caps text-label-caps text-on-surface-variant">
         {label}
       </label>
       {children}
@@ -3838,14 +3838,14 @@ function Stepper({
     <span className="inline-flex items-center gap-2">
       <button
         onClick={() => onChange(Math.max(min, value - 1))}
-        className="h-9 w-9 rounded-lg bg-slate-100 text-lg hover:bg-slate-200"
+        className="h-9 w-9 rounded-lg bg-surface-container text-lg text-on-surface hover:bg-surface-container-high"
       >
         −
       </button>
       <span className="w-6 text-center font-semibold tabular-nums">{value}</span>
       <button
         onClick={() => onChange(Math.min(max, value + 1))}
-        className="h-9 w-9 rounded-lg bg-slate-100 text-lg hover:bg-slate-200"
+        className="h-9 w-9 rounded-lg bg-surface-container text-lg text-on-surface hover:bg-surface-container-high"
       >
         +
       </button>
@@ -3865,10 +3865,10 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
         active
-          ? "bg-slate-900 text-white"
-          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          ? "bg-navy text-white"
+          : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
       }`}
     >
       {label}
@@ -3888,7 +3888,7 @@ function Toggle({
   offLabel: string;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm">
+    <div className="inline-flex rounded-lg bg-surface-container p-1 text-sm">
       {[
         { v: true, label: onLabel },
         { v: false, label: offLabel },
@@ -3896,10 +3896,10 @@ function Toggle({
         <button
           key={o.label}
           onClick={() => onChange(o.v)}
-          className={`rounded-md px-3 py-2 font-semibold ${
+          className={`rounded-md px-3 py-2 font-semibold transition ${
             value === o.v
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500"
+              ? "bg-surface-container-lowest text-on-surface shadow-sm"
+              : "text-on-surface-variant"
           }`}
         >
           {o.label}
@@ -3971,8 +3971,8 @@ function TeamCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
-      <div className="mb-1.5 text-xs font-semibold text-lime-600">
+    <div className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2.5 shadow-sm">
+      <div className="mb-1.5 font-label-caps text-label-caps text-primary">
         Tim {index + 1}
       </div>
       <div className="space-y-1.5">{children}</div>
@@ -3982,7 +3982,7 @@ function TeamCard({
 
 const TEAM_GRID = "grid grid-cols-1 gap-2 sm:grid-cols-2";
 const EMPTY_HINT =
-  "rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-400";
+  "rounded-lg bg-surface-container-low px-3 py-4 text-center text-xs text-on-surface-variant";
 
 /**
  * Pratinjau pasangan otomatis (read-only) — kartu tim grid + tombol acak ulang.
