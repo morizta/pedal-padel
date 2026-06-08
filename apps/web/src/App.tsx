@@ -1435,11 +1435,10 @@ function LeagueScreen({
               }}
             />
           </Card>
-          <LeagueMembers
+          <LeaguePeople
             leagueId={leagueId}
             isAdmin={league.myRole === "owner" || league.myRole === "admin"}
           />
-          <LeagueRoster leagueId={leagueId} />
         </div>
       </div>
     </div>
@@ -1447,7 +1446,13 @@ function LeagueScreen({
 }
 
 /** Anggota liga: permintaan pending (approve/tolak), daftar anggota, invite. */
-function LeagueMembers({
+/**
+ * Satu kartu gabungan: anggota akun (owner/admin/member) + pemain roster
+ * (termasuk tamu). Akun = akses kelola; pemain/tamu = yang main (auto-terpilih
+ * saat tambah sesi). Dua sumber data (league_users + league_members) disatukan
+ * di tampilan, dedup berdasarkan nama agar tak dobel.
+ */
+function LeaguePeople({
   leagueId,
   isAdmin,
 }: {
@@ -1455,47 +1460,112 @@ function LeagueMembers({
   isAdmin: boolean;
 }) {
   const membersQ = useAsync(() => listLeagueMembers(leagueId), [leagueId]);
-  const [q, setQ] = useState("");
+  const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
+  const playersQ = useAsync(() => listPlayers(), []);
+
+  const [roster, setRoster] = useState<string[] | null>(null);
+  const [inviteQ, setInviteQ] = useState("");
   const [hits, setHits] = useState<AccountUser[]>([]);
+  const [addQ, setAddQ] = useState("");
 
-  const members = membersQ.data ?? [];
-  const pending = members.filter((m) => m.status === "pending");
-  const active = members.filter((m) => m.status === "member");
-  const memberIds = new Set(members.map((m) => m.userId));
+  const accounts = membersQ.data ?? [];
+  const pending = accounts.filter((m) => m.status === "pending");
+  const activeAccounts = accounts.filter((m) => m.status === "member");
+  const accIds = new Set(accounts.map((m) => m.userId));
+  const accountNames = new Set(activeAccounts.map((a) => a.name.toLowerCase()));
 
-  // Cari user untuk diundang (≥3 huruf, debounce).
+  const allPlayers = playersQ.data ?? [];
+  const rosterIds = roster ?? leagueQ.data?.memberIds ?? [];
+  const extraPlayers = allPlayers
+    .filter((p) => rosterIds.includes(p.id))
+    .filter((p) => !accountNames.has(p.name.toLowerCase())); // hindari dobel
+
+  const roleRank: Record<string, number> = { owner: 0, admin: 1, member: 2 };
+  const rows = [
+    ...activeAccounts
+      .slice()
+      .sort(
+        (a, b) =>
+          (roleRank[a.role] ?? 9) - (roleRank[b.role] ?? 9) ||
+          a.name.localeCompare(b.name)
+      )
+      .map((a) => ({
+        key: "u:" + a.userId,
+        name: a.name,
+        username: a.username,
+        badge: a.role,
+        canRemove: isAdmin && a.role !== "owner",
+        onRemove: () => removeMember(leagueId, a.userId),
+      })),
+    ...extraPlayers
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((p) => ({
+        key: "p:" + p.id,
+        name: p.name,
+        username: null as string | null,
+        badge: p.isGuest ? "tamu" : "akun",
+        canRemove: isAdmin,
+        onRemove: async () => setR(rosterIds.filter((x) => x !== p.id)),
+      })),
+  ];
+
+  // Cari akun untuk diundang (≥3 huruf).
   useEffect(() => {
-    const term = q.trim();
-    if (!isAdmin || term.length < 3) {
+    const t = inviteQ.trim();
+    if (!isAdmin || t.length < 3) {
       setHits([]);
       return;
     }
-    const t = setTimeout(async () => {
+    const tm = setTimeout(async () => {
       try {
-        const r = await searchAccounts(term);
-        setHits(r.filter((u) => !memberIds.has(u.userId)));
+        const r = await searchAccounts(t);
+        setHits(r.filter((u) => !accIds.has(u.userId)));
       } catch {
         setHits([]);
       }
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(tm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, isAdmin, members.length]);
+  }, [inviteQ, isAdmin, accounts.length]);
+
+  const addTerm = addQ.trim().toLowerCase();
+  const addPool = allPlayers.filter(
+    (p) =>
+      !rosterIds.includes(p.id) &&
+      (addTerm ? p.name.toLowerCase().includes(addTerm) : false)
+  );
 
   async function act(fn: () => Promise<void>) {
     try {
       await fn();
       membersQ.reload();
+      leagueQ.reload();
     } catch (e) {
       alert("Gagal: " + errMsg(e));
     }
   }
+  async function setR(next: string[]) {
+    setRoster(next);
+    await setLeagueMembers(leagueId, next);
+  }
 
-  const roleLabel = (r: string) =>
-    r === "owner" ? "owner" : r === "admin" ? "admin" : null;
+  const badgeCls = (b: string) =>
+    b === "owner"
+      ? "bg-lime-100 text-lime-700"
+      : b === "admin"
+        ? "bg-sky-100 text-sky-700"
+        : b === "tamu"
+          ? "bg-amber-100 text-amber-700"
+          : "bg-slate-100 text-slate-500";
 
   return (
-    <Card title={`👥 Anggota (${active.length})`}>
+    <Card title={`🎾 Pemain & Anggota (${rows.length})`}>
+      <p className="mb-3 text-xs text-slate-400">
+        <b>Akun</b> (owner/admin/member) = akses kelola. <b>Tamu</b> = main saja.
+        Pemain di sini otomatis terpilih saat tambah sesi.
+      </p>
+
       {isAdmin && pending.length > 0 && (
         <div className="mb-4">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
@@ -1535,72 +1605,120 @@ function LeagueMembers({
       )}
 
       {isAdmin && (
-        <div className="relative mb-3">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Undang via nama / @username…"
-            className="input w-full"
-          />
-          {hits.length > 0 && (
-            <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
-              {hits.map((u) => (
-                <li key={u.userId}>
-                  <button
-                    onClick={() =>
-                      act(async () => {
-                        await inviteUser(leagueId, u.userId);
-                        setQ("");
-                        setHits([]);
-                      })
-                    }
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
-                  >
-                    <TeamAvatar name={u.name} />
-                    <span className="min-w-0 flex-1 truncate">
-                      {u.name}
-                      {u.username && (
-                        <span className="text-slate-400"> @{u.username}</span>
-                      )}
-                    </span>
-                    <span className="text-xs font-medium text-lime-700">
-                      Undang
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <>
+          <div className="relative mb-2">
+            <input
+              value={inviteQ}
+              onChange={(e) => setInviteQ(e.target.value)}
+              placeholder="Undang akun via nama / @username…"
+              className="input w-full"
+            />
+            {hits.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                {hits.map((u) => (
+                  <li key={u.userId}>
+                    <button
+                      onClick={() =>
+                        act(async () => {
+                          await inviteUser(leagueId, u.userId);
+                          setInviteQ("");
+                          setHits([]);
+                        })
+                      }
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                    >
+                      <TeamAvatar name={u.name} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {u.name}
+                        {u.username && (
+                          <span className="text-slate-400"> @{u.username}</span>
+                        )}
+                      </span>
+                      <span className="text-xs font-medium text-lime-700">
+                        Undang
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="relative mb-3">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              🔍
+            </span>
+            <input
+              value={addQ}
+              onChange={(e) => setAddQ(e.target.value)}
+              placeholder="Tambah pemain/tamu ke roster…"
+              className="input w-full pl-9"
+            />
+            {addTerm && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                {addPool.length === 0 ? (
+                  <li className="px-2 py-1.5 text-xs text-slate-400">
+                    Tak ada pemain cocok.
+                  </li>
+                ) : (
+                  addPool.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => {
+                          setR([...rosterIds, p.id]);
+                          setAddQ("");
+                        }}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                      >
+                        <TeamAvatar name={p.name} />
+                        <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        {p.isGuest && (
+                          <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
+                            tamu
+                          </span>
+                        )}
+                        <span className="text-xs font-medium text-lime-700">
+                          Tambah
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+          </div>
+        </>
       )}
 
       <StateText
-        loading={membersQ.loading}
-        error={membersQ.error}
-        empty={!membersQ.loading && active.length === 0}
-        emptyText="Belum ada anggota."
+        loading={membersQ.loading || playersQ.loading}
+        error={membersQ.error || playersQ.error}
+        empty={!membersQ.loading && rows.length === 0}
+        emptyText="Belum ada pemain/anggota."
       />
-      <ul className="space-y-1">
-        {active.map((m) => (
+      <ul className="space-y-0.5 rounded-xl border border-slate-200 p-1">
+        {rows.map((r) => (
           <li
-            key={m.userId}
-            className="flex items-center gap-2 rounded-lg px-1 py-1 text-sm"
+            key={r.key}
+            className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm"
           >
-            <TeamAvatar name={m.name} />
-            <span className="min-w-0 flex-1 truncate">
-              {m.name}
-              {m.username && (
-                <span className="text-slate-400"> @{m.username}</span>
+            <TeamAvatar name={r.name} />
+            <span className="min-w-0 flex-1 truncate font-medium text-slate-800">
+              {r.name}
+              {r.username && (
+                <span className="font-normal text-slate-400"> @{r.username}</span>
               )}
             </span>
-            {roleLabel(m.role) && (
-              <span className="rounded bg-slate-100 px-1.5 text-[10px] font-semibold uppercase text-slate-500">
-                {roleLabel(m.role)}
-              </span>
-            )}
-            {isAdmin && m.role !== "owner" && (
+            <span
+              className={`rounded px-1.5 text-[10px] font-semibold uppercase ${badgeCls(
+                r.badge
+              )}`}
+            >
+              {r.badge}
+            </span>
+            {r.canRemove && (
               <button
-                onClick={() => act(() => removeMember(leagueId, m.userId))}
+                onClick={() => act(r.onRemove)}
                 className="text-slate-300 hover:text-red-600"
                 title="Keluarkan"
               >
@@ -1610,113 +1728,6 @@ function LeagueMembers({
           </li>
         ))}
       </ul>
-    </Card>
-  );
-}
-
-function LeagueRoster({ leagueId }: { leagueId: string }) {
-  const registered = useAsync(() => listPlayers(), []);
-  const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
-  const [members, setMembers] = useState<string[] | null>(null);
-  const [q, setQ] = useState("");
-
-  const memberIds = members ?? leagueQ.data?.memberIds ?? [];
-  const all = registered.data ?? [];
-  const selected = all.filter((p) => memberIds.includes(p.id));
-  const term = q.trim().toLowerCase();
-  const pool = all.filter(
-    (p) => !memberIds.includes(p.id) && (term ? p.name.toLowerCase().includes(term) : false)
-  );
-
-  async function set(next: string[]) {
-    setMembers(next);
-    await setLeagueMembers(leagueId, next);
-  }
-  const add = (id: string) => {
-    set([...memberIds, id]);
-    setQ("");
-  };
-  const remove = (id: string) => set(memberIds.filter((m) => m !== id));
-
-  return (
-    <Card title="🧑‍🤝‍🧑 Anggota Liga">
-      <p className="mb-3 text-xs text-slate-400">
-        Pemain terdaftar yang ikut liga ini. Saat tambah sesi, mereka otomatis
-        terpilih.
-      </p>
-
-      <div className="relative mb-3">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-          🔍
-        </span>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Cari & tambah pemain…"
-          className="input w-full pl-9"
-        />
-        {term && (
-          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
-            {pool.length === 0 ? (
-              <li className="px-2 py-1.5 text-xs text-slate-400">
-                Tak ada pemain cocok.
-              </li>
-            ) : (
-              pool.map((p) => (
-                <li key={p.id}>
-                  <button
-                    onClick={() => add(p.id)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
-                  >
-                    <TeamAvatar name={p.name} />
-                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    {p.isGuest && (
-                      <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
-                        tamu
-                      </span>
-                    )}
-                    <span className="text-xs font-medium text-lime-700">
-                      Tambah
-                    </span>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-      </div>
-
-      {selected.length === 0 ? (
-        <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-400">
-          Belum ada anggota. Cari nama di atas untuk menambah.
-        </p>
-      ) : (
-        <ul className="space-y-0.5 rounded-xl border border-slate-200 p-1">
-          {selected.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-2.5 rounded-lg bg-lime-50 px-2 py-1.5 text-sm"
-            >
-              <TeamAvatar name={p.name} />
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">
-                {p.name}
-              </span>
-              {p.isGuest && (
-                <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
-                  tamu
-                </span>
-              )}
-              <button
-                onClick={() => remove(p.id)}
-                className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                aria-label={`Hapus ${p.name}`}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </Card>
   );
 }
