@@ -222,13 +222,20 @@ function ProfileScreen({
   const myName = displayName(u);
   const me = (() => {
     if (!statsQ.data) return null;
-    const r = computeRatings(statsQ.data.names, statsQ.data.results).find(
-      (x) => x.name === myName
-    );
+    const ratings = computeRatings(statsQ.data.names, statsQ.data.results);
+    const played = ratings.filter((r) => r.matchesPlayed > 0); // sudah urut by ELO
+    const idx = played.findIndex((x) => x.name === myName);
+    const r = ratings.find((x) => x.name === myName);
     const s = computeStandings(statsQ.data.results, { compensate: false }).find(
       (x) => x.playerId === myName
     );
-    return { rating: r?.rating ?? null, played: r?.matchesPlayed ?? 0, st: s ?? null };
+    return {
+      rating: r?.rating ?? null,
+      played: r?.matchesPlayed ?? 0,
+      st: s ?? null,
+      rank: idx >= 0 ? idx + 1 : null,
+      totalRanked: played.length,
+    };
   })();
   const history = histQ.data ?? [];
   const rel = me && me.played > 0 ? Math.round(reliability(me.played) * 100) : 0;
@@ -345,19 +352,39 @@ function ProfileScreen({
 
       {/* Rating */}
       <Card title="📈 Rating">
-        <div className="grid grid-cols-2 gap-3 text-center">
+        <div className="grid grid-cols-3 gap-3 text-center">
           {[
-            { k: "ELO", v: me && me.played > 0 ? Math.round(me.rating!) : "–" },
-            { k: "Keandalan", v: me && me.played > 0 ? `${rel}%` : "–" },
+            {
+              k: "Peringkat",
+              v:
+                me?.rank != null ? `#${me.rank}` : "–",
+              sub: me?.rank != null ? `dari ${me.totalRanked}` : "belum main",
+            },
+            {
+              k: "ELO",
+              v: me && me.played > 0 ? Math.round(me.rating!) : "–",
+              sub: "rating",
+            },
+            {
+              k: "Keandalan",
+              v: me && me.played > 0 ? `${rel}%` : "–",
+              sub: me && me.played > 0 ? `${me.played}/20 match` : "—",
+            },
           ].map((r) => (
             <div key={r.k} className="rounded-xl bg-slate-50 py-4">
-              <div className="text-xs uppercase tracking-wide text-slate-400">
+              <div className="text-[10px] uppercase tracking-wide text-slate-400">
                 {r.k}
               </div>
               <div className="mt-1 text-2xl font-bold">{r.v}</div>
+              <div className="mt-0.5 text-[10px] text-slate-400">{r.sub}</div>
             </div>
           ))}
         </div>
+        <p className="mt-3 text-xs text-slate-400">
+          <b>Keandalan</b> = seberapa stabil rating-mu, naik tiap main; 100%
+          (stabil) setelah 20 match. Di bawah itu, rating masih bergerak besar
+          tiap menang/kalah.
+        </p>
       </Card>
 
       {/* Statistik */}
@@ -480,6 +507,7 @@ function HomeScreen({
   const standalone = useAsync(() => listEvents(null), []);
   const me = useAsync(() => globalStats(), []);
   const [newLeague, setNewLeague] = useState("");
+  const [newLeagueDesc, setNewLeagueDesc] = useState("");
   const [newVisibility, setNewVisibility] = useState<"private" | "public">(
     "private"
   );
@@ -499,8 +527,9 @@ function HomeScreen({
   async function addLeague() {
     const name = newLeague.trim();
     if (!name) return;
-    const lg = await createLeague(name, newVisibility);
+    const lg = await createLeague(name, newVisibility, newLeagueDesc);
     setNewLeague("");
+    setNewLeagueDesc("");
     onNavigate({ t: "league", id: lg.id });
   }
 
@@ -562,6 +591,12 @@ function HomeScreen({
             + Liga
           </button>
         </div>
+        <input
+          value={newLeagueDesc}
+          onChange={(e) => setNewLeagueDesc(e.target.value)}
+          placeholder="Deskripsi liga (opsional)…"
+          className="input mb-2 w-full"
+        />
         <div className="mb-4 flex items-center gap-2">
           <Toggle
             value={newVisibility === "private"}
@@ -1219,20 +1254,39 @@ function EventList({
                     : ""}
                 {e.name}
               </span>
+              {e.description && (
+                <span className="block truncate text-xs text-slate-400">
+                  {e.description}
+                </span>
+              )}
               <span className="text-xs text-slate-400">
                 {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
-                {fmtDate(e.createdAt)}
+                {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
               </span>
             </span>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                e.status === "finished"
-                  ? "bg-slate-100 text-slate-500"
-                  : "bg-lime-100 text-lime-700"
-              }`}
-            >
-              {e.status === "finished" ? "selesai" : "berjalan"}
-            </span>
+            {(() => {
+              const upcoming =
+                e.status !== "finished" &&
+                !!e.startAt &&
+                e.startAt > Date.now();
+              return (
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    e.status === "finished"
+                      ? "bg-slate-100 text-slate-500"
+                      : upcoming
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-lime-100 text-lime-700"
+                  }`}
+                >
+                  {e.status === "finished"
+                    ? "selesai"
+                    : upcoming
+                      ? "mendatang"
+                      : "berjalan"}
+                </span>
+              );
+            })()}
           </button>
           <button
             onClick={() => {
@@ -1275,7 +1329,10 @@ function LeagueScreen({
       <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-white">
         <div className="min-w-0">
           <h2 className="truncate text-lg font-bold">{league.name}</h2>
-          <p className="text-xs text-slate-300">
+          {league.description && (
+            <p className="mt-0.5 text-sm text-slate-300">{league.description}</p>
+          )}
+          <p className="text-xs text-slate-400">
             {events.length} sesi · dibuat {fmtDate(league.createdAt)}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
@@ -1561,50 +1618,103 @@ function LeagueRoster({ leagueId }: { leagueId: string }) {
   const registered = useAsync(() => listPlayers(), []);
   const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
   const [members, setMembers] = useState<string[] | null>(null);
+  const [q, setQ] = useState("");
 
-  // Inisialisasi member (player ids) dari liga sekali termuat.
   const memberIds = members ?? leagueQ.data?.memberIds ?? [];
+  const all = registered.data ?? [];
+  const selected = all.filter((p) => memberIds.includes(p.id));
+  const term = q.trim().toLowerCase();
+  const pool = all.filter(
+    (p) => !memberIds.includes(p.id) && (term ? p.name.toLowerCase().includes(term) : false)
+  );
 
-  async function toggle(id: string) {
-    const next = memberIds.includes(id)
-      ? memberIds.filter((m) => m !== id)
-      : [...memberIds, id];
+  async function set(next: string[]) {
     setMembers(next);
     await setLeagueMembers(leagueId, next);
   }
+  const add = (id: string) => {
+    set([...memberIds, id]);
+    setQ("");
+  };
+  const remove = (id: string) => set(memberIds.filter((m) => m !== id));
 
-  const list = registered.data ?? [];
   return (
     <Card title="🧑‍🤝‍🧑 Anggota Liga">
       <p className="mb-3 text-xs text-slate-400">
-        Pilih pemain terdaftar yang ikut liga ini. Saat tambah sesi, anggota
-        otomatis terpilih.
+        Pemain terdaftar yang ikut liga ini. Saat tambah sesi, mereka otomatis
+        terpilih.
       </p>
-      <StateText
-        loading={registered.loading}
-        error={registered.error}
-        empty={list.length === 0}
-        emptyText="Belum ada pemain terdaftar — daftarkan dulu di halaman utama."
-      />
-      {list.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
-          {list.map((p) => {
-            const on = memberIds.includes(p.id);
-            return (
-              <li key={p.id}>
-                <button
-                  onClick={() => toggle(p.id)}
-                  className={`rounded-full px-3 py-1 text-sm transition ${
-                    on
-                      ? "bg-lime-400 font-medium text-slate-900"
-                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                  }`}
-                >
-                  {p.name}
-                </button>
+
+      <div className="relative mb-3">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          🔍
+        </span>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Cari & tambah pemain…"
+          className="input w-full pl-9"
+        />
+        {term && (
+          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+            {pool.length === 0 ? (
+              <li className="px-2 py-1.5 text-xs text-slate-400">
+                Tak ada pemain cocok.
               </li>
-            );
-          })}
+            ) : (
+              pool.map((p) => (
+                <li key={p.id}>
+                  <button
+                    onClick={() => add(p.id)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                  >
+                    <TeamAvatar name={p.name} />
+                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    {p.isGuest && (
+                      <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
+                        tamu
+                      </span>
+                    )}
+                    <span className="text-xs font-medium text-lime-700">
+                      Tambah
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
+
+      {selected.length === 0 ? (
+        <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-400">
+          Belum ada anggota. Cari nama di atas untuk menambah.
+        </p>
+      ) : (
+        <ul className="space-y-0.5 rounded-xl border border-slate-200 p-1">
+          {selected.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-center gap-2.5 rounded-lg bg-lime-50 px-2 py-1.5 text-sm"
+            >
+              <TeamAvatar name={p.name} />
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">
+                {p.name}
+              </span>
+              {p.isGuest && (
+                <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
+                  tamu
+                </span>
+              )}
+              <button
+                onClick={() => remove(p.id)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                aria-label={`Hapus ${p.name}`}
+              >
+                ×
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </Card>
@@ -1657,6 +1767,9 @@ function CreateScreen({
   const registeredList = registered.data ?? [];
 
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [startMode, setStartMode] = useState<"now" | "schedule">("now");
+  const [startAt, setStartAt] = useState("");
   const [format, setFormat] = useState<Format>("americano");
   const [courts, setCourts] = useState(1);
   const [scoringType, setScoringType] = useState<"point" | "normal">("point");
@@ -1779,6 +1892,11 @@ function CreateScreen({
             )
           : undefined,
         visibility,
+        description,
+        startAt:
+          startMode === "schedule" && startAt
+            ? new Date(startAt).getTime()
+            : null,
       });
       onCreated(event.id);
     } catch (e) {
@@ -1809,6 +1927,39 @@ function CreateScreen({
             placeholder="mis. Tarkam Jumat Malam"
             className="input"
           />
+        </Field>
+
+        <Field label="Deskripsi (opsional)">
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="mis. Arisan padel mingguan…"
+            className="input"
+          />
+        </Field>
+
+        <Field label="Mulai">
+          <Toggle
+            value={startMode === "now"}
+            onChange={(v) => setStartMode(v ? "now" : "schedule")}
+            onLabel="Sekarang"
+            offLabel="Jadwalkan"
+          />
+          {startMode === "schedule" && (
+            <input
+              type="datetime-local"
+              value={startAt}
+              onChange={(e) => setStartAt(e.target.value)}
+              className="input mt-2"
+            />
+          )}
+          <p className="mt-1 text-xs text-slate-400">
+            {startMode === "now"
+              ? "Sesi dimulai sekarang."
+              : startAt
+                ? "Dijadwalkan — tampil sebagai sesi mendatang sampai waktunya."
+                : "Pilih tanggal & jam mulai."}
+          </p>
         </Field>
 
         <Field label="Format">

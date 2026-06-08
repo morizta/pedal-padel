@@ -208,6 +208,7 @@ export async function updateProfile(patch: {
 export interface League {
   id: string;
   name: string;
+  description: string | null;
   createdAt: number;
   memberIds: string[];
   visibility: "private" | "public";
@@ -217,12 +218,13 @@ export interface League {
 }
 
 const LEAGUE_COLS =
-  "id,name,created_at,visibility,join_code,league_members(player_id)";
+  "id,name,description,created_at,visibility,join_code,league_members(player_id)";
 
 function mapLeague(r: any, myRole: League["myRole"] = null): League {
   return {
     id: r.id,
     name: r.name,
+    description: r.description ?? null,
     createdAt: Date.parse(r.created_at),
     memberIds: (r.league_members ?? []).map((m: any) => m.player_id),
     visibility: r.visibility ?? "private",
@@ -279,7 +281,8 @@ export async function getLeague(id: string): Promise<League | undefined> {
 
 export async function createLeague(
   name: string,
-  visibility: "private" | "public" = "private"
+  visibility: "private" | "public" = "private",
+  description?: string
 ): Promise<League> {
   const owner = await currentUserId();
   if (!owner) throw new Error("Harus login untuk membuat liga.");
@@ -288,6 +291,7 @@ export async function createLeague(
     .insert({
       name: name.trim() || "Liga Tanpa Nama",
       owner_id: owner,
+      description: description?.trim() || null,
       visibility,
       join_code: visibility === "private" ? genJoinCode() : null,
     })
@@ -491,6 +495,9 @@ export interface DbEvent {
   randomizeStart: boolean;
   status: "live" | "finished";
   visibility: "inherit" | "private" | "public";
+  description: string | null;
+  /** Jadwal mulai (ms). null = mulai sekarang/segera. */
+  startAt: number | null;
   playerIds: string[];
   /** Nama peserta (identitas engine). */
   players: string[];
@@ -501,7 +508,7 @@ export interface DbEvent {
 }
 
 const EVENT_COLS =
-  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,player_ids,player_names,teams,rounds,scores,created_at";
+  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,start_at,player_ids,player_names,teams,rounds,scores,created_at";
 
 function mapEvent(r: any): DbEvent {
   return {
@@ -514,6 +521,8 @@ function mapEvent(r: any): DbEvent {
     randomizeStart: r.randomize_start,
     status: r.status,
     visibility: r.visibility ?? "inherit",
+    description: r.description ?? null,
+    startAt: r.start_at ? Date.parse(r.start_at) : null,
     playerIds: r.player_ids ?? [],
     players: r.player_names ?? [],
     teams: r.teams ?? [],
@@ -570,6 +579,9 @@ export interface NewEvent {
   teams?: Pair[];
   /** Visibilitas: inherit (ikut liga) | private | public. Default inherit. */
   visibility?: "inherit" | "private" | "public";
+  description?: string;
+  /** Jadwal mulai (ms). null/undefined = sekarang. */
+  startAt?: number | null;
 }
 
 export async function createEvent(input: NewEvent): Promise<DbEvent> {
@@ -587,6 +599,8 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
       randomize_start: input.randomizeStart,
       status: "live",
       visibility: input.visibility ?? "inherit",
+      description: input.description?.trim() || null,
+      start_at: input.startAt ? new Date(input.startAt).toISOString() : null,
       player_ids: input.participants.map((p) => p.id),
       player_names: input.participants.map((p) => p.name),
       teams: input.teams ?? [],

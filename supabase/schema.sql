@@ -61,6 +61,11 @@ alter table public.events
   add column if not exists visibility text not null default 'inherit'
     check (visibility in ('inherit', 'private', 'public'));
 
+-- Deskripsi + jadwal mulai turnamen (start_at null = mulai sekarang).
+alter table public.events  add column if not exists description text;
+alter table public.events  add column if not exists start_at timestamptz;
+alter table public.leagues add column if not exists description text;
+
 -- Username unik (handle) + avatar untuk profil.
 alter table public.profiles add column if not exists username   text;
 alter table public.profiles add column if not exists avatar_url text;
