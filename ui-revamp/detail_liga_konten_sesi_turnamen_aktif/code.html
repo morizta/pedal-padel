@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SiCopa X Primasys | PedalPadel League</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Shared Components Logic & Tailwind Config -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "on-surface-variant": "#444933",
+                "outline": "#747a60",
+                "on-tertiary-container": "#0466d9",
+                "elo-silver": "#94A3B8",
+                "on-surface": "#191c1e",
+                "on-secondary-container": "#5c647a",
+                "on-tertiary": "#ffffff",
+                "tertiary-fixed-dim": "#adc6ff",
+                "elo-gold": "#F59E0B",
+                "tertiary-container": "#e7ecff",
+                "inverse-on-surface": "#eff1f3",
+                "on-secondary-fixed-variant": "#3f465c",
+                "on-secondary-fixed": "#131b2e",
+                "inverse-surface": "#2d3133",
+                "surface": "#f7f9fb",
+                "tertiary-fixed": "#d8e2ff",
+                "secondary-fixed": "#dae2fd",
+                "on-error-container": "#93000a",
+                "elo-bronze": "#B45309",
+                "primary-fixed": "#c3f400",
+                "surface-container-highest": "#e0e3e5",
+                "secondary-fixed-dim": "#bec6e0",
+                "on-primary-container": "#5b7300",
+                "surface-container": "#eceef0",
+                "primary-fixed-dim": "#abd600",
+                "on-primary-fixed-variant": "#3c4d00",
+                "secondary": "#565e74",
+                "on-background": "#191c1e",
+                "surface-container-low": "#f2f4f6",
+                "secondary-container": "#dae2fd",
+                "surface-container-lowest": "#ffffff",
+                "primary-container": "#ccff00",
+                "on-tertiary-fixed": "#001a42",
+                "surface-bright": "#f7f9fb",
+                "reliability-dimmed": "#64748B",
+                "outline-variant": "#c4c9ac",
+                "on-tertiary-fixed-variant": "#004395",
+                "surface-variant": "#e0e3e5",
+                "error": "#ba1a1a",
+                "primary": "#506600",
+                "on-error": "#ffffff",
+                "error-container": "#ffdad6",
+                "background": "#f7f9fb",
+                "loss-red": "#EF4444",
+                "on-secondary": "#ffffff",
+                "on-primary": "#ffffff",
+                "surface-tint": "#506600",
+                "tertiary": "#005ac2",
+                "surface-container-high": "#e6e8ea",
+                "win-green": "#22C55E",
+                "on-primary-fixed": "#161e00",
+                "surface-dim": "#d8dadc",
+                "inverse-primary": "#abd600"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+            },
+            "spacing": {
+                "margin-mobile": "16px",
+                "margin-desktop": "40px",
+                "stack-lg": "24px",
+                "touch-target": "44px",
+                "inset-card": "20px",
+                "stack-sm": "8px",
+                "stack-md": "16px",
+                "gutter": "16px"
+            },
+            "fontFamily": {
+                "headline-lg-mobile": ["Hanken Grotesk"],
+                "body-sm": ["Inter"],
+                "data-mono": ["JetBrains Mono"],
+                "display-elo": ["Hanken Grotesk"],
+                "body-md": ["Inter"],
+                "headline-lg": ["Hanken Grotesk"],
+                "title-md": ["Hanken Grotesk"],
+                "label-caps": ["Inter"]
+            },
+            "fontSize": {
+                "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                "data-mono": ["13px", {"lineHeight": "16px", "fontWeight": "500"}],
+                "display-elo": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                "title-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .active-tab-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            background-color: #506600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body-md text-on-surface min-h-screen pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="bg-on-secondary-fixed shadow-sm fixed top-0 w-full h-16 px-margin-mobile md:px-margin-desktop z-50 flex justify-between items-center">
+<div class="flex items-center gap-4">
+<h1 class="font-display-elo text-headline-lg text-primary-fixed">PedalPadel</h1>
+<nav class="hidden md:flex items-center gap-6 ml-8">
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors px-3 py-1 rounded-lg font-title-md" href="#">Home</a>
+<a class="text-primary-fixed font-bold px-3 py-1 rounded-lg font-title-md" href="#">Leagues</a>
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors px-3 py-1 rounded-lg font-title-md" href="#">Match</a>
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors px-3 py-1 rounded-lg font-title-md" href="#">Rankings</a>
+</nav>
+</div>
+<div class="flex items-center gap-stack-md">
+<button class="text-primary-fixed p-2 rounded-full hover:bg-on-secondary-fixed-variant transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-primary-fixed p-2 rounded-full hover:bg-on-secondary-fixed-variant transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-secondary-fixed overflow-hidden border border-outline-variant">
+<img alt="Rizky" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDCRUftwG9Oq1h5mHIlfbqAUvGQ8o9OdVCBBnNE0NFw3uypFDigdLhG3Hczukt1V-2ooXWqZRAyNVjdqsHymQgHoDpZr9qeumiCF2Jz0xualaN6InM8pveQVXRmXcpF6aOvkKply6gCdNFAeMbAYL4g4bO4xMGGk78RPSM1Euy-swjL9_GPPQlR8vXnyyXVohw2bV65SjUSCM6VZqWbHdZGoGfp7j2Gut6pcoiqy4t4cE5gVOj8gIm3BkNppp3hpJO6AuETNS4bDhI8"/>
+</div>
+</div>
+</header>
+<main class="pt-20 max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop">
+<!-- League Hero Section -->
+<section class="mt-stack-lg bg-on-secondary-fixed rounded-xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-lg overflow-hidden relative border border-outline/10">
+<div class="absolute top-0 right-0 w-1/3 h-full opacity-10 pointer-events-none">
+<div class="w-full h-full bg-gradient-to-l from-primary-fixed to-transparent"></div>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-2">
+<span class="bg-primary-container text-on-primary-container px-2 py-0.5 rounded font-label-caps text-label-caps uppercase">Premier League</span>
+<span class="text-on-secondary-fixed-variant font-label-caps text-label-caps">• Season 2024</span>
+</div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-primary-fixed mb-2">SiCopa X Primasys</h2>
+<div class="flex flex-wrap items-center gap-4 text-on-secondary-fixed-variant">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span class="font-body-sm text-body-sm">Created 8 Jun 2024</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">group</span>
+<span class="font-body-sm text-body-sm">12 Players Active</span>
+</div>
+<div class="flex items-center gap-1 bg-on-secondary-fixed-variant/50 px-2 py-0.5 rounded-full border border-outline/20">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+<span class="font-data-mono text-data-mono text-primary-fixed">HU9U3F</span>
+<span class="material-symbols-outlined text-[16px] cursor-pointer hover:text-primary-fixed transition-colors">content_copy</span>
+</div>
+</div>
+</div>
+<button class="relative z-10 bg-primary-fixed text-on-primary-fixed px-6 py-3 rounded-xl font-title-md flex items-center justify-center gap-2 hover:bg-primary-fixed-dim transition-all active:scale-95">
+<span class="material-symbols-outlined">add</span>
+<span>Tambah Sesi</span>
+</button>
+</section>
+<!-- Main Content Grid -->
+<div class="mt-stack-lg grid grid-cols-1 lg:grid-cols-12 gap-gutter pb-stack-lg">
+<!-- Left Column: Standings & Sessions -->
+<div class="lg:col-span-8 space-y-gutter">
+<!-- Desktop Navigation Tabs (Mobile Hidden) -->
+<div class="hidden md:flex border-b border-outline-variant relative">
+<button class="px-6 py-4 font-title-md text-on-surface-variant transition-colors hover:text-primary relative" onclick="switchTab('standings')">
+                        Klasemen Liga
+                        <div class="active-tab-indicator w-0" id="standings-indicator"></div>
+</button>
+<button class="px-6 py-4 font-title-md text-primary transition-colors hover:text-primary-fixed-dim relative" onclick="switchTab('sessions')">
+                        Sesi Turnamen
+                        <div class="active-tab-indicator w-full" id="sessions-indicator"></div>
+</button>
+</div>
+<!-- Standings Card -->
+<div class="space-y-6" id="standings-panel">
+<!-- Sesi Aktif Section -->
+<div class="space-y-3">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant/60 uppercase px-1">Sesi Aktif</h3>
+<div class="bg-surface-container-lowest rounded-xl border-2 border-win-green/30 overflow-hidden shadow-sm">
+<div class="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-4">
+<div class="relative">
+<div class="w-12 h-12 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">sports_tennis</span>
+</div>
+<span class="absolute -top-1 -right-1 flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-win-green opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-win-green"></span>
+</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="bg-win-green text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">LIVE</span>
+<h4 class="font-title-md text-title-md">SiCopa Night Americano</h4>
+</div>
+<p class="text-body-sm text-on-surface-variant">Ronde 3/6 • 4 Lapangan • 16 Pemain</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="bg-primary text-on-primary px-4 py-2 rounded-lg font-title-md text-body-sm hover:bg-primary-fixed-dim transition-colors">
+                        Lihat Scoreboard
+                    </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Sesi Mendatang Section -->
+<div class="space-y-3">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant/60 uppercase px-1">Sesi Mendatang</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Session Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant hover:border-primary transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 bg-tertiary-container rounded-lg flex items-center justify-center text-on-tertiary-container">
+<span class="material-symbols-outlined">calendar_month</span>
+</div>
+<span class="bg-surface-container text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px] uppercase">Americano</span>
+</div>
+<h4 class="font-title-md text-body-md mb-1">Weekend Warriors Open</h4>
+<div class="space-y-1.5 mb-4">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span class="text-body-sm">Sabtu, 15 Jun • 08:00</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span class="text-body-sm">Cilandak Sports Center</span>
+</div>
+</div>
+<button class="w-full py-2 border border-primary text-primary rounded-lg font-title-md text-body-sm hover:bg-primary-container transition-colors">
+                    Gabung Sesi
+                </button>
+</div>
+<!-- Session Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant hover:border-primary transition-all group">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 bg-secondary-container rounded-lg flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined">emoji_events</span>
+</div>
+<span class="bg-surface-container text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px] uppercase">Mexicano</span>
+</div>
+<h4 class="font-title-md text-body-md mb-1">Night Owls League</h4>
+<div class="space-y-1.5 mb-4">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span class="text-body-sm">Senin, 17 Jun • 20:00</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span class="text-body-sm">Padel Pro Kemang</span>
+</div>
+</div>
+<button class="w-full py-2 border border-outline-variant text-on-surface-variant rounded-lg font-title-md text-body-sm hover:bg-surface-container transition-colors">
+                    Detail Sesi
+                </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Sessions List (Shown via Tab) -->
+</div>
+<!-- Right Column: Members & Stats -->
+<div class="lg:col-span-4 space-y-gutter">
+<!-- Players & Members Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant overflow-hidden">
+<div class="p-inset-card border-b border-outline-variant flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">sports_tennis</span>
+<h3 class="font-title-md text-title-md">Pemain &amp; Anggota (2)</h3>
+</div>
+<span class="bg-surface-container text-on-surface-variant px-2 py-0.5 rounded font-data-mono text-[11px]">ADMIN MODE</span>
+</div>
+<div class="p-inset-card space-y-4">
+<p class="text-body-sm text-on-surface-variant leading-relaxed">
+<span class="font-bold text-on-surface">Akun</span> (owner/admin/member) = akses kelola. <span class="font-bold text-on-surface">Tamu</span> = main saja. Pemain di sini otomatis terpilih saat tambah sesi.
+                        </p>
+<!-- Search & Invite Inputs -->
+<div class="space-y-3">
+<div class="relative group">
+<input class="w-full h-12 pl-4 pr-12 rounded-lg border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary bg-surface transition-all" placeholder="Undang akun via nama / @username..." type="text"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-primary p-1 hover:bg-primary-container rounded transition-colors">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+<div class="relative group">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant">person_add</span>
+<input class="w-full h-12 pl-10 pr-4 rounded-lg border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary bg-surface transition-all" placeholder="Tambah pemain/tamu ke roster..." type="text"/>
+</div>
+</div>
+<!-- Player List -->
+<div class="space-y-2 mt-6">
+<!-- Owner -->
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed-dim flex items-center justify-center text-on-tertiary-fixed font-bold">RI</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-body-md">Rizky</span>
+<span class="text-on-surface-variant text-[12px]">@izkyd06b</span>
+</div>
+<span class="text-win-green font-data-mono text-[11px]">ELO: 1450</span>
+</div>
+</div>
+<span class="bg-primary-container text-on-primary-container px-2 py-0.5 rounded font-label-caps text-[10px] uppercase">OWNER</span>
+</div>
+<!-- Guest -->
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed font-bold">AR</div>
+<div>
+<span class="font-title-md text-body-md block">Arbi</span>
+<span class="text-on-surface-variant/60 text-[12px]">Guest Player</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px] uppercase">TAMU</span>
+<button class="text-on-surface-variant/40 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+</div>
+</div>
+<button class="w-full py-2 text-primary font-title-md hover:bg-primary-container rounded-lg transition-colors mt-2">
+                            Lihat Semua Anggota
+                        </button>
+</div>
+</div>
+<!-- Ad/Promo Card -->
+<div class="bg-on-tertiary-fixed rounded-xl p-inset-card relative overflow-hidden group">
+<div class="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary-fixed to-transparent scale-150 group-hover:scale-110 transition-transform duration-700"></div>
+<div class="relative z-10">
+<h4 class="text-primary-fixed font-title-md mb-2">Upgrade to Pro League</h4>
+<p class="text-tertiary-fixed text-body-sm mb-4">Dapatkan statistik mendalam, matchmaking otomatis, dan sponsorship untuk liga Anda.</p>
+<button class="bg-white/10 hover:bg-white/20 text-white w-full py-2 rounded-lg font-label-caps backdrop-blur-md transition-all border border-white/10">PELAJARI LEBIH LANJUT</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar (Mobile Only) -->
+<nav class="fixed md:hidden bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-2 bg-surface-container-lowest border-t border-outline-variant shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">groups</span>
+<span class="font-label-caps text-label-caps mt-1">Leagues</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">sports_tennis</span>
+<span class="font-label-caps text-label-caps mt-1">Match</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-label-caps text-label-caps mt-1">Rankings</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-caps text-label-caps mt-1">Profile</span>
+</a>
+</nav>
+<script>
+        function switchTab(tabId) {
+            const standingsPanel = document.getElementById('standings-panel');
+            const sessionsPanel = document.getElementById('sessions-panel');
+            const standingsIndicator = document.getElementById('standings-indicator');
+            const sessionsIndicator = document.getElementById('sessions-indicator');
+            
+            if (tabId === 'standings') {
+                standingsPanel.classList.remove('hidden');
+                sessionsPanel.classList.add('hidden');
+                standingsIndicator.classList.replace('w-0', 'w-full');
+                sessionsIndicator.classList.replace('w-full', 'w-0');
+            } else {
+                standingsPanel.classList.add('hidden');
+                sessionsPanel.classList.remove('hidden');
+                standingsIndicator.classList.replace('w-full', 'w-0');
+                sessionsIndicator.classList.replace('w-0', 'w-full');
+            }
+        }
+    </script>
+</body></html>

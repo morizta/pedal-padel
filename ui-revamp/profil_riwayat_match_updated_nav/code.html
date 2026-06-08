@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PedalPadel - Profile &amp; Match History</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+                  "on-surface-variant": "#444933",
+                  "outline": "#747a60",
+                  "on-tertiary-container": "#0466d9",
+                  "elo-silver": "#94A3B8",
+                  "on-surface": "#191c1e",
+                  "on-secondary-container": "#5c647a",
+                  "on-tertiary": "#ffffff",
+                  "tertiary-fixed-dim": "#adc6ff",
+                  "elo-gold": "#F59E0B",
+                  "tertiary-container": "#e7ecff",
+                  "inverse-on-surface": "#eff1f3",
+                  "on-secondary-fixed-variant": "#3f465c",
+                  "on-secondary-fixed": "#131b2e",
+                  "inverse-surface": "#2d3133",
+                  "surface": "#f7f9fb",
+                  "tertiary-fixed": "#d8e2ff",
+                  "secondary-fixed": "#dae2fd",
+                  "on-error-container": "#93000a",
+                  "elo-bronze": "#B45309",
+                  "primary-fixed": "#c3f400",
+                  "surface-container-highest": "#e0e3e5",
+                  "secondary-fixed-dim": "#bec6e0",
+                  "on-primary-container": "#5b7300",
+                  "surface-container": "#eceef0",
+                  "primary-fixed-dim": "#abd600",
+                  "on-primary-fixed-variant": "#3c4d00",
+                  "secondary": "#565e74",
+                  "on-background": "#191c1e",
+                  "surface-container-low": "#f2f4f6",
+                  "secondary-container": "#dae2fd",
+                  "surface-container-lowest": "#ffffff",
+                  "primary-container": "#ccff00",
+                  "on-tertiary-fixed": "#001a42",
+                  "surface-bright": "#f7f9fb",
+                  "reliability-dimmed": "#64748B",
+                  "outline-variant": "#c4c9ac",
+                  "on-tertiary-fixed-variant": "#004395",
+                  "surface-variant": "#e0e3e5",
+                  "error": "#ba1a1a",
+                  "primary": "#506600",
+                  "on-error": "#ffffff",
+                  "error-container": "#ffdad6",
+                  "background": "#f7f9fb",
+                  "loss-red": "#EF4444",
+                  "on-secondary": "#ffffff",
+                  "on-primary": "#ffffff",
+                  "surface-tint": "#506600",
+                  "tertiary": "#005ac2",
+                  "surface-container-high": "#e6e8ea",
+                  "win-green": "#22C55E",
+                  "on-primary-fixed": "#161e00",
+                  "surface-dim": "#d8dadc",
+                  "inverse-primary": "#abd600"
+          },
+          "borderRadius": {
+                  "DEFAULT": "0.25rem",
+                  "lg": "0.5rem",
+                  "xl": "0.75rem",
+                  "full": "9999px"
+          },
+          "spacing": {
+                  "margin-mobile": "16px",
+                  "margin-desktop": "40px",
+                  "stack-lg": "24px",
+                  "touch-target": "44px",
+                  "inset-card": "20px",
+                  "stack-sm": "8px",
+                  "stack-md": "16px",
+                  "gutter": "16px"
+          },
+          "fontFamily": {
+                  "headline-lg-mobile": ["Hanken Grotesk"],
+                  "body-sm": ["Inter"],
+                  "data-mono": ["JetBrains Mono"],
+                  "display-elo": ["Hanken Grotesk"],
+                  "body-md": ["Inter"],
+                  "headline-lg": ["Hanken Grotesk"],
+                  "title-md": ["Hanken Grotesk"],
+                  "label-caps": ["Inter"]
+          },
+          "fontSize": {
+                  "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                  "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                  "data-mono": ["13px", {"lineHeight": "16px", "fontWeight": "500"}],
+                  "display-elo": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                  "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                  "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                  "title-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                  "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    
+    .neo-card {
+      background: white;
+      box-shadow: 0px 4px 20px rgba(19, 27, 46, 0.04);
+      transition: transform 0.2s ease;
+    }
+    .neo-card:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="bg-on-secondary-fixed text-primary-fixed fixed top-0 left-0 w-full z-50 flex justify-between items-center h-16 px-margin-mobile md:px-margin-desktop shadow-sm">
+<div class="flex items-center gap-3">
+<div class="bg-primary-fixed text-on-primary-fixed w-10 h-10 rounded-lg flex items-center justify-center font-display-elo text-headline-lg shadow-inner">P</div>
+<h1 class="font-display-elo text-headline-lg-mobile md:text-headline-lg tracking-tight">PedalPadel</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined hover:bg-on-secondary-fixed-variant p-2 rounded-full transition-colors">notifications</button>
+<button class="material-symbols-outlined hover:bg-on-secondary-fixed-variant p-2 rounded-full transition-colors">settings</button>
+<div class="w-8 h-8 rounded-full bg-primary-fixed-dim flex items-center justify-center text-on-primary-fixed font-bold border-2 border-primary-fixed">R</div>
+</div>
+</header>
+<main class="max-w-[1200px] mx-auto pt-20 px-margin-mobile md:px-margin-desktop space-y-6">
+<!-- Profile Header Section -->
+<section class="bg-on-secondary-fixed rounded-xl p-inset-card text-white flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative">
+<!-- Decorative background blur -->
+<div class="absolute -top-10 -right-10 w-40 h-40 bg-primary-fixed opacity-10 rounded-full blur-3xl"></div>
+<div class="flex items-center gap-6 relative z-10">
+<div class="relative">
+<div class="w-24 h-24 md:w-28 md:h-28 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-display-elo text-4xl shadow-lg border-4 border-on-secondary-fixed-variant">
+            R
+          </div>
+<div class="absolute bottom-1 right-1 bg-win-green w-6 h-6 rounded-full border-2 border-on-secondary-fixed"></div>
+</div>
+<div>
+<h2 class="font-headline-lg-mobile md:text-headline-lg text-white">Rizky</h2>
+<p class="font-data-mono text-secondary-fixed-dim opacity-80">@izkyd06b</p>
+<div class="mt-2 flex gap-2">
+<span class="bg-on-secondary-fixed-variant px-2 py-1 rounded text-[10px] font-label-caps uppercase tracking-wider border border-outline/20">Pro Player</span>
+<span class="bg-on-secondary-fixed-variant px-2 py-1 rounded text-[10px] font-label-caps uppercase tracking-wider border border-outline/20">League A</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3 relative z-10">
+<button class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-on-secondary-fixed-variant hover:bg-primary-fixed hover:text-on-primary-fixed border border-outline/30 px-6 py-2.5 rounded-lg font-label-caps transition-all active:scale-95 duration-100">
+<span class="material-symbols-outlined text-sm">edit</span>
+          Ubah Profil
+        </button>
+</div>
+</section>
+<!-- Stats & Rating Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Rating Section -->
+<section class="neo-card rounded-xl p-inset-card">
+<div class="flex items-center gap-2 mb-stack-md">
+<span class="material-symbols-outlined text-error">trending_up</span>
+<h3 class="font-title-md text-on-surface">Rating</h3>
+</div>
+<div class="bento-grid">
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col items-center justify-center text-center">
+<span class="font-label-caps text-on-surface-variant mb-1">PERINGKAT</span>
+<span class="font-display-elo text-headline-lg text-elo-gold">#8</span>
+<span class="text-[10px] text-outline font-body-sm">DARI 124</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col items-center justify-center text-center">
+<span class="font-label-caps text-on-surface-variant mb-1">ELO</span>
+<span class="font-display-elo text-headline-lg text-primary">991</span>
+<span class="text-[10px] text-outline font-body-sm">PLATINUM II</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col items-center justify-center text-center">
+<span class="font-label-caps text-on-surface-variant mb-1">KEANDALAN</span>
+<span class="font-display-elo text-headline-lg text-win-green">15%</span>
+<span class="text-[10px] text-outline font-body-sm">3/20 MATCH</span>
+</div>
+</div>
+<p class="mt-4 font-body-sm text-outline text-xs leading-relaxed italic">
+          Keandalan = seberapa stabil rating-mu. 100% stabil setelah 20 match. Di bawah itu, rating masih bergerak besar.
+        </p>
+</section>
+<!-- Dashboard Stats -->
+<section class="neo-card rounded-xl p-inset-card">
+<div class="flex items-center gap-2 mb-stack-md">
+<span class="material-symbols-outlined text-tertiary">analytics</span>
+<h3 class="font-title-md text-on-surface">Statistik</h3>
+</div>
+<div class="bento-grid">
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col items-center justify-center text-center">
+<span class="font-label-caps text-on-surface-variant mb-1">MAIN</span>
+<span class="font-display-elo text-headline-lg">3</span>
+<span class="text-[10px] text-outline font-body-sm">TOTAL MATCH</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col items-center justify-center text-center">
+<span class="font-label-caps text-on-surface-variant mb-1">MENANG</span>
+<span class="font-display-elo text-headline-lg">0</span>
+<span class="text-[10px] text-outline font-body-sm">VICORITIES</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col items-center justify-center text-center">
+<span class="font-label-caps text-on-surface-variant mb-1">WIN %</span>
+<span class="font-display-elo text-headline-lg">0%</span>
+<span class="text-[10px] text-outline font-body-sm">EFFICIENCY</span>
+</div>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<span class="font-label-caps text-on-surface-variant">RECENT FORM</span>
+<div class="flex gap-1">
+<div class="w-6 h-6 rounded bg-surface-container-highest border border-outline-variant flex items-center justify-center text-[10px] text-outline">S</div>
+<div class="w-6 h-6 rounded bg-error-container border border-error/20 flex items-center justify-center text-[10px] text-error">K</div>
+<div class="w-6 h-6 rounded bg-surface-container-highest border border-outline-variant flex items-center justify-center text-[10px] text-outline">S</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Match History -->
+<section class="neo-card rounded-xl p-inset-card">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">sports_tennis</span>
+<h3 class="font-title-md text-on-surface">Pertandingan Terakhir</h3>
+</div>
+<button class="text-primary font-label-caps text-[10px] uppercase hover:underline">See All</button>
+</div>
+<div class="space-y-4">
+<!-- Match Item 1 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-outline-variant hover:bg-surface-container-lowest transition-all group">
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-center justify-center w-14 h-14 bg-surface-container-high rounded-lg">
+<span class="font-display-elo text-title-md leading-none">2-2</span>
+<span class="font-label-caps text-[8px] text-outline mt-1">DRAW</span>
+</div>
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="font-body-md font-semibold">vs</span>
+<span class="font-title-md">lama &amp; sala</span>
+</div>
+<p class="font-body-sm text-outline flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">group</span>
+                Partner: Rendi • Sesi Tanpa Nama
+              </p>
+</div>
+</div>
+<div class="flex flex-row sm:flex-col items-center sm:items-end justify-between mt-4 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-outline-variant/30">
+<span class="bg-surface-container-high text-on-surface-variant font-label-caps px-3 py-1 rounded-full text-[10px]">Seri</span>
+<span class="font-data-mono text-outline text-[10px] mt-1">8 Jun 2026</span>
+</div>
+</div>
+<!-- Match Item 2 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-outline-variant hover:bg-surface-container-lowest transition-all">
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-center justify-center w-14 h-14 bg-error-container/40 rounded-lg">
+<span class="font-display-elo text-title-md leading-none text-error">1-3</span>
+<span class="font-label-caps text-[8px] text-error mt-1 uppercase">Loss</span>
+</div>
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="font-body-md font-semibold">vs</span>
+<span class="font-title-md">kala &amp; Arbi</span>
+</div>
+<p class="font-body-sm text-outline flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">group</span>
+                Partner: Rendi • Sesi Tanpa Nama
+              </p>
+</div>
+</div>
+<div class="flex flex-row sm:flex-col items-center sm:items-end justify-between mt-4 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-outline-variant/30">
+<span class="bg-error-container text-error font-label-caps px-3 py-1 rounded-full text-[10px]">Kalah</span>
+<span class="font-data-mono text-outline text-[10px] mt-1">8 Jun 2026</span>
+</div>
+</div>
+<!-- Match Item 3 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-outline-variant hover:bg-surface-container-lowest transition-all">
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-center justify-center w-14 h-14 bg-surface-container-high rounded-lg">
+<span class="font-display-elo text-title-md leading-none">2-2</span>
+<span class="font-label-caps text-[8px] text-outline mt-1">DRAW</span>
+</div>
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="font-body-md font-semibold">vs</span>
+<span class="font-title-md">Julian &amp; iqbal</span>
+</div>
+<p class="font-body-sm text-outline flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">group</span>
+                Partner: Rendi • Sesi Tanpa Nama
+              </p>
+</div>
+</div>
+<div class="flex flex-row sm:flex-col items-center sm:items-end justify-between mt-4 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-outline-variant/30">
+<span class="bg-surface-container-high text-on-surface-variant font-label-caps px-3 py-1 rounded-full text-[10px]">Seri</span>
+<span class="font-data-mono text-outline text-[10px] mt-1">8 Jun 2026</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Account Actions -->
+<section class="flex flex-col gap-3">
+<button class="w-full h-touch-target bg-surface-container-lowest border border-outline-variant text-on-surface font-title-md rounded-xl hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 group">
+<span class="material-symbols-outlined text-error transition-transform group-hover:-translate-x-1">logout</span>
+        Logout
+      </button>
+<p class="text-center text-[10px] font-label-caps text-outline uppercase tracking-widest mt-2">PedalPadel v2.4.0 • Built for Performance</p>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-2 bg-surface-container-lowest border-t border-outline-variant md:hidden"><a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-[10px]">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-label-caps text-[10px]">Leagues</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined">sports_tennis</span>
+<span class="font-label-caps text-[10px]">Match</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-label-caps text-[10px]">Rankings</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-caps text-[10px]">Profile</span>
+</a></nav>
+<!-- Desktop Floating Sidebar (Indicator Only) -->
+<aside class="hidden md:flex fixed left-0 top-16 bottom-0 w-20 flex-col items-center py-8 gap-8 border-r border-outline-variant bg-surface-container-lowest z-40">
+<div class="group relative">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-primary-fixed hover:text-on-primary-fixed transition-all cursor-pointer">
+<span class="material-symbols-outlined">dashboard</span>
+</div>
+</div>
+<div class="group relative">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-primary-fixed hover:text-on-primary-fixed transition-all cursor-pointer">
+<span class="material-symbols-outlined">groups</span>
+</div>
+</div>
+<div class="group relative">
+<div class="w-12 h-12 rounded-xl bg-primary-container flex items-center justify-center text-on-primary-container shadow-md transition-all cursor-pointer">
+<span class="material-symbols-outlined">sports_tennis</span>
+</div>
+</div>
+<div class="mt-auto">
+<div class="w-12 h-12 rounded-xl bg-on-secondary-fixed text-primary-fixed flex items-center justify-center shadow-lg transition-all cursor-pointer ring-4 ring-primary/20">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+</div>
+</aside>
+<script>
+    // Simple micro-interactions for the profile page
+    document.querySelectorAll('.neo-card').forEach(card => {
+      card.addEventListener('mouseenter', () => {
+        card.classList.add('shadow-md');
+      });
+      card.addEventListener('mouseleave', () => {
+        card.classList.remove('shadow-md');
+      });
+    });
+
+    // Logout confirmation simulation
+    document.querySelector('button.bg-surface-container-lowest').addEventListener('click', () => {
+      if(confirm('Are you sure you want to logout from PedalPadel?')) {
+        alert('Logging out...');
+      }
+    });
+  </script>
+</body></html>

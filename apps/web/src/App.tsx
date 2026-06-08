@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   useAuth,
@@ -33,7 +33,6 @@ import {
   listEvents,
   listPlayers,
   createPlayer,
-  deletePlayer,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -43,6 +42,10 @@ import {
   setLeagueMembers,
   deleteLeague,
   discoverLeagues,
+  latestLeagues,
+  listVisibleEvents,
+  myInvolvedEvents,
+  discoverEvents,
   requestJoin,
   joinWithCode,
   inviteUser,
@@ -58,23 +61,159 @@ import {
   leagueStandings,
   globalStats,
   playerHistory,
+  eventResults,
   type DbEvent,
   type AccountUser,
+  type PlayerMatch,
 } from "./db";
 import { useAsync } from "./useAsync";
 
 type View =
   | { t: "home" }
+  | { t: "leagues" }
   | { t: "league"; id: string }
+  | { t: "createLeague" }
   | { t: "create"; leagueId: string | null }
+  | { t: "myEvents" }
+  | { t: "myLeagues" }
+  | { t: "myMatches" }
   | { t: "session"; id: string }
   | { t: "leaderboard" }
   | { t: "player"; name: string }
   | { t: "discover" }
   | { t: "profile" };
 
+/* ---------- Routing: petakan View ↔ URL path (back/forward + link share) ---------- */
+
+function viewToPath(v: View): string {
+  switch (v.t) {
+    case "home":
+      return "/";
+    case "leagues":
+      return "/jelajah";
+    case "league":
+      return `/liga/${v.id}`;
+    case "createLeague":
+      return "/liga/baru";
+    case "create":
+      return v.leagueId ? `/main/baru?liga=${v.leagueId}` : "/main/baru";
+    case "myEvents":
+      return "/turnamen-saya";
+    case "myLeagues":
+      return "/liga-saya";
+    case "myMatches":
+      return "/pertandingan-saya";
+    case "session":
+      return `/main/${v.id}`;
+    case "leaderboard":
+      return "/ranking";
+    case "player":
+      return `/pemain/${encodeURIComponent(v.name)}`;
+    case "discover":
+      return "/temukan";
+    case "profile":
+      return "/profil";
+  }
+}
+
+function pathToView(pathname: string, search: string): View {
+  const [a, b] = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  switch (a) {
+    case undefined:
+      return { t: "home" };
+    case "jelajah":
+      return { t: "leagues" };
+    case "liga":
+      if (!b) return { t: "leagues" };
+      if (b === "baru") return { t: "createLeague" };
+      return { t: "league", id: b };
+    case "main":
+      if (!b || b === "baru")
+        return { t: "create", leagueId: new URLSearchParams(search).get("liga") };
+      return { t: "session", id: b };
+    case "turnamen-saya":
+      return { t: "myEvents" };
+    case "liga-saya":
+      return { t: "myLeagues" };
+    case "pertandingan-saya":
+      return { t: "myMatches" };
+    case "ranking":
+      return { t: "leaderboard" };
+    case "pemain":
+      return b ? { t: "player", name: decodeURIComponent(b) } : { t: "leaderboard" };
+    case "temukan":
+      return { t: "discover" };
+    case "profil":
+      return { t: "profile" };
+    default:
+      return { t: "home" };
+  }
+}
+
+// Navigasi berbasis state, tapi tersinkron ke URL: setView push history baru,
+// tombol back/forward browser update view, dan URL bisa di-share / di-refresh.
+function useRoutedView(): [View, (v: View) => void] {
+  const [view, setViewState] = useState<View>(() =>
+    pathToView(window.location.pathname, window.location.search)
+  );
+
+  const setView = useCallback((v: View) => {
+    setViewState(v);
+    const path = viewToPath(v);
+    if (path !== window.location.pathname + window.location.search)
+      window.history.pushState(null, "", path);
+  }, []);
+
+  useEffect(() => {
+    const onPop = () =>
+      setViewState(pathToView(window.location.pathname, window.location.search));
+    window.addEventListener("popstate", onPop);
+    // Normalkan URL awal agar cocok dengan view awal (mis. path tak dikenal → "/").
+    const path = viewToPath(view);
+    if (path !== window.location.pathname + window.location.search)
+      window.history.replaceState(null, "", path);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return [view, setView];
+}
+
+type TabKey = "home" | "leagues" | "main" | "rank" | "profile";
+
+const NAV_TABS: { key: TabKey; label: string; icon: string; view: View }[] = [
+  { key: "home", label: "Beranda", icon: "dashboard", view: { t: "home" } },
+  { key: "leagues", label: "Jelajah", icon: "explore", view: { t: "leagues" } },
+  { key: "main", label: "Main", icon: "sports_tennis", view: { t: "create", leagueId: null } },
+  { key: "rank", label: "Ranking", icon: "leaderboard", view: { t: "leaderboard" } },
+  { key: "profile", label: "Profil", icon: "person", view: { t: "profile" } },
+];
+
+function activeTab(v: View): TabKey {
+  switch (v.t) {
+    case "leagues":
+    case "league":
+    case "createLeague":
+    case "myLeagues":
+    case "discover":
+      return "leagues";
+    case "create":
+    case "myEvents":
+    case "session":
+      return "main";
+    case "leaderboard":
+    case "player":
+      return "rank";
+    case "profile":
+    case "myMatches":
+      return "profile";
+    default:
+      return "home";
+  }
+}
+
 export function App() {
-  const [view, setView] = useState<View>({ t: "home" });
+  const [view, setView] = useRoutedView();
   const { user } = useAuth();
 
   // Saat login: pastikan user punya "self-player" (jadi bisa dicari & di-add).
@@ -83,100 +222,950 @@ export function App() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-stone-50 text-slate-900">
-      <Brand
-        onHome={() => setView({ t: "home" })}
-        onProfile={() => setView({ t: "profile" })}
-        user={user}
-      />
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        {view.t === "home" && (
-          <HomeScreen user={user} onNavigate={setView} />
-        )}
-        {view.t === "league" && (
-          <LeagueScreen leagueId={view.id} onNavigate={setView} />
-        )}
-        {view.t === "create" && (
-          <CreateScreen
-            leagueId={view.leagueId}
-            onCreated={(id) => setView({ t: "session", id })}
-            onCancel={() =>
-              setView(
-                view.leagueId
-                  ? { t: "league", id: view.leagueId }
-                  : { t: "home" }
-              )
-            }
-          />
-        )}
-        {view.t === "session" && (
-          <SessionScreen
-            key={view.id}
-            eventId={view.id}
-            onExit={(ev) =>
-              setView(
-                ev?.leagueId ? { t: "league", id: ev.leagueId } : { t: "home" }
-              )
-            }
-          />
-        )}
-        {view.t === "leaderboard" && (
-          <LeaderboardScreen
-            onBack={() => setView({ t: "home" })}
-            onOpenPlayer={(name) => setView({ t: "player", name })}
-          />
-        )}
-        {view.t === "player" && (
-          <PlayerProfileScreen
-            key={view.name}
-            name={view.name}
-            onBack={() => setView({ t: "leaderboard" })}
-          />
-        )}
-        {view.t === "discover" && (
-          <DiscoverScreen
-            onBack={() => setView({ t: "home" })}
-            onOpenLeague={(id) => setView({ t: "league", id })}
-          />
-        )}
-        {view.t === "profile" && (
-          <ProfileScreen user={user} onBack={() => setView({ t: "home" })} />
-        )}
+    <AppShell view={view} user={user} onNavigate={setView}>
+      {view.t === "home" && (
+        <DashboardScreen user={user} onNavigate={setView} />
+      )}
+      {view.t === "leagues" && (
+        <ExploreScreen user={user} onNavigate={setView} />
+      )}
+      {view.t === "createLeague" && (
+        <CreateLeagueScreen
+          onCreated={(id) => setView({ t: "league", id })}
+          onCancel={() => setView({ t: "leagues" })}
+        />
+      )}
+      {view.t === "league" && (
+        <LeagueScreen leagueId={view.id} onNavigate={setView} />
+      )}
+      {view.t === "create" && (
+        <CreateScreen
+          leagueId={view.leagueId}
+          onCreated={(id) => setView({ t: "session", id })}
+          onCancel={() =>
+            setView(
+              view.leagueId ? { t: "league", id: view.leagueId } : { t: "home" }
+            )
+          }
+        />
+      )}
+      {view.t === "myEvents" && (
+        <MyEventsScreen
+          user={user}
+          onNavigate={setView}
+          onBack={() => setView({ t: "home" })}
+        />
+      )}
+      {view.t === "myMatches" && (
+        <MyMatchesScreen
+          user={user}
+          onBack={() => setView({ t: "profile" })}
+        />
+      )}
+      {view.t === "myLeagues" && (
+        <MyLeaguesScreen
+          onNavigate={setView}
+          onBack={() => setView({ t: "home" })}
+        />
+      )}
+      {view.t === "session" && (
+        <SessionScreen
+          key={view.id}
+          eventId={view.id}
+          onExit={(ev) =>
+            setView(
+              ev?.leagueId ? { t: "league", id: ev.leagueId } : { t: "home" }
+            )
+          }
+        />
+      )}
+      {view.t === "leaderboard" && (
+        <LeaderboardScreen
+          user={user}
+          onOpenPlayer={(name) => setView({ t: "player", name })}
+        />
+      )}
+      {view.t === "player" && (
+        <PlayerProfileScreen
+          key={view.name}
+          name={view.name}
+          onBack={() => setView({ t: "leaderboard" })}
+        />
+      )}
+      {view.t === "discover" && (
+        <DiscoverScreen
+          onBack={() => setView({ t: "home" })}
+          onOpenLeague={(id) => setView({ t: "league", id })}
+        />
+      )}
+      {view.t === "profile" && (
+        <ProfileScreen
+          user={user}
+          onNavigate={setView}
+          onBack={() => setView({ t: "home" })}
+        />
+      )}
+    </AppShell>
+  );
+}
+
+/* ---------- App shell: header navy (desktop nav) + bottom nav (mobile) ---------- */
+
+function AppShell({
+  view,
+  user,
+  onNavigate,
+  children,
+}: {
+  view: View;
+  user: User | null;
+  onNavigate: (v: View) => void;
+  children: React.ReactNode;
+}) {
+  const active = activeTab(view);
+  return (
+    <div className="min-h-screen bg-surface text-on-surface">
+      <header className="sticky top-0 z-40 bg-navy text-white">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
+          <button
+            onClick={() => onNavigate({ t: "home" })}
+            className="flex items-center gap-2"
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary-fixed">
+              <span className="material-symbols-outlined fill text-on-primary-fixed">
+                sports_tennis
+              </span>
+            </span>
+            <span className="font-display text-xl font-extrabold tracking-tight text-primary-fixed">
+              PedalPadel
+            </span>
+          </button>
+
+          <nav className="hidden items-center gap-1 md:flex">
+            {NAV_TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => onNavigate(t.view)}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  active === t.key
+                    ? "text-primary-fixed"
+                    : "text-white/55 hover:text-white"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+
+          <AuthBar user={user} onProfile={() => onNavigate({ t: "profile" })} />
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-28 md:pb-10">
+        {children}
       </main>
+
+      <nav className="fixed bottom-0 left-0 z-40 flex w-full items-stretch justify-around border-t border-outline-variant bg-surface-container-lowest pb-safe shadow-lg md:hidden">
+        {NAV_TABS.map((t) => {
+          const on = active === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => onNavigate(t.view)}
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
+            >
+              <span
+                className={`grid h-8 w-14 place-items-center rounded-full transition ${
+                  on ? "bg-primary-container" : ""
+                }`}
+              >
+                <span
+                  className={`material-symbols-outlined text-[22px] ${
+                    on
+                      ? "fill text-on-primary-container"
+                      : "text-on-surface-variant"
+                  }`}
+                >
+                  {t.icon}
+                </span>
+              </span>
+              <span
+                className={`text-[11px] font-semibold ${
+                  on ? "text-on-surface" : "text-on-surface-variant"
+                }`}
+              >
+                {t.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
 
-/* ---------- Identitas merek (gaya sendiri) ---------- */
+/* ---------- Beranda (dashboard) ---------- */
 
-function Brand({
-  onHome,
-  onProfile,
+function DashboardScreen({
   user,
+  onNavigate,
 }: {
-  onHome: () => void;
-  onProfile: () => void;
   user: User | null;
+  onNavigate: (v: View) => void;
+}) {
+  const statsQ = useAsync(() => globalStats(), []);
+  const myLeaguesQ = useAsync(() => listLeagues(), []);
+  const myEventsQ = useAsync(() => listEvents(), []);
+  const latestLeaguesQ = useAsync(() => latestLeagues(), []);
+  const latestEventsQ = useAsync(() => listVisibleEvents(), []);
+
+  if (!user) {
+    return (
+      <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
+        <span className="material-symbols-outlined mb-2 text-5xl text-primary-fixed-dim">
+          sports_tennis
+        </span>
+        <h2 className="font-display text-xl font-bold">
+          Selamat datang di PedalPadel
+        </h2>
+        <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
+          Klik <b>Masuk / Daftar</b> di kanan atas untuk membuat liga & turnamen,
+          input skor, dan lihat ranking ELO-mu.
+        </p>
+      </div>
+    );
+  }
+
+  const myName = displayName(user);
+  const ratings = statsQ.data
+    ? computeRatings(statsQ.data.names, statsQ.data.results)
+    : [];
+  const standings = statsQ.data
+    ? computeStandings(statsQ.data.results, { compensate: false })
+    : [];
+  const playedRanked = ratings.filter((r) => r.matchesPlayed > 0);
+  const myIdx = playedRanked.findIndex((r) => r.name === myName);
+  const myRating = ratings.find((r) => r.name === myName);
+  const mySt = standings.find((s) => s.playerId === myName);
+
+  const myEvents = myEventsQ.data ?? [];
+  const upcoming = myEvents
+    .filter((e) => e.startAt && e.startAt > Date.now() && e.status !== "finished")
+    .sort((a, b) => (a.startAt ?? 0) - (b.startAt ?? 0));
+  const live = myEvents.filter((e) => e.status !== "finished" && !e.startAt);
+  const nextMatch = upcoming[0] ?? live[0] ?? null;
+  const myLeagues = myLeaguesQ.data ?? [];
+  const latestLeaguesD = latestLeaguesQ.data ?? [];
+  const latestEventsD = latestEventsQ.data ?? [];
+
+  return (
+    <div className="space-y-5">
+      {/* Hero */}
+      <section className="overflow-hidden rounded-2xl bg-navy p-6 text-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-extrabold tracking-tight">
+              Halo, {myName.split(" ")[0]}! 👋
+            </h1>
+            <p className="mt-1 text-sm text-white/60">
+              Siap bertanding hari ini? Cek performamu di bawah.
+            </p>
+          </div>
+          <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+            <div className="font-label-caps text-label-caps text-primary-fixed">
+              {nextMatch ? "MATCH BERIKUTNYA" : "STATISTIK"}
+            </div>
+            {nextMatch ? (
+              <button
+                onClick={() => onNavigate({ t: "session", id: nextMatch.id })}
+                className="mt-1 block text-left"
+              >
+                <div className="truncate font-bold">{nextMatch.name}</div>
+                <div className="text-xs text-white/60">
+                  {nextMatch.startAt
+                    ? `🗓 ${fmtDate(nextMatch.startAt)}`
+                    : "Sedang berlangsung"}
+                </div>
+              </button>
+            ) : (
+              <div className="mt-1 flex items-end gap-3">
+                <span className="font-data-mono text-2xl font-bold text-primary-fixed">
+                  {myRating?.matchesPlayed ? Math.round(myRating.rating) : 1000}
+                </span>
+                <span className="pb-1 text-xs text-white/50">
+                  ELO{myIdx >= 0 ? ` · #${myIdx + 1}` : ""}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Aksi cepat */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <button
+          onClick={() => onNavigate({ t: "create", leagueId: null })}
+          className="flex items-center justify-center gap-2 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined">add_circle</span>
+          Main Sekarang
+        </button>
+        <button
+          onClick={() => onNavigate({ t: "leagues" })}
+          className="flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-semibold transition hover:border-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined text-on-surface-variant">
+            explore
+          </span>
+          Jelajah
+        </button>
+        <button
+          onClick={() => onNavigate({ t: "leagues" })}
+          className="flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-semibold transition hover:border-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined text-on-surface-variant">
+            groups
+          </span>
+          Liga Saya
+        </button>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Kiri */}
+        <div className="space-y-5 lg:col-span-2">
+          {/* Terbaru (global, private + public) — Liga / Turnamen */}
+          <DashTabCard
+            title="Terbaru"
+            action={
+              <button
+                onClick={() => onNavigate({ t: "leagues" })}
+                className="text-xs font-semibold text-primary"
+              >
+                Jelajah
+              </button>
+            }
+            tabs={[
+              {
+                key: "liga",
+                label: "Liga",
+                icon: "emoji_events",
+                node: (
+                  <DashLeagueList
+                    onNavigate={onNavigate}
+                    emptyText="Belum ada liga."
+                    items={latestLeaguesD.map((l) => ({
+                      id: l.id,
+                      name: l.name,
+                      visibility: l.visibility,
+                      count: `${l.memberCount} anggota`,
+                      date: l.createdAt,
+                      badge:
+                        l.myStatus === "member"
+                          ? "Anggota"
+                          : l.myStatus === "pending"
+                            ? "Menunggu"
+                            : undefined,
+                    }))}
+                  />
+                ),
+              },
+              {
+                key: "turnamen",
+                label: "Turnamen",
+                icon: "sports_tennis",
+                node: (
+                  <DashEventList
+                    events={latestEventsD}
+                    onNavigate={onNavigate}
+                    emptyText="Belum ada turnamen."
+                  />
+                ),
+              },
+            ]}
+          />
+
+          {/* Punyaku — Liga / Turnamen milikku */}
+          <DashTabCard
+            title="Saya"
+            tabs={[
+              {
+                key: "liga",
+                label: "Liga",
+                icon: "emoji_events",
+                action: (
+                  <button
+                    onClick={() => onNavigate({ t: "myLeagues" })}
+                    className="text-xs font-semibold text-primary"
+                  >
+                    Kelola
+                  </button>
+                ),
+                node: (
+                  <DashLeagueList
+                    onNavigate={onNavigate}
+                    emptyText="Belum ikut liga. Buat atau jelajah liga."
+                    items={myLeagues.map((l) => ({
+                      id: l.id,
+                      name: l.name,
+                      visibility: l.visibility,
+                      count: `${l.memberIds.length} pemain`,
+                      date: l.createdAt,
+                      badge:
+                        l.myRole === "owner"
+                          ? "Owner"
+                          : l.myRole === "admin"
+                            ? "Admin"
+                            : l.myRole === "member"
+                              ? "Anggota"
+                              : undefined,
+                    }))}
+                  />
+                ),
+              },
+              {
+                key: "turnamen",
+                label: "Turnamen",
+                icon: "sports_tennis",
+                action: (
+                  <button
+                    onClick={() => onNavigate({ t: "myEvents" })}
+                    className="text-xs font-semibold text-primary"
+                  >
+                    Kelola
+                  </button>
+                ),
+                node: (
+                  <DashEventList
+                    events={myEvents}
+                    onNavigate={onNavigate}
+                    emptyText="Belum ada turnamen. Klik 'Main Sekarang'."
+                  />
+                ),
+              },
+            ]}
+          />
+        </div>
+
+        {/* Kanan */}
+        <div className="space-y-5">
+          <section className="rounded-2xl bg-navy p-5 text-white shadow-sm">
+            <div className="font-label-caps text-label-caps text-primary-fixed">
+              STATISTIK SAYA
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              {[
+                {
+                  k: "ELO",
+                  v: myRating?.matchesPlayed
+                    ? Math.round(myRating.rating)
+                    : 1000,
+                },
+                {
+                  k: "Win %",
+                  v: mySt ? `${Math.round(mySt.winRate * 100)}%` : "0%",
+                },
+                { k: "Rank", v: myIdx >= 0 ? `#${myIdx + 1}` : "–" },
+              ].map((s) => (
+                <div key={s.k} className="rounded-xl bg-white/5 py-3">
+                  <div className="font-data-mono text-xl font-bold text-primary-fixed">
+                    {s.v}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-white/50">
+                    {s.k}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => onNavigate({ t: "profile" })}
+              className="mt-3 w-full rounded-lg bg-white/10 py-2 text-sm font-semibold hover:bg-white/15"
+            >
+              Lihat profil
+            </button>
+          </section>
+
+          <DashCard
+            title="Ranking Global"
+            action={
+              <button
+                onClick={() => onNavigate({ t: "leaderboard" })}
+                className="text-xs font-semibold text-primary"
+              >
+                Lihat semua
+              </button>
+            }
+          >
+            {playedRanked.length === 0 ? (
+              <DashEmpty text="Belum ada match selesai." />
+            ) : (
+              <ul className="space-y-1">
+                {playedRanked.slice(0, 5).map((r, i) => (
+                  <li key={r.id}>
+                    <button
+                      onClick={() => onNavigate({ t: "player", name: r.name })}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-surface-container-low ${
+                        r.name === myName ? "bg-primary-container/30" : ""
+                      }`}
+                    >
+                      <RankBadge rank={i + 1} />
+                      <TeamAvatar name={r.name} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {r.name}
+                      </span>
+                      <span className="font-data-mono text-sm font-bold tabular-nums">
+                        {Math.round(r.rating)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashCard>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashCard({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <header className="border-b border-slate-800 bg-slate-900">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-        <button onClick={onHome} className="flex items-center gap-3 text-left">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-lime-400 text-lg font-black text-slate-900">
-            P
-          </span>
-          <div className="leading-tight">
-            <div className="font-bold tracking-tight text-white">
-              Pedal<span className="text-lime-400">Padel</span>
-            </div>
-            <div className="text-[11px] uppercase tracking-widest text-slate-400">
-              liga &amp; matchmaking
-            </div>
-          </div>
-        </button>
-        <AuthBar user={user} onProfile={onProfile} />
+    <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-display text-base font-bold">{title}</h3>
+        {action}
       </div>
-    </header>
+      {children}
+    </section>
+  );
+}
+
+function DashEmpty({ text }: { text: string }) {
+  return (
+    <p className="rounded-xl bg-surface-container-low px-3 py-5 text-center text-sm text-on-surface-variant">
+      {text}
+    </p>
+  );
+}
+
+/** Card Beranda dengan tab internal (mis. Liga | Turnamen). */
+function DashTabCard({
+  title,
+  action,
+  tabs,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  tabs: {
+    key: string;
+    label: string;
+    icon: string;
+    node: React.ReactNode;
+    action?: React.ReactNode;
+  }[];
+}) {
+  const [active, setActive] = useState(tabs[0]?.key);
+  const current = tabs.find((t) => t.key === active) ?? tabs[0];
+  return (
+    <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-display text-base font-bold">{title}</h3>
+        {current?.action ?? action}
+      </div>
+      <div className="mb-3 flex w-fit rounded-xl border border-outline-variant/40 bg-surface-container p-0.5">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActive(t.key)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+              active === t.key
+                ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            <span
+              className={`material-symbols-outlined text-[18px] ${
+                active === t.key ? "fill text-primary" : ""
+              }`}
+            >
+              {t.icon}
+            </span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {current?.node}
+    </section>
+  );
+}
+
+/** Daftar turnamen ringkas (Beranda) — dipakai global & "milikku". */
+function DashEventList({
+  events,
+  onNavigate,
+  emptyText,
+}: {
+  events: DbEvent[];
+  onNavigate: (v: View) => void;
+  emptyText: string;
+}) {
+  if (events.length === 0) return <DashEmpty text={emptyText} />;
+  return (
+    <ul className="space-y-1.5">
+      {events.slice(0, 5).map((e) => (
+        <li key={e.id}>
+          <button
+            onClick={() => onNavigate({ t: "session", id: e.id })}
+            className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/50 px-3 py-2.5 text-left hover:border-primary-fixed-dim"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container">
+              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                sports_tennis
+              </span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{e.name}</span>
+              <span className="text-xs text-on-surface-variant">
+                {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
+              </span>
+            </span>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                e.status === "finished"
+                  ? "bg-surface-container text-on-surface-variant"
+                  : "bg-primary-container text-on-primary-container"
+              }`}
+            >
+              {e.status === "finished" ? "selesai" : "live"}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Daftar liga ringkas (Beranda) — satu baris penuh + detail. */
+function DashLeagueList({
+  items,
+  onNavigate,
+  emptyText,
+}: {
+  items: {
+    id: string;
+    name: string;
+    visibility: "private" | "public";
+    count: string;
+    date?: number;
+    badge?: string;
+  }[];
+  onNavigate: (v: View) => void;
+  emptyText: string;
+}) {
+  if (items.length === 0) return <DashEmpty text={emptyText} />;
+  return (
+    <ul className="space-y-2">
+      {items.slice(0, 5).map((l) => (
+        <li key={l.id}>
+          <button
+            onClick={() => onNavigate({ t: "league", id: l.id })}
+            className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/50 px-3 py-2.5 text-left hover:border-primary-fixed-dim"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                {l.visibility === "private" ? "lock" : "public"}
+              </span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{l.name}</span>
+              <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-on-surface-variant">
+                <span>{l.visibility === "private" ? "Privat" : "Publik"}</span>
+                <span>·</span>
+                <span>{l.count}</span>
+                {l.date != null && (
+                  <>
+                    <span>·</span>
+                    <span>{fmtDate(l.date)}</span>
+                  </>
+                )}
+              </span>
+            </span>
+            {l.badge && (
+              <span className="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[10px] font-semibold uppercase text-on-surface-variant">
+                {l.badge}
+              </span>
+            )}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/* ---------- Turnamen Saya (kelola: buat / ikuti, berlangsung + selesai) ---------- */
+
+function MyEventsScreen({
+  user,
+  onNavigate,
+  onBack,
+}: {
+  user: User | null;
+  onNavigate: (v: View) => void;
+  onBack: () => void;
+}) {
+  const q = useAsync(() => myInvolvedEvents(), []);
+  const all = q.data ?? [];
+  const myName = user ? displayName(user) : "";
+  const ongoing = all.filter((e) => e.status !== "finished");
+  const finished = all.filter((e) => e.status === "finished");
+
+  const row = (e: DbEvent) => {
+    const r = myRankInEvent(e, myName);
+    return (
+    <li key={e.id}>
+      <button
+        onClick={() => onNavigate({ t: "session", id: e.id })}
+        className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+      >
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
+          <span className="material-symbols-outlined text-on-surface-variant">
+            sports_tennis
+          </span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{e.name}</span>
+          <span className="text-xs text-on-surface-variant">
+            {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+            {r ? `Peringkat #${r.rank}/${r.total}` : "Belum ada hasil"}
+          </span>
+        </span>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
+            e.status === "finished"
+              ? "bg-surface-container text-on-surface-variant"
+              : "bg-primary-container text-on-primary-container"
+          }`}
+        >
+          {e.status === "finished" ? "SELESAI" : "LIVE"}
+        </span>
+      </button>
+    </li>
+    );
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+      >
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
+      </button>
+
+      <div>
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined fill text-[18px] text-primary">
+            sports_tennis
+          </span>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">
+            TURNAMEN SAYA
+          </span>
+        </div>
+        <h2 className="mt-1 font-display text-2xl font-bold">Kelola Turnamen</h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Turnamen yang kamu buat atau ikuti — yang berlangsung & sudah selesai.
+        </p>
+      </div>
+
+      <StateText
+        loading={q.loading}
+        error={q.error}
+        empty={!q.loading && all.length === 0}
+        emptyText="Belum ada turnamen. Klik 'Main Sekarang' di beranda."
+      />
+
+      {ongoing.length > 0 && (
+        <section className="space-y-2">
+          <div className="font-label-caps text-label-caps text-on-surface-variant">
+            BERLANGSUNG ({ongoing.length})
+          </div>
+          <ul className="space-y-2">{ongoing.map(row)}</ul>
+        </section>
+      )}
+
+      {finished.length > 0 && (
+        <section className="space-y-2">
+          <div className="font-label-caps text-label-caps text-on-surface-variant">
+            SELESAI ({finished.length})
+          </div>
+          <ul className="space-y-2">{finished.map(row)}</ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Liga Saya (kelola: dikelola owner/admin + diikuti) ---------- */
+
+function MyLeaguesScreen({
+  onNavigate,
+  onBack,
+}: {
+  onNavigate: (v: View) => void;
+  onBack: () => void;
+}) {
+  const q = useAsync(() => listLeagues(), []);
+  const all = q.data ?? [];
+  const managed = all.filter(
+    (l) => l.myRole === "owner" || l.myRole === "admin"
+  );
+  const joined = all.filter((l) => l.myRole === "member");
+
+  const row = (l: (typeof all)[number]) => (
+    <li key={l.id}>
+      <button
+        onClick={() => onNavigate({ t: "league", id: l.id })}
+        className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+      >
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
+          <span className="material-symbols-outlined text-on-surface-variant">
+            {l.visibility === "private" ? "lock" : "public"}
+          </span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{l.name}</span>
+          <span className="text-xs text-on-surface-variant">
+            {l.visibility === "private" ? "Privat" : "Publik"} ·{" "}
+            {l.memberIds.length} pemain · {fmtDate(l.createdAt)}
+          </span>
+        </span>
+        <span className="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[10px] font-semibold uppercase text-on-surface-variant">
+          {l.myRole === "owner"
+            ? "Owner"
+            : l.myRole === "admin"
+              ? "Admin"
+              : "Anggota"}
+        </span>
+      </button>
+    </li>
+  );
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+      >
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
+      </button>
+
+      <div>
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined fill text-[18px] text-primary">
+            emoji_events
+          </span>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">
+            LIGA SAYA
+          </span>
+        </div>
+        <h2 className="mt-1 font-display text-2xl font-bold">Kelola Liga</h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Liga yang kamu kelola atau ikuti.
+        </p>
+      </div>
+
+      <StateText
+        loading={q.loading}
+        error={q.error}
+        empty={!q.loading && all.length === 0}
+        emptyText="Belum ikut liga. Buat atau jelajah liga dulu."
+      />
+
+      {managed.length > 0 && (
+        <section className="space-y-2">
+          <div className="font-label-caps text-label-caps text-on-surface-variant">
+            DIKELOLA ({managed.length})
+          </div>
+          <ul className="space-y-2">{managed.map(row)}</ul>
+        </section>
+      )}
+
+      {joined.length > 0 && (
+        <section className="space-y-2">
+          <div className="font-label-caps text-label-caps text-on-surface-variant">
+            DIIKUTI ({joined.length})
+          </div>
+          <ul className="space-y-2">{joined.map(row)}</ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Semua Pertandingan Saya ---------- */
+
+function MyMatchesScreen({
+  user,
+  onBack,
+}: {
+  user: User | null;
+  onBack: () => void;
+}) {
+  const q = useAsync(
+    () => (user ? playerHistory(displayName(user)) : Promise.resolve([])),
+    [user]
+  );
+  const history = q.data ?? [];
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+      >
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
+      </button>
+
+      <div>
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined fill text-[18px] text-primary">
+            history
+          </span>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">
+            PERTANDINGAN SAYA
+          </span>
+        </div>
+        <h2 className="mt-1 font-display text-2xl font-bold">
+          Semua Pertandingan
+        </h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          {history.length} pertandingan, terbaru dulu.
+        </p>
+      </div>
+
+      <StateText
+        loading={q.loading}
+        error={q.error}
+        empty={!q.loading && history.length === 0}
+        emptyText="Belum ada pertandingan."
+      />
+      <ul className="space-y-2">
+        {history.map((m, i) => (
+          <MatchRow key={i} m={m} />
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -184,9 +1173,11 @@ function Brand({
 
 function ProfileScreen({
   user,
+  onNavigate,
   onBack,
 }: {
   user: User | null;
+  onNavigate: (v: View) => void;
   onBack: () => void;
 }) {
   const profileQ = useAsync(() => getMyProfile(), []);
@@ -194,6 +1185,10 @@ function ProfileScreen({
   const statsQ = useAsync(() => globalStats(), []);
   const histQ = useAsync(
     () => (user ? playerHistory(displayName(user)) : Promise.resolve([])),
+    [user]
+  );
+  const eventsQ = useAsync(
+    () => (user ? myInvolvedEvents() : Promise.resolve([])),
     [user]
   );
   const [editing, setEditing] = useState(false);
@@ -238,6 +1233,12 @@ function ProfileScreen({
     };
   })();
   const history = histQ.data ?? [];
+  // Turnamen yang kuikuti — ongoing dulu, lalu terbaru.
+  const myTournaments = [...(eventsQ.data ?? [])].sort((a, b) => {
+    const ao = a.status !== "finished" ? 0 : 1;
+    const bo = b.status !== "finished" ? 0 : 1;
+    return ao - bo || (b.startAt ?? b.createdAt) - (a.startAt ?? a.createdAt);
+  });
   const rel = me && me.played > 0 ? Math.round(reliability(me.played) * 100) : 0;
 
   function startEdit() {
@@ -268,194 +1269,283 @@ function ProfileScreen({
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-5">
-      <button
-        onClick={onBack}
-        className="text-sm text-slate-500 hover:text-slate-900"
-      >
-        ← Kembali
-      </button>
-
+    <div className="mx-auto max-w-2xl space-y-5">
       {/* Header */}
-      <div className="rounded-2xl bg-slate-900 p-5 text-white">
+      <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary-fixed/10 blur-3xl" />
         {editing ? (
-          <div className="space-y-3">
-            <label className="block text-xs text-slate-400">Nama lengkap</label>
+          <div className="relative space-y-3">
+            <label className="block font-label-caps text-label-caps text-white/60">
+              Nama lengkap
+            </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-slate-900"
+              className="w-full rounded-lg px-3 py-2 text-on-surface"
               placeholder="Nama"
             />
-            <label className="block text-xs text-slate-400">Username (unik)</label>
-            <div className="flex items-center rounded-lg bg-white px-3 text-slate-900">
-              <span className="text-slate-400">@</span>
+            <label className="block font-label-caps text-label-caps text-white/60">
+              Username (unik)
+            </label>
+            <div className="flex items-center rounded-lg bg-white px-3 text-on-surface">
+              <span className="text-outline">@</span>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full py-2 focus:outline-none"
+                className="w-full py-2 outline-none"
                 placeholder="username"
               />
             </div>
-            <label className="block text-xs text-slate-400">
+            <label className="block font-label-caps text-label-caps text-white/60">
               URL foto (opsional)
             </label>
             <input
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-slate-900"
+              className="w-full rounded-lg px-3 py-2 text-on-surface"
               placeholder="https://…/foto.jpg"
             />
-            {err && <p className="text-sm text-red-400">{err}</p>}
+            {err && <p className="text-sm text-loss-red">{err}</p>}
             <div className="flex gap-2">
               <button
                 onClick={save}
                 disabled={saving}
-                className="rounded-lg bg-lime-400 px-4 py-2 text-sm font-semibold text-slate-900 disabled:opacity-60"
+                className="rounded-lg bg-primary-fixed px-4 py-2 text-sm font-semibold text-on-primary-fixed disabled:opacity-60"
               >
                 {saving ? "Menyimpan…" : "Simpan"}
               </button>
               <button
                 onClick={() => setEditing(false)}
-                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
               >
                 Batal
               </button>
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            {shownAvatar ? (
-              <img
-                src={shownAvatar}
-                alt=""
-                className="h-16 w-16 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-lime-400 text-2xl font-black text-slate-900">
-                {shownName.charAt(0).toUpperCase()}
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-bold">{shownName}</div>
-              <div className="text-sm text-slate-400">@{shownUser}</div>
+          <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              {shownAvatar ? (
+                <img
+                  src={shownAvatar}
+                  alt=""
+                  className="h-20 w-20 shrink-0 rounded-full border-4 border-on-secondary-fixed-variant object-cover"
+                />
+              ) : (
+                <span className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-on-secondary-fixed-variant bg-primary-fixed font-display text-3xl font-extrabold text-on-primary-fixed">
+                  {shownName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0">
+                <h1 className="truncate font-display text-2xl font-bold">
+                  {shownName}
+                </h1>
+                <div className="text-sm text-white/60">@{shownUser}</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {me?.rank != null && (
+                    <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                      #{me.rank} GLOBAL
+                    </span>
+                  )}
+                  <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                    {me?.played ?? 0} MATCH
+                  </span>
+                </div>
+              </div>
             </div>
             <button
               onClick={startEdit}
-              className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-5 py-2.5 font-label-caps text-label-caps transition hover:bg-primary-fixed hover:text-on-primary-fixed active:scale-95"
             >
-              ✎ Ubah
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+              Ubah Profil
             </button>
           </div>
         )}
+      </section>
+
+      {/* Rating + Statistik */}
+      <div className="grid gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              trending_up
+            </span>
+            Rating
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat
+              label="Peringkat"
+              value={me?.rank != null ? `#${me.rank}` : "–"}
+              sub={me?.rank != null ? `dari ${me.totalRanked}` : "belum main"}
+            />
+            <ProfileStat
+              label="ELO"
+              value={me && me.played > 0 ? Math.round(me.rating!) : "–"}
+              sub="rating"
+            />
+            <ProfileStat
+              label="Keandalan"
+              value={me && me.played > 0 ? `${rel}%` : "–"}
+              sub={me && me.played > 0 ? `${me.played}/20 match` : "—"}
+            />
+          </div>
+          <p className="mt-3 text-xs text-on-surface-variant">
+            <b>Keandalan</b> = seberapa stabil rating-mu; 100% (stabil) setelah 20
+            match.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              bar_chart
+            </span>
+            Statistik
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat label="Main" value={me?.played ?? 0} />
+            <ProfileStat label="Menang" value={me?.st?.wins ?? 0} />
+            <ProfileStat
+              label="Win %"
+              value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
+            />
+          </div>
+          {history.length > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant">
+                FORM TERAKHIR
+              </span>
+              <div className="flex gap-1">
+                {history.slice(0, 5).map((m, i) => {
+                  const c =
+                    m.result === "win"
+                      ? "bg-primary-container text-on-primary-container"
+                      : m.result === "loss"
+                        ? "bg-error-container text-error"
+                        : "bg-surface-container-high text-on-surface-variant";
+                  const l =
+                    m.result === "win" ? "M" : m.result === "loss" ? "K" : "S";
+                  return (
+                    <span
+                      key={i}
+                      className={`grid h-6 w-6 place-items-center rounded text-[10px] font-bold ${c}`}
+                    >
+                      {l}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Rating */}
-      <Card title="📈 Rating">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            {
-              k: "Peringkat",
-              v:
-                me?.rank != null ? `#${me.rank}` : "–",
-              sub: me?.rank != null ? `dari ${me.totalRanked}` : "belum main",
-            },
-            {
-              k: "ELO",
-              v: me && me.played > 0 ? Math.round(me.rating!) : "–",
-              sub: "rating",
-            },
-            {
-              k: "Keandalan",
-              v: me && me.played > 0 ? `${rel}%` : "–",
-              sub: me && me.played > 0 ? `${me.played}/20 match` : "—",
-            },
-          ].map((r) => (
-            <div key={r.k} className="rounded-xl bg-slate-50 py-4">
-              <div className="text-[10px] uppercase tracking-wide text-slate-400">
-                {r.k}
-              </div>
-              <div className="mt-1 text-2xl font-bold">{r.v}</div>
-              <div className="mt-0.5 text-[10px] text-slate-400">{r.sub}</div>
-            </div>
-          ))}
+      {/* Turnamen Terakhir */}
+      <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              sports_tennis
+            </span>
+            Turnamen Terakhir
+          </h3>
+          {myTournaments.length > 0 && (
+            <button
+              onClick={() => onNavigate({ t: "myEvents" })}
+              className="text-xs font-semibold text-primary"
+            >
+              Lihat semua
+            </button>
+          )}
         </div>
-        <p className="mt-3 text-xs text-slate-400">
-          <b>Keandalan</b> = seberapa stabil rating-mu, naik tiap main; 100%
-          (stabil) setelah 20 match. Di bawah itu, rating masih bergerak besar
-          tiap menang/kalah.
-        </p>
-      </Card>
+        <StateText
+          loading={eventsQ.loading}
+          error={eventsQ.error}
+          empty={!eventsQ.loading && !eventsQ.error && myTournaments.length === 0}
+          emptyText="Belum ikut turnamen."
+        />
+        <ul className="space-y-2">
+          {myTournaments.slice(0, 5).map((e) => {
+            const r = myRankInEvent(e, myName);
+            const ongoing = e.status !== "finished";
+            return (
+              <li key={e.id}>
+                <button
+                  onClick={() => onNavigate({ t: "session", id: e.id })}
+                  className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/40 p-3 text-left hover:border-primary-fixed-dim"
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-surface-container">
+                    <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                      sports_tennis
+                    </span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">
+                      {e.name}
+                    </span>
+                    <span className="text-xs text-on-surface-variant">
+                      {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                      {r ? `Peringkat #${r.rank}/${r.total}` : "Belum ada hasil"}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
+                      ongoing
+                        ? "bg-primary-container text-on-primary-container"
+                        : "bg-surface-container text-on-surface-variant"
+                    }`}
+                  >
+                    {ongoing ? "LIVE" : "SELESAI"}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
-      {/* Statistik */}
-      <Card title="📊 Statistik">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            { k: "Main", v: me?.played ?? 0 },
-            { k: "Menang", v: me?.st?.wins ?? 0 },
-            {
-              k: "Win %",
-              v: me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%",
-            },
-          ].map((s) => (
-            <div key={s.k} className="rounded-xl bg-slate-50 py-4">
-              <div className="text-xs uppercase tracking-wide text-slate-400">
-                {s.k}
-              </div>
-              <div className="mt-1 text-2xl font-bold">{s.v}</div>
-            </div>
-          ))}
+      {/* Pertandingan Terakhir */}
+      <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              history
+            </span>
+            Pertandingan Terakhir
+          </h3>
+          {history.length > 0 && (
+            <button
+              onClick={() => onNavigate({ t: "myMatches" })}
+              className="text-xs font-semibold text-primary"
+            >
+              Lihat semua
+            </button>
+          )}
         </div>
-      </Card>
-
-      {/* Riwayat */}
-      <Card title="🎾 Pertandingan Terakhir">
         <StateText
           loading={histQ.loading}
           error={histQ.error}
           empty={!histQ.loading && !histQ.error && history.length === 0}
           emptyText="Belum ada pertandingan."
         />
-        <ul className="space-y-1.5">
-          {history.slice(0, 10).map((m, i) => {
-            const [label, cls] =
-              m.result === "win"
-                ? ["Menang", "bg-emerald-100 text-emerald-700"]
-                : m.result === "loss"
-                  ? ["Kalah", "bg-rose-100 text-rose-700"]
-                  : ["Seri", "bg-slate-100 text-slate-600"];
-            return (
-              <li key={i} className="rounded-xl border border-slate-200 p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-sm">
-                    <b className="tabular-nums">
-                      {m.scoreFor}–{m.scoreAgainst}
-                    </b>{" "}
-                    <span className="text-slate-400">vs</span>{" "}
-                    {m.opponents.join(" & ")}
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}
-                  >
-                    {label}
-                  </span>
-                </div>
-                <div className="mt-0.5 truncate text-xs text-slate-400">
-                  bareng {m.partner} · {m.eventName} · {fmtDate(m.date)}
-                </div>
-              </li>
-            );
-          })}
+        <ul className="space-y-2">
+          {history.slice(0, 5).map((m, i) => (
+            <MatchRow key={i} m={m} />
+          ))}
         </ul>
-      </Card>
+      </section>
 
       <button
         onClick={() => {
           signOut();
           onBack();
         }}
-        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest py-3 font-semibold text-on-surface hover:bg-surface-container-high"
       >
+        <span className="material-symbols-outlined text-[20px] text-error">
+          logout
+        </span>
         Logout
       </button>
     </div>
@@ -479,6 +1569,62 @@ function fmtDate(ts: number): string {
   });
 }
 
+/** Peringkat seorang pemain (by nama) di dalam SATU turnamen. null = belum ada hasil. */
+function myRankInEvent(
+  e: DbEvent,
+  myName: string
+): { rank: number; total: number } | null {
+  const results = eventResults(e);
+  if (results.length === 0) return null;
+  const st = computeStandings(results, { compensate: false });
+  const idx = st.findIndex((s) => s.playerId === myName);
+  if (idx < 0) return null;
+  return { rank: idx + 1, total: st.length };
+}
+
+/** Satu baris pertandingan (dipakai di profil sendiri & profil pemain). */
+function MatchRow({ m }: { m: PlayerMatch }) {
+  const win = m.result === "win";
+  const loss = m.result === "loss";
+  const badge = win
+    ? ["Menang", "bg-primary-container text-on-primary-container"]
+    : loss
+      ? ["Kalah", "bg-error-container text-error"]
+      : ["Seri", "bg-surface-container-high text-on-surface-variant"];
+  const box = win
+    ? "bg-primary-container/40"
+    : loss
+      ? "bg-error-container/40"
+      : "bg-surface-container-high";
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-outline-variant/40 p-3">
+      <div
+        className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg ${box}`}
+      >
+        <span className="font-data-mono text-base font-bold">
+          {m.scoreFor}–{m.scoreAgainst}
+        </span>
+        <span className="font-label-caps text-[8px] uppercase text-outline">
+          {win ? "WIN" : loss ? "LOSS" : "DRAW"}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">
+          vs {m.opponents.join(" & ")}
+        </div>
+        <div className="truncate text-xs text-on-surface-variant">
+          Partner: {m.partner} · {m.eventName} · {fmtDate(m.date)}
+        </div>
+      </div>
+      <span
+        className={`shrink-0 rounded-full px-3 py-1 font-label-caps text-label-caps ${badge[1]}`}
+      >
+        {badge[0]}
+      </span>
+    </li>
+  );
+}
+
 function StateText({
   loading,
   error,
@@ -496,238 +1642,362 @@ function StateText({
   return null;
 }
 
-function HomeScreen({
+function ExploreScreen({
   user,
   onNavigate,
 }: {
   user: User | null;
   onNavigate: (v: View) => void;
 }) {
-  const leagues = useAsync(() => listLeagues(), []);
-  const standalone = useAsync(() => listEvents(null), []);
-  const me = useAsync(() => globalStats(), []);
-  const [newLeague, setNewLeague] = useState("");
-  const [newLeagueDesc, setNewLeagueDesc] = useState("");
-  const [newVisibility, setNewVisibility] = useState<"private" | "public">(
-    "private"
+  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("liga");
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const leaguesQ = useAsync(() => discoverLeagues(), []);
+  const eventsQ = useAsync(() => discoverEvents(), []);
+  const rosterQ = useAsync(() => listPlayers(), []);
+  const statsQ = useAsync(() => globalStats(), []);
+
+  const [code, setCode] = useState("");
+
+  const term = q.trim().toLowerCase();
+  const ligaShown = (leaguesQ.data ?? []).filter(
+    (l) => !term || l.name.toLowerCase().includes(term)
   );
-  const [tab, setTab] = useState<"all" | "active" | "past">("all");
+  const turnamenShown = (eventsQ.data ?? []).filter(
+    (e) => !term || e.name.toLowerCase().includes(term)
+  );
+
+  // Pemain GLOBAL: semua nama yang muncul di event (identitas per nama).
+  // Roster-ku dipakai untuk flag "tamu" + pemainku yang belum main.
+  const rankedPlayers = (() => {
+    const players = rosterQ.data ?? [];
+    const data = statsQ.data;
+    const ratings = data ? computeRatings(data.names, data.results) : [];
+    const mine = new Map(players.map((p) => [p.name, p]));
+    const out: {
+      id: string;
+      name: string;
+      isGuest: boolean;
+      rating: number | null;
+      played: number;
+    }[] = [];
+    const seen = new Set<string>();
+    for (const r of ratings) {
+      if (r.matchesPlayed === 0) continue;
+      const p = mine.get(r.name);
+      seen.add(r.name);
+      out.push({
+        id: p?.id ?? r.name,
+        name: r.name,
+        isGuest: p?.isGuest ?? false,
+        rating: r.rating,
+        played: r.matchesPlayed,
+      });
+    }
+    for (const p of players) {
+      if (seen.has(p.name)) continue;
+      out.push({
+        id: p.id,
+        name: p.name,
+        isGuest: p.isGuest,
+        rating: null,
+        played: 0,
+      });
+    }
+    return out.sort((a, b) =>
+      a.played > 0 && b.played > 0
+        ? b.rating! - a.rating! || a.name.localeCompare(b.name)
+        : (b.played > 0 ? 1 : 0) - (a.played > 0 ? 1 : 0) ||
+          a.name.localeCompare(b.name)
+    );
+  })();
+  const pemainShown = term
+    ? rankedPlayers.filter((p) => p.name.toLowerCase().includes(term))
+    : rankedPlayers;
+
+  async function joinByCode() {
+    if (!code.trim()) return;
+    setBusy(true);
+    try {
+      const id = await joinWithCode(code);
+      onNavigate({ t: "league", id });
+    } catch (e) {
+      alert("Gagal: " + errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function requestJoinLiga(id: string) {
+    setBusy(true);
+    try {
+      await requestJoin(id);
+      leaguesQ.reload();
+      alert("Permintaan terkirim. Menunggu persetujuan owner.");
+    } catch (e) {
+      alert("Gagal: " + errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!user) {
     return (
-      <Card title="Selamat datang di PedalPadel">
-        <p className="text-sm text-slate-500">
-          Klik <b>Masuk / Daftar</b> di kanan atas untuk membuat liga &
-          turnamen, dan menyimpan datanya di cloud.
+      <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
+        <span className="material-symbols-outlined mb-2 text-5xl text-primary-fixed-dim">
+          explore
+        </span>
+        <h2 className="font-display text-xl font-bold">Jelajah</h2>
+        <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
+          Masuk untuk menjelajah liga, turnamen, dan pemain.
         </p>
-      </Card>
+      </div>
     );
   }
-
-  async function addLeague() {
-    const name = newLeague.trim();
-    if (!name) return;
-    const lg = await createLeague(name, newVisibility, newLeagueDesc);
-    setNewLeague("");
-    setNewLeagueDesc("");
-    onNavigate({ t: "league", id: lg.id });
-  }
-
-  const lgList = leagues.data ?? [];
-
-  // Rank pemilik akun (self-player) di leaderboard ELO miliknya.
-  const myRank = (() => {
-    if (!me.data) return null;
-    const played = computeRatings(me.data.names, me.data.results).filter(
-      (r) => r.matchesPlayed > 0
-    );
-    const idx = played.findIndex((r) => r.name === displayName(user));
-    if (idx < 0) return null;
-    return {
-      rank: idx + 1,
-      total: played.length,
-      rating: Math.round(played[idx]!.rating),
-    };
-  })();
-
-  const allEvents = standalone.data ?? [];
-  const events =
-    tab === "all"
-      ? allEvents
-      : allEvents.filter((e) =>
-          tab === "active" ? e.status === "live" : e.status === "finished"
-        );
 
   return (
-    <div className="space-y-6">
-      <button
-        onClick={() => onNavigate({ t: "leaderboard" })}
-        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-lime-400 hover:bg-lime-50/40"
-      >
-        <span className="min-w-0">
-          <span className="block font-semibold">🏅 Pemain &amp; Ranking</span>
-          <span className="block text-sm text-slate-400">
-            {myRank
-              ? `Rank-mu #${myRank.rank} dari ${myRank.total} · ELO ${myRank.rating}`
-              : "Daftar pemain + leaderboard ELO dari semua sesimu"}
-          </span>
-        </span>
-        <span className="shrink-0 text-xl text-slate-300">›</span>
-      </button>
+    <div className="space-y-5">
+      <div>
+        <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
+          <span className="material-symbols-outlined text-primary">explore</span>
+          Jelajah
+        </h2>
+        <p className="text-sm text-on-surface-variant">
+          Temukan liga, turnamen, dan pemain.
+        </p>
+      </div>
 
-      <Card title="🏆 Liga">
-        <div className="mb-2 flex gap-2">
-          <input
-            value={newLeague}
-            onChange={(e) => setNewLeague(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addLeague()}
-            placeholder="Nama liga baru… (mis. Liga Tarkam 2026)"
-            className="input flex-1"
-          />
+      {/* Tab full-width (segmented) */}
+      <div className="flex rounded-2xl border border-outline-variant/40 bg-surface-container p-1 shadow-sm">
+        {(
+          [
+            ["liga", "Liga", "emoji_events"],
+            ["turnamen", "Turnamen", "sports_tennis"],
+            ["pemain", "Pemain", "group"],
+          ] as const
+        ).map(([k, l, icon]) => (
           <button
-            onClick={addLeague}
-            className="rounded-lg bg-lime-400 px-4 text-sm font-semibold text-slate-900 hover:bg-lime-300"
+            key={k}
+            onClick={() => setTab(k)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition ${
+              tab === k
+                ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface"
+            }`}
           >
-            + Liga
+            <span
+              className={`material-symbols-outlined text-[18px] ${
+                tab === k ? "fill text-primary" : ""
+              }`}
+            >
+              {icon}
+            </span>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div className="relative">
+        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline">
+          search
+        </span>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={
+            tab === "pemain"
+              ? "Cari pemain / @username…"
+              : tab === "turnamen"
+                ? "Cari turnamen…"
+                : "Cari liga…"
+          }
+          className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
+        />
+      </div>
+
+      {tab === "liga" && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onNavigate({ t: "createLeague" })}
+            className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
+          >
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Buat Liga
           </button>
         </div>
-        <input
-          value={newLeagueDesc}
-          onChange={(e) => setNewLeagueDesc(e.target.value)}
-          placeholder="Deskripsi liga (opsional)…"
-          className="input mb-2 w-full"
-        />
-        <div className="mb-4 flex items-center gap-2">
-          <Toggle
-            value={newVisibility === "private"}
-            onChange={(v) => setNewVisibility(v ? "private" : "public")}
-            onLabel="🔒 Private"
-            offLabel="🌐 Public"
-          />
-          <span className="text-xs text-slate-400">
-            {newVisibility === "private"
-              ? "Gabung lewat kode / undangan."
-              : "Bisa ditemukan & di-request gabung (perlu approval)."}
-          </span>
+      )}
+      {tab === "turnamen" && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onNavigate({ t: "create", leagueId: null })}
+            className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
+          >
+            <span className="material-symbols-outlined text-[20px]">add</span>
+            Buat Turnamen
+          </button>
         </div>
-        <button
-          onClick={() => onNavigate({ t: "discover" })}
-          className="mb-4 w-full rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
-        >
-          🔍 Cari &amp; gabung liga lain
-        </button>
-        <StateText
-          loading={leagues.loading}
-          error={leagues.error}
-          empty={lgList.length === 0}
-          emptyText="Belum ikut liga. Buat baru atau cari liga lain."
-        />
-        <ul className="space-y-2">
-          {lgList.map((l) => (
-            <li
-              key={l.id}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 hover:border-lime-400 hover:bg-lime-50/40"
+      )}
+
+      {tab === "liga" && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="Punya kode liga? Masukkan…"
+              className="input flex-1 font-data-mono tracking-wider"
+            />
+            <button
+              onClick={joinByCode}
+              disabled={busy || !code.trim()}
+              className="rounded-lg bg-navy px-4 text-sm font-semibold text-white disabled:opacity-50"
             >
-              <button
-                onClick={() => onNavigate({ t: "league", id: l.id })}
-                className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+              Gabung
+            </button>
+          </div>
+          <StateText
+            loading={leaguesQ.loading}
+            error={leaguesQ.error}
+            empty={!leaguesQ.loading && ligaShown.length === 0}
+            emptyText="Tidak ada liga publik."
+          />
+          <ul className="space-y-2">
+            {ligaShown.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 shadow-sm"
               >
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">
-                    {l.visibility === "private" ? "🔒" : "🌐"} {l.name}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {l.memberIds.length} pemain · {fmtDate(l.createdAt)}
-                    {l.myRole && l.myRole !== "owner"
-                      ? ` · ${l.myRole === "admin" ? "admin" : "anggota"}`
-                      : ""}
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
+                  <span className="material-symbols-outlined text-on-surface-variant">
+                    emoji_events
                   </span>
                 </span>
-              </button>
-              {l.myRole === "owner" ? (
-                <button
-                  onClick={async () => {
-                    if (
-                      confirm(
-                        `Hapus liga "${l.name}"? Sesi di dalamnya jadi turnamen lepas (tidak ikut terhapus).`
-                      )
-                    ) {
-                      await deleteLeague(l.id);
-                      leagues.reload();
-                      standalone.reload();
-                    }
-                  }}
-                  className="shrink-0 rounded-lg px-2 py-1 text-slate-300 hover:bg-red-50 hover:text-red-600"
-                  aria-label="Hapus liga"
-                  title="Hapus liga"
-                >
-                  🗑
-                </button>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (confirm(`Keluar dari liga "${l.name}"?`)) {
-                      await leaveLeague(l.id);
-                      leagues.reload();
-                    }
-                  }}
-                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  title="Keluar liga"
-                >
-                  Keluar
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      <Card title="🎾 Turnamen Lepas">
-        <button
-          onClick={() => onNavigate({ t: "create", leagueId: null })}
-          className="mb-4 w-full rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
-        >
-          + Buat Turnamen Lepas
-        </button>
-        {allEvents.length > 0 && (
-          <div className="mb-3 flex gap-1.5">
-            {(
-              [
-                ["all", "Semua"],
-                ["active", "Aktif"],
-                ["past", "Selesai"],
-              ] as const
-            ).map(([key, label]) => (
-              <Chip
-                key={key}
-                active={tab === key}
-                onClick={() => setTab(key)}
-                label={label}
-              />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{l.name}</div>
+                  <div className="text-xs text-on-surface-variant">
+                    {l.memberCount} anggota · {fmtDate(l.createdAt)}
+                  </div>
+                </div>
+                {l.myStatus === "member" ? (
+                  <button
+                    onClick={() => onNavigate({ t: "league", id: l.id })}
+                    className="shrink-0 rounded-lg bg-primary-container px-3 py-1.5 text-sm font-semibold text-on-primary-container hover:brightness-95"
+                  >
+                    Buka
+                  </button>
+                ) : l.myStatus === "pending" ? (
+                  <span className="shrink-0 rounded-lg bg-elo-gold/15 px-3 py-1.5 text-sm font-semibold text-elo-bronze">
+                    Menunggu
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => requestJoinLiga(l.id)}
+                    disabled={busy}
+                    className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    Join
+                  </button>
+                )}
+              </li>
             ))}
-          </div>
-        )}
-        <StateText
-          loading={standalone.loading}
-          error={standalone.error}
-          empty={events.length === 0}
-          emptyText={
-            allEvents.length === 0
-              ? "Belum ada turnamen."
-              : tab === "active"
-                ? "Tidak ada turnamen aktif."
-                : "Tidak ada turnamen selesai."
-          }
-        />
-        <EventList
-          events={events}
-          onOpen={(id) => onNavigate({ t: "session", id })}
-          onDelete={async (id) => {
-            await deleteEvent(id);
-            standalone.reload();
-          }}
-        />
-      </Card>
+          </ul>
+        </div>
+      )}
+
+      {tab === "turnamen" && (
+        <div>
+          <StateText
+            loading={eventsQ.loading}
+            error={eventsQ.error}
+            empty={!eventsQ.loading && turnamenShown.length === 0}
+            emptyText="Tidak ada turnamen publik."
+          />
+          <ul className="space-y-2">
+            {turnamenShown.map((e) => (
+              <li key={e.id}>
+                <button
+                  onClick={() => onNavigate({ t: "session", id: e.id })}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
+                    <span className="material-symbols-outlined text-on-surface-variant">
+                      sports_tennis
+                    </span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">
+                      {e.name}
+                    </span>
+                    <span className="text-xs text-on-surface-variant">
+                      {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                      {fmtDate(e.startAt ?? e.createdAt)}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
+                      e.status === "finished"
+                        ? "bg-surface-container text-on-surface-variant"
+                        : "bg-primary-container text-on-primary-container"
+                    }`}
+                  >
+                    {e.status === "finished" ? "SELESAI" : "LIVE"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tab === "pemain" && (
+        <div>
+          <StateText
+            loading={rosterQ.loading || statsQ.loading}
+            error={rosterQ.error || statsQ.error}
+            empty={
+              !rosterQ.loading && !statsQ.loading && pemainShown.length === 0
+            }
+            emptyText="Belum ada pemain."
+          />
+          <ul className="space-y-2">
+            {pemainShown.map((p, i) => {
+              const played = p.played > 0;
+              return (
+                <li key={p.id}>
+                  <button
+                    onClick={() => onNavigate({ t: "player", name: p.name })}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+                  >
+                    {played ? (
+                      <RankBadge rank={i + 1} />
+                    ) : (
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-container text-sm text-on-surface-variant">
+                        –
+                      </span>
+                    )}
+                    <TeamAvatar name={p.name} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-semibold">{p.name}</span>
+                        {p.isGuest && (
+                          <span className="rounded bg-elo-bronze/15 px-1 text-[10px] font-semibold uppercase text-elo-bronze">
+                            tamu
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">
+                        {played ? `${p.played} match` : "belum main"}
+                      </span>
+                    </span>
+                    <span className="font-data-mono text-sm font-bold text-on-surface-variant">
+                      {Math.round(p.rating ?? 1000)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -750,205 +2020,375 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
+type RankRow = {
+  id: string | null; // null = pemain global (bukan roster-ku) → tak bisa dihapus
+  name: string;
+  isGuest: boolean;
+  rating: number | null;
+  played: number;
+  st: Standing | undefined;
+};
+
 /**
- * Pemain & Ranking — semua pemain terdaftar dengan rank/rating ELO (dari semua
- * sesi user), plus daftar/hapus pemain. Yang sudah main diperingkat; yang belum
- * tampil di bawah. Rating dihitung ulang dari hasil match (keyed by nama).
+ * Pemain & Ranking (revamp): header + podium top-3 + tabel + daftar/hapus pemain.
+ * Rating dihitung ulang dari hasil match (keyed by nama).
  */
 function LeaderboardScreen({
-  onBack,
+  user,
   onOpenPlayer,
 }: {
-  onBack: () => void;
+  user: User | null;
   onOpenPlayer: (name: string) => void;
 }) {
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
-  const [newName, setNewName] = useState("");
+  const [q, setQ] = useState("");
   const [limit, setLimit] = useState(10);
+  const [unrankedLimit, setUnrankedLimit] = useState(4);
+  const meName = user ? displayName(user) : "";
 
-  async function register() {
-    if (await createPlayer(newName)) {
-      setNewName("");
-      roster.reload();
-    }
-  }
-  async function remove(id: string, name: string) {
-    if (!confirm(`Hapus pemain "${name}" dari daftar?`)) return;
-    await deletePlayer(id);
-    roster.reload();
-  }
-
-  const rows = (() => {
+  const rows: RankRow[] = (() => {
     const players = roster.data ?? [];
     const data = stats.data;
-    const byName = new Map(
-      (data ? computeRatings(data.names, data.results) : []).map((r) => [
-        r.name,
-        r,
-      ])
-    );
+    const ratings = data ? computeRatings(data.names, data.results) : [];
     const st = new Map(
-      (data
-        ? computeStandings(data.results, { compensate: false })
-        : []
-      ).map((s) => [s.playerId, s])
+      (data ? computeStandings(data.results, { compensate: false }) : []).map(
+        (s) => [s.playerId, s]
+      )
     );
-    return players
-      .map((p) => {
-        const r = byName.get(p.name);
-        return {
-          id: p.id,
-          name: p.name,
-          isGuest: p.isGuest,
-          rating: r?.rating ?? null,
-          played: r?.matchesPlayed ?? 0,
-          st: st.get(p.name),
-        };
-      })
-      .sort((a, b) => {
-        if ((a.played > 0) !== (b.played > 0)) return a.played > 0 ? -1 : 1;
-        if (a.played > 0 && b.played > 0)
-          return b.rating! - a.rating! || a.name.localeCompare(b.name);
-        return a.name.localeCompare(b.name);
+    // Roster milikku → untuk id (tombol hapus) + flag tamu, dicocokkan per nama.
+    const mine = new Map(players.map((p) => [p.name, p]));
+    const out: RankRow[] = [];
+    const seen = new Set<string>();
+    // Peringkat: SEMUA pemain yang pernah main (global, identitas per nama).
+    for (const r of ratings) {
+      if (r.matchesPlayed === 0) continue;
+      const p = mine.get(r.name);
+      seen.add(r.name);
+      out.push({
+        id: p?.id ?? null,
+        name: r.name,
+        isGuest: p?.isGuest ?? false,
+        rating: r.rating,
+        played: r.matchesPlayed,
+        st: st.get(r.name),
       });
+    }
+    // Unranked: pemain di roster-ku yang belum pernah main.
+    for (const p of players) {
+      if (seen.has(p.name)) continue;
+      out.push({
+        id: p.id,
+        name: p.name,
+        isGuest: p.isGuest,
+        rating: null,
+        played: 0,
+        st: st.get(p.name),
+      });
+    }
+    return out.sort((a, b) =>
+      a.played > 0 && b.played > 0
+        ? b.rating! - a.rating! || a.name.localeCompare(b.name)
+        : (b.played > 0 ? 1 : 0) - (a.played > 0 ? 1 : 0) ||
+          a.name.localeCompare(b.name)
+    );
   })();
 
-  const playedCount = rows.filter((r) => r.played > 0).length;
-  let rank = 0;
+  const played = rows.filter((r) => r.played > 0);
+  const unranked = rows.filter((r) => r.played === 0);
+  const top3 = played.slice(0, 3);
+  const rest = played.slice(3);
+  const term = q.trim().toLowerCase();
+  const restShown = (
+    term ? rest.filter((r) => r.name.toLowerCase().includes(term)) : rest
+  ).slice(0, limit);
 
   return (
-    <div className="space-y-4">
-      <button
-        onClick={onBack}
-        className="text-sm text-slate-500 hover:text-slate-900"
-      >
-        ← Kembali
-      </button>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-lg font-bold">🏅 Pemain &amp; Ranking</h2>
-          {stats.data && (
-            <span className="text-xs text-slate-400">
-              {stats.data.eventCount} sesi
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined fill text-[18px] text-elo-gold">
+              military_tech
             </span>
-          )}
+            <span className="font-label-caps text-label-caps text-on-surface-variant">
+              RANKING ELO GLOBAL
+            </span>
+          </div>
+          <h2 className="mt-1 font-display text-2xl font-bold">
+            Pemain &amp; Ranking
+          </h2>
+          <p className="mt-1 max-w-xl text-sm text-on-surface-variant">
+            Ranking gabungan dari semua sesi (rating awal 1000).
+            {stats.data ? ` ${stats.data.eventCount} sesi.` : ""}
+          </p>
         </div>
-        <p className="mb-3 text-sm text-slate-400">
-          Ranking ELO gabungan dari semua sesimu (rating awal 1000). Pemain belum
-          main tampil di bawah.
-        </p>
-
-        {/* Daftarkan pemain */}
-        <div className="mb-4 flex gap-2">
+        <div className="relative md:w-72">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline">
+            search
+          </span>
           <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && register()}
-            placeholder="Daftarkan pemain baru…"
-            className="input flex-1"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari nama…"
+            className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
           />
-          <button
-            onClick={register}
-            className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Daftar
-          </button>
         </div>
+      </div>
 
-        <StateText
-          loading={stats.loading || roster.loading}
-          error={stats.error || roster.error}
-          empty={!stats.loading && !roster.loading && rows.length === 0}
-          emptyText="Belum ada pemain. Daftarkan di atas."
-        />
+      <StateText
+        loading={stats.loading || roster.loading}
+        error={stats.error || roster.error}
+        empty={!stats.loading && !roster.loading && rows.length === 0}
+        emptyText="Belum ada pemain. Daftarkan di atas."
+      />
 
-        <ol className="space-y-1.5">
-          {rows.slice(0, limit).map((r) => {
-            const played = r.played > 0;
-            if (played) rank += 1;
-            const rel = Math.round(reliability(r.played) * 100);
-            const wl = r.st
-              ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
-              : "0–0";
-            const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
-            return (
-              <li
-                key={r.id}
-                className={`flex items-center gap-3 rounded-xl border p-2.5 ${
-                  played ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50/60"
-                }`}
-              >
-                {played ? (
-                  <RankBadge rank={rank} />
-                ) : (
-                  <span className="grid h-7 w-7 shrink-0 place-items-center text-xs text-slate-300">
-                    –
-                  </span>
-                )}
-                <button
-                  onClick={() => onOpenPlayer(r.name)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      {/* Podium */}
+      {top3.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {top3.map((r, i) => (
+            <PodiumCard
+              key={r.id ?? r.name}
+              r={r}
+              rank={i + 1}
+              me={r.name === meName}
+              onOpen={() => onOpenPlayer(r.name)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Tabel sisa peringkat */}
+      {rest.length > 0 && (
+        <section className="overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-sm">
+          <div className="flex items-center gap-3 border-b border-outline-variant/30 bg-surface-container-low px-4 py-2.5 font-label-caps text-label-caps text-on-surface-variant">
+            <span className="w-8">RANK</span>
+            <span className="flex-1">PEMAIN</span>
+            <span>ELO</span>
+          </div>
+          <ul className="divide-y divide-outline-variant/20">
+            {restShown.map((r) => {
+              const rk = played.indexOf(r) + 1;
+              const rel = Math.round(reliability(r.played) * 100);
+              const wl = r.st
+                ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
+                : "0–0";
+              const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
+              return (
+                <li
+                  key={r.id ?? r.name}
+                  className={`flex items-center gap-3 px-4 py-2.5 ${
+                    r.name === meName ? "bg-primary-container/25" : ""
+                  }`}
                 >
+                  <span className="w-8 font-data-mono text-sm font-bold text-on-surface-variant">
+                    {rk}
+                  </span>
+                  <button
+                    onClick={() => onOpenPlayer(r.name)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  >
+                    <TeamAvatar name={r.name} />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-semibold">{r.name}</span>
+                        {r.isGuest && (
+                          <span className="rounded bg-elo-bronze/15 px-1 text-[10px] font-semibold uppercase text-elo-bronze">
+                            tamu
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">
+                        {r.played} match · {wl} · {wr}% menang
+                      </span>
+                    </span>
+                  </button>
+                  <div className="text-right">
+                    <div className="font-data-mono text-sm font-bold">
+                      {Math.round(r.rating ?? 1000)}
+                    </div>
+                    <div className="text-[10px] text-reliability-dimmed">
+                      {rel < 100 ? `andal ${rel}%` : "stabil"}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {rest.length > limit && !term && (
+            <button
+              onClick={() => setLimit((n) => n + 10)}
+              className="w-full border-t border-outline-variant/30 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
+            >
+              Muat lebih banyak ({rest.length - limit} lagi)
+            </button>
+          )}
+        </section>
+      )}
+
+      {/* Belum main / unranked */}
+      {unranked.length > 0 && (
+        <section>
+          <div className="mb-2 font-label-caps text-label-caps text-on-surface-variant">
+            BELUM MAIN / UNRANKED ({unranked.length})
+          </div>
+          <ul className="space-y-2">
+            {unranked.slice(0, unrankedLimit).map((r) => (
+              <li
+                key={r.id ?? r.name}
+                className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 shadow-sm"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-container text-sm text-on-surface-variant">
+                  –
+                </span>
                 <TeamAvatar name={r.name} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="truncate font-semibold text-slate-800">
-                      {r.name}
-                    </span>
+                    <span className="truncate font-semibold">{r.name}</span>
                     {r.isGuest && (
-                      <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
+                      <span className="rounded bg-elo-bronze/15 px-1 text-[10px] font-semibold uppercase text-elo-bronze">
                         tamu
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400">
-                    {played ? `${r.played} match · ${wl} · ${wr}% menang` : "belum main"}
-                  </div>
+                  <div className="text-xs text-on-surface-variant">belum main</div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <div
-                    className={`font-bold tabular-nums ${
-                      played ? "" : "text-slate-300"
-                    }`}
-                  >
-                    {Math.round(r.rating ?? 1000)}
-                  </div>
-                  {played && (
-                    <div className="text-[10px] text-slate-400">
-                      {rel < 100 ? `andal ${rel}%` : "stabil"}
-                    </div>
-                  )}
+                <div className="font-data-mono text-sm font-bold text-outline">
+                  1000
                 </div>
-                </button>
-                <button
-                  onClick={() => remove(r.id, r.name)}
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-slate-300 hover:bg-red-50 hover:text-red-600"
-                  aria-label={`Hapus ${r.name}`}
-                >
-                  ×
-                </button>
               </li>
-            );
-          })}
-        </ol>
+            ))}
+          </ul>
+          {unranked.length > unrankedLimit && (
+            <button
+              onClick={() => setUnrankedLimit((n) => n + 4)}
+              className="mt-2 w-full rounded-xl border border-outline-variant/40 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
+            >
+              Muat lebih banyak ({unranked.length - unrankedLimit} lagi)
+            </button>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
 
-        {rows.length > limit && (
-          <button
-            onClick={() => setLimit((n) => n + 10)}
-            className="mt-2 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
+/** Kartu podium top-3 (juara emas elevated, perak/perunggu putih). */
+function PodiumCard({
+  r,
+  rank,
+  me,
+  onOpen,
+}: {
+  r: RankRow;
+  rank: number;
+  me: boolean;
+  onOpen: () => void;
+}) {
+  const champ = rank === 1;
+  const tierLabel = rank === 1 ? "JUARA" : rank === 2 ? "PERAK" : "PERUNGGU";
+  const order =
+    rank === 1 ? "order-1 md:order-2" : rank === 2 ? "order-2 md:order-1" : "order-3";
+  const rel = Math.round(reliability(r.played) * 100);
+  const wl = r.st
+    ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
+    : "0–0";
+  const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
+
+  const accent =
+    rank === 1
+      ? {
+          bar: "bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500",
+          glow: "bg-amber-400/25",
+          ring: "ring-amber-400",
+          medal: "bg-gradient-to-br from-amber-300 to-amber-500 text-navy",
+          badge: "bg-amber-400/15 text-amber-600",
+          elo: "text-amber-500",
+        }
+      : rank === 2
+        ? {
+            bar: "bg-gradient-to-r from-slate-300 to-slate-400",
+            glow: "bg-slate-300/25",
+            ring: "ring-slate-300",
+            medal: "bg-gradient-to-br from-slate-300 to-slate-400 text-white",
+            badge: "bg-slate-300/20 text-slate-500",
+            elo: "text-on-surface",
+          }
+        : {
+            bar: "bg-gradient-to-r from-orange-300 to-orange-500",
+            glow: "bg-orange-400/20",
+            ring: "ring-orange-400",
+            medal: "bg-gradient-to-br from-orange-300 to-orange-500 text-white",
+            badge: "bg-orange-400/15 text-orange-600",
+            elo: "text-on-surface",
+          };
+  const cardCls = champ
+    ? "bg-gradient-to-b from-amber-50 to-surface-container-lowest ring-2 ring-amber-300 shadow-lg shadow-amber-500/10 md:-translate-y-4"
+    : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm";
+
+  return (
+    <div
+      className={`relative flex flex-col items-center overflow-hidden rounded-2xl px-5 pb-5 pt-7 text-center text-on-surface ${order} ${cardCls}`}
+    >
+      <div className={`absolute inset-x-0 top-0 h-1.5 ${accent.bar}`} />
+      <div
+        className={`pointer-events-none absolute -top-12 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full blur-3xl ${accent.glow}`}
+      />
+      <span
+        className={`absolute right-3 top-4 font-label-caps text-label-caps rounded px-2 py-1 ${accent.badge}`}
+      >
+        {tierLabel}
+      </span>
+
+      {champ && (
+        <span className="material-symbols-outlined fill relative mb-1 text-[22px] text-amber-500">
+          emoji_events
+        </span>
+      )}
+
+      <button onClick={onOpen} className="relative flex flex-col items-center">
+        <span className="relative">
+          <span
+            className={`grid h-20 w-20 place-items-center rounded-full text-2xl font-bold ring-4 ${accent.ring} ${avatarColor(
+              r.name
+            )}`}
           >
-            Muat lebih banyak ({rows.length - limit} lagi)
-          </button>
-        )}
+            {initialsOf(r.name)}
+          </span>
+          <span
+            className={`absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full font-data-mono text-xs font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
+          >
+            {rank}
+          </span>
+        </span>
+        <span className="mt-3 block max-w-full truncate font-display text-lg font-bold">
+          {r.name}
+          {me && <span className="ml-1 text-xs opacity-60">(kamu)</span>}
+        </span>
+        <span className="text-sm text-on-surface-variant">
+          {wl} · {wr}% menang
+        </span>
+      </button>
 
-        {playedCount > 0 && (
-          <p className="mt-3 text-center text-xs text-slate-400">
-            {playedCount} pemain sudah main · {rows.length} terdaftar
-          </p>
-        )}
-      </section>
+      <div className="relative mt-4 flex w-full items-end justify-between border-t border-outline-variant/20 pt-3">
+        <div className="text-left">
+          <div className="font-label-caps text-label-caps text-reliability-dimmed">
+            KEANDALAN
+          </div>
+          <div className="font-data-mono text-data-mono">{rel}%</div>
+        </div>
+        <div className="text-right">
+          <div className="font-label-caps text-label-caps text-reliability-dimmed">
+            ELO
+          </div>
+          <div
+            className={`font-display text-3xl font-extrabold leading-none ${accent.elo}`}
+          >
+            {Math.round(r.rating ?? 1000)}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -956,14 +2396,23 @@ function LeaderboardScreen({
 function ProfileStat({
   label,
   value,
+  sub,
 }: {
   label: string;
   value: React.ReactNode;
+  sub?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2 text-center">
-      <div className="text-lg font-bold tabular-nums">{value}</div>
-      <div className="text-[11px] text-slate-400">{label}</div>
+    <div className="flex flex-col items-center justify-center rounded-lg bg-surface-container-low px-2 py-3 text-center">
+      <span className="font-label-caps text-label-caps text-on-surface-variant">
+        {label}
+      </span>
+      <span className="mt-1 font-display text-xl font-bold tabular-nums">
+        {value}
+      </span>
+      {sub && (
+        <span className="mt-0.5 text-[10px] text-outline">{sub}</span>
+      )}
     </div>
   );
 }
@@ -981,111 +2430,149 @@ function PlayerProfileScreen({
 
   const me = (() => {
     if (!stats.data) return null;
-    const r = computeRatings(stats.data.names, stats.data.results).find(
-      (x) => x.name === name
-    );
+    const ratings = computeRatings(stats.data.names, stats.data.results);
+    const played = ratings.filter((r) => r.matchesPlayed > 0);
+    const idx = played.findIndex((x) => x.name === name);
+    const r = ratings.find((x) => x.name === name);
     const s = computeStandings(stats.data.results, { compensate: false }).find(
       (x) => x.playerId === name
     );
-    return { rating: r?.rating ?? null, played: r?.matchesPlayed ?? 0, st: s ?? null };
+    return {
+      rating: r?.rating ?? null,
+      played: r?.matchesPlayed ?? 0,
+      st: s ?? null,
+      rank: idx >= 0 ? idx + 1 : null,
+      totalRanked: played.length,
+    };
   })();
-
   const history = hist.data ?? [];
-  const rel = me ? Math.round(reliability(me.played) * 100) : 0;
+  const rel = me && me.played > 0 ? Math.round(reliability(me.played) * 100) : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-2xl space-y-5">
       <button
         onClick={onBack}
-        className="text-sm text-slate-500 hover:text-slate-900"
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
       >
-        ← Kembali
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
       </button>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-4">
+      <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary-fixed/10 blur-3xl" />
+        <div className="relative flex items-center gap-4">
           <span
-            className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-lg font-bold ${avatarColor(
+            className={`grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-on-secondary-fixed-variant text-3xl font-extrabold ${avatarColor(
               name
             )}`}
           >
             {initialsOf(name)}
           </span>
           <div className="min-w-0">
-            <h2 className="truncate text-xl font-bold">{name}</h2>
-            <p className="text-sm text-slate-400">
-              {me && me.played > 0
-                ? rel < 100
-                  ? `Keandalan ${rel}% · ${me.played} match`
-                  : `Rating stabil · ${me.played} match`
-                : "Belum main"}
-            </p>
-          </div>
-          <div className="ml-auto shrink-0 text-right">
-            <div className="text-2xl font-bold tabular-nums">
-              {me?.rating != null ? Math.round(me.rating) : 1000}
-            </div>
-            <div className="text-[10px] uppercase tracking-wide text-slate-400">
-              ELO
+            <h1 className="truncate font-display text-2xl font-bold">{name}</h1>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {me?.rank != null && (
+                <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                  #{me.rank} GLOBAL
+                </span>
+              )}
+              <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                {me?.played ?? 0} MATCH
+              </span>
             </div>
           </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <ProfileStat label="Match" value={me?.played ?? 0} />
-          <ProfileStat
-            label="Menang–Kalah"
-            value={me?.st ? `${me.st.wins}–${me.st.losses}` : "0–0"}
-          />
-          <ProfileStat
-            label="Win Rate"
-            value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
-          />
-          <ProfileStat label="Poin" value={me?.st?.points ?? 0} />
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-3 font-semibold">Riwayat Pertandingan</h3>
+      <div className="grid gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              trending_up
+            </span>
+            Rating
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat
+              label="Peringkat"
+              value={me?.rank != null ? `#${me.rank}` : "–"}
+              sub={me?.rank != null ? `dari ${me.totalRanked}` : "belum main"}
+            />
+            <ProfileStat
+              label="ELO"
+              value={me && me.played > 0 ? Math.round(me.rating!) : "–"}
+              sub="rating"
+            />
+            <ProfileStat
+              label="Keandalan"
+              value={me && me.played > 0 ? `${rel}%` : "–"}
+              sub={me && me.played > 0 ? `${me.played}/20 match` : "—"}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              bar_chart
+            </span>
+            Statistik
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat label="Main" value={me?.played ?? 0} />
+            <ProfileStat label="Menang" value={me?.st?.wins ?? 0} />
+            <ProfileStat
+              label="Win %"
+              value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
+            />
+          </div>
+          {history.length > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant">
+                FORM TERAKHIR
+              </span>
+              <div className="flex gap-1">
+                {history.slice(0, 5).map((m, i) => {
+                  const c =
+                    m.result === "win"
+                      ? "bg-primary-container text-on-primary-container"
+                      : m.result === "loss"
+                        ? "bg-error-container text-error"
+                        : "bg-surface-container-high text-on-surface-variant";
+                  const l =
+                    m.result === "win" ? "M" : m.result === "loss" ? "K" : "S";
+                  return (
+                    <span
+                      key={i}
+                      className={`grid h-6 w-6 place-items-center rounded text-[10px] font-bold ${c}`}
+                    >
+                      {l}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+        <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+          <span className="material-symbols-outlined text-[20px] text-primary">
+            history
+          </span>
+          Pertandingan Terakhir
+        </h3>
         <StateText
           loading={hist.loading}
           error={hist.error}
           empty={!hist.loading && !hist.error && history.length === 0}
           emptyText="Belum ada pertandingan."
         />
-        <ul className="space-y-1.5">
-          {history.map((m, i) => {
-            const [label, cls] =
-              m.result === "win"
-                ? ["Menang", "bg-emerald-100 text-emerald-700"]
-                : m.result === "loss"
-                  ? ["Kalah", "bg-rose-100 text-rose-700"]
-                  : ["Seri", "bg-slate-100 text-slate-600"];
-            return (
-              <li
-                key={i}
-                className="rounded-xl border border-slate-200 p-2.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-sm">
-                    <b className="tabular-nums">
-                      {m.scoreFor}–{m.scoreAgainst}
-                    </b>{" "}
-                    <span className="text-slate-400">vs</span>{" "}
-                    {m.opponents.join(" & ")}
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}
-                  >
-                    {label}
-                  </span>
-                </div>
-                <div className="mt-0.5 truncate text-xs text-slate-400">
-                  bareng {m.partner} · {m.eventName} · {fmtDate(m.date)}
-                </div>
-              </li>
-            );
-          })}
+        <ul className="space-y-2">
+          {history.slice(0, 10).map((m, i) => (
+            <MatchRow key={i} m={m} />
+          ))}
         </ul>
       </section>
     </div>
@@ -1158,7 +2645,7 @@ function DiscoverScreen({
           <button
             onClick={joinByCode}
             disabled={busy || !code.trim()}
-            className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-300"
+            className="rounded-lg bg-navy px-4 text-sm font-medium text-white hover:opacity-90 disabled:bg-surface-container disabled:text-outline"
           >
             Gabung
           </button>
@@ -1198,19 +2685,19 @@ function DiscoverScreen({
               {l.myStatus === "member" ? (
                 <button
                   onClick={() => onOpenLeague(l.id)}
-                  className="shrink-0 rounded-lg bg-lime-100 px-3 py-1.5 text-sm font-medium text-lime-700 hover:bg-lime-200"
+                  className="shrink-0 rounded-lg bg-primary-container px-3 py-1.5 text-sm font-medium text-on-primary-container hover:brightness-95"
                 >
                   Buka
                 </button>
               ) : l.myStatus === "pending" ? (
-                <span className="shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-700">
+                <span className="shrink-0 rounded-lg bg-elo-gold/15 px-3 py-1.5 text-sm font-medium text-elo-bronze">
                   Menunggu
                 </span>
               ) : (
                 <button
                   onClick={() => request(l.id)}
                   disabled={busy}
-                  className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-300"
+                  className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:bg-surface-container disabled:text-outline"
                 >
                   Join
                 </button>
@@ -1233,73 +2720,71 @@ function EventList({
   onDelete: (id: string) => void;
 }) {
   if (events.length === 0)
-    return <p className="text-sm text-slate-400">Belum ada turnamen.</p>;
+    return (
+      <p className="text-sm text-on-surface-variant">Belum ada turnamen.</p>
+    );
   return (
     <ul className="space-y-2">
-      {events.map((e) => (
-        <li
-          key={e.id}
-          className="group flex items-center gap-2 rounded-xl border border-slate-200 p-3 hover:border-lime-400 hover:bg-lime-50/40"
-        >
-          <button
-            onClick={() => onOpen(e.id)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+      {events.map((e) => {
+        const upcoming =
+          e.status !== "finished" && !!e.startAt && e.startAt > Date.now();
+        return (
+          <li
+            key={e.id}
+            className="group flex items-center gap-2 rounded-xl border border-outline-variant/50 p-2.5 transition hover:border-primary-fixed-dim hover:bg-surface-container-low"
           >
-            <span className="min-w-0">
-              <span className="block truncate font-semibold">
-                {e.visibility === "public"
-                  ? "🌐 "
-                  : e.visibility === "private"
-                    ? "🔒 "
-                    : ""}
-                {e.name}
-              </span>
-              {e.description && (
-                <span className="block truncate text-xs text-slate-400">
-                  {e.description}
-                </span>
-              )}
-              <span className="text-xs text-slate-400">
-                {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
-                {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                {e.visibility === "private" ? "lock" : "sports_tennis"}
               </span>
             </span>
-            {(() => {
-              const upcoming =
-                e.status !== "finished" &&
-                !!e.startAt &&
-                e.startAt > Date.now();
-              return (
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    e.status === "finished"
-                      ? "bg-slate-100 text-slate-500"
-                      : upcoming
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-lime-100 text-lime-700"
-                  }`}
-                >
-                  {e.status === "finished"
-                    ? "selesai"
-                    : upcoming
-                      ? "mendatang"
-                      : "berjalan"}
+            <button
+              onClick={() => onOpen(e.id)}
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{e.name}</span>
+                {e.description && (
+                  <span className="block truncate text-xs text-on-surface-variant">
+                    {e.description}
+                  </span>
+                )}
+                <span className="text-xs text-on-surface-variant">
+                  {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                  {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
                 </span>
-              );
-            })()}
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Hapus turnamen "${e.name}"?`)) onDelete(e.id);
-            }}
-            className="shrink-0 rounded-lg px-2 py-1 text-slate-300 hover:bg-red-50 hover:text-red-600"
-            aria-label="Hapus"
-            title="Hapus"
-          >
-            🗑
-          </button>
-        </li>
-      ))}
+              </span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
+                  e.status === "finished"
+                    ? "bg-surface-container text-on-surface-variant"
+                    : upcoming
+                      ? "bg-elo-gold/20 text-elo-bronze"
+                      : "bg-primary-container text-on-primary-container"
+                }`}
+              >
+                {e.status === "finished"
+                  ? "SELESAI"
+                  : upcoming
+                    ? "MENDATANG"
+                    : "LIVE"}
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`Hapus turnamen "${e.name}"?`)) onDelete(e.id);
+              }}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
+              aria-label="Hapus"
+              title="Hapus"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                delete
+              </span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -1326,80 +2811,144 @@ function LeagueScreen({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-white">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-bold">{league.name}</h2>
-          {league.description && (
-            <p className="mt-0.5 text-sm text-slate-300">{league.description}</p>
-          )}
-          <p className="text-xs text-slate-400">
-            {events.length} sesi · dibuat {fmtDate(league.createdAt)}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="rounded-full bg-white/10 px-2 py-0.5">
-              {league.visibility === "private" ? "🔒 Private" : "🌐 Public"}
+      <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary-fixed/10 blur-3xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <span className="font-label-caps text-label-caps text-primary-fixed">
+              {league.visibility === "private" ? "LIGA PRIVAT" : "LIGA PUBLIK"}
             </span>
-            {league.visibility === "private" && league.joinCode && (
-              <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(league.joinCode!);
-                  alert(`Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`);
-                }}
-                className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono font-semibold tracking-wider text-lime-300 hover:bg-lime-400/30"
-                title="Salin kode join"
-              >
-                {league.joinCode} 📋
-              </button>
+            <h2 className="mt-1 truncate font-display text-2xl font-bold">
+              {league.name}
+            </h2>
+            {league.description && (
+              <p className="mt-0.5 text-sm text-white/60">
+                {league.description}
+              </p>
             )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-white/10 px-2.5 py-1 font-label-caps text-label-caps">
+                {events.length} SESI
+              </span>
+              <span className="rounded-full bg-white/10 px-2.5 py-1 font-label-caps text-label-caps">
+                🗓 {fmtDate(league.createdAt)}
+              </span>
+              {league.visibility === "private" && league.joinCode && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(league.joinCode!);
+                    alert(
+                      `Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`
+                    );
+                  }}
+                  className="flex items-center gap-1 rounded-full bg-primary-fixed/15 px-2.5 py-1 font-data-mono text-data-mono font-bold tracking-wider text-primary-fixed hover:bg-primary-fixed/25"
+                  title="Salin kode join"
+                >
+                  {league.joinCode}
+                  <span className="material-symbols-outlined text-[14px]">
+                    content_copy
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <button
+              onClick={() => onNavigate({ t: "create", leagueId })}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">add</span>
+              Tambah Sesi
+            </button>
+            {league.myRole === "owner" ? (
+              <button
+                onClick={async () => {
+                  if (
+                    confirm(
+                      `Hapus liga "${league.name}"? Sesi di dalamnya jadi turnamen lepas.`
+                    )
+                  ) {
+                    await deleteLeague(league.id);
+                    onNavigate({ t: "leagues" });
+                  }
+                }}
+                className="font-label-caps text-label-caps text-white/50 transition hover:text-loss-red"
+              >
+                Hapus liga
+              </button>
+            ) : league.myRole ? (
+              <button
+                onClick={async () => {
+                  if (confirm(`Keluar dari liga "${league.name}"?`)) {
+                    await leaveLeague(league.id);
+                    onNavigate({ t: "leagues" });
+                  }
+                }}
+                className="font-label-caps text-label-caps text-white/50 transition hover:text-loss-red"
+              >
+                Keluar liga
+              </button>
+            ) : null}
           </div>
         </div>
-        <button
-          onClick={() => onNavigate({ t: "create", leagueId })}
-          className="ml-2 shrink-0 rounded-lg bg-lime-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-lime-300"
-        >
-          + Tambah Sesi
-        </button>
-      </div>
+      </section>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card title="📊 Klasemen Liga (akumulasi pemain)">
           {standings.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="rounded-xl bg-surface-container-low px-3 py-6 text-center text-sm text-on-surface-variant">
               Belum ada skor. Tambah sesi & input skor untuk mengisi klasemen.
             </p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-outline-variant/30 text-left font-label-caps text-label-caps text-on-surface-variant">
                   <th className="pb-2 pr-2">#</th>
-                  <th className="pb-2">Pemain</th>
+                  <th className="pb-2">PEMAIN</th>
                   <th className="pb-2 text-right">P</th>
                   <th className="pb-2 text-right" title="Menang-Kalah-Seri">
                     W-L-T
                   </th>
                   <th className="pb-2 text-right" title="Jumlah match dimainkan">
-                    Main
+                    MAIN
                   </th>
                   <th className="pb-2 text-right" title="Selisih poin">
-                    Diff
+                    DIFF
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {standings.map((s, i) => (
-                  <tr key={s.playerId} className="border-t border-slate-100">
-                    <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
-                    <td className="py-1.5 font-medium">{s.playerId}</td>
-                    <td className="py-1.5 text-right font-bold tabular-nums">
+                  <tr
+                    key={s.playerId}
+                    className="border-b border-outline-variant/15 last:border-0"
+                  >
+                    <td className="py-2 pr-2">
+                      <span
+                        className={`grid h-6 w-6 place-items-center rounded-full font-data-mono text-xs font-bold ${
+                          i === 0
+                            ? "bg-elo-gold/20 text-elo-bronze"
+                            : i === 1
+                              ? "bg-elo-silver/20 text-on-surface-variant"
+                              : i === 2
+                                ? "bg-elo-bronze/15 text-elo-bronze"
+                                : "text-on-surface-variant"
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                    </td>
+                    <td className="py-2 font-semibold">{s.playerId}</td>
+                    <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                       {s.points}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
+                    <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                       {s.wins}-{s.losses}-{s.ties}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
+                    <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                       {s.played}
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-slate-500">
+                    <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                       {s.gamesDiff > 0 ? `+${s.gamesDiff}` : s.gamesDiff}
                     </td>
                   </tr>
@@ -1625,7 +3174,7 @@ function LeaguePeople({
                           setHits([]);
                         })
                       }
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
                     >
                       <TeamAvatar name={u.name} />
                       <span className="min-w-0 flex-1 truncate">
@@ -1634,7 +3183,7 @@ function LeaguePeople({
                           <span className="text-slate-400"> @{u.username}</span>
                         )}
                       </span>
-                      <span className="text-xs font-medium text-lime-700">
+                      <span className="text-xs font-medium text-primary">
                         Undang
                       </span>
                     </button>
@@ -1668,7 +3217,7 @@ function LeaguePeople({
                           setR([...rosterIds, p.id]);
                           setAddQ("");
                         }}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
                       >
                         <TeamAvatar name={p.name} />
                         <span className="min-w-0 flex-1 truncate">{p.name}</span>
@@ -1677,7 +3226,7 @@ function LeaguePeople({
                             tamu
                           </span>
                         )}
-                        <span className="text-xs font-medium text-lime-700">
+                        <span className="text-xs font-medium text-primary">
                           Tambah
                         </span>
                       </button>
@@ -1759,6 +3308,379 @@ const FORMATS: { id: Format; name: string; desc: string }[] = [
 
 const POINT_OPTIONS = [16, 21, 24, 32, 0]; // 0 = Undefined / bebas
 const NORMAL_TARGETS = [3, 4, 5, 6, 7];
+
+/** Editor WYSIWYG ringan (contentEditable + execCommand) — ramah mobile. */
+function RichText({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== value)
+      ref.current.innerHTML = value;
+    // sekali saat mount saja
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const cmd = (c: string) => {
+    document.execCommand(c, false);
+    ref.current?.focus();
+    onChange(ref.current?.innerHTML ?? "");
+  };
+  const Btn = ({ c, icon }: { c: string; icon: string }) => (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => cmd(c)}
+      className="grid h-8 w-8 place-items-center rounded text-on-surface-variant hover:bg-surface-container-high"
+    >
+      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+    </button>
+  );
+  return (
+    <div className="overflow-hidden rounded-lg border border-outline-variant">
+      <div className="flex gap-0.5 border-b border-outline-variant/50 bg-surface-container-low p-1">
+        <Btn c="bold" icon="format_bold" />
+        <Btn c="italic" icon="format_italic" />
+        <Btn c="insertUnorderedList" icon="format_list_bulleted" />
+        <Btn c="insertOrderedList" icon="format_list_numbered" />
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => onChange(ref.current?.innerHTML ?? "")}
+        data-placeholder={placeholder}
+        className="min-h-24 px-3 py-2 text-sm outline-none [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+      />
+    </div>
+  );
+}
+
+/** Baca file gambar → data URL terkompres (maks sisi terpanjang `max` px). */
+function readImageDataUrl(file: File, max = 256): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.75));
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Halaman buat liga (proper): foto, nama, deskripsi, notes (WYSIWYG),
+ *  visibilitas, dan tambah anggota (undang akun / tamu). */
+function CreateLeagueScreen({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (id: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<"private" | "public">("private");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // anggota
+  const [invited, setInvited] = useState<AccountUser[]>([]);
+  const [guests, setGuests] = useState<string[]>([]);
+  const [accQ, setAccQ] = useState("");
+  const [accHits, setAccHits] = useState<AccountUser[]>([]);
+  const [guestName, setGuestName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const t = accQ.trim();
+    if (t.length < 3) {
+      setAccHits([]);
+      return;
+    }
+    const tm = setTimeout(async () => {
+      try {
+        const r = await searchAccounts(t);
+        const have = new Set(invited.map((u) => u.userId));
+        setAccHits(r.filter((u) => !have.has(u.userId)));
+      } catch {
+        setAccHits([]);
+      }
+    }, 300);
+    return () => clearTimeout(tm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accQ, invited.length]);
+
+  async function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) {
+      try {
+        setPhoto(await readImageDataUrl(f));
+      } catch {
+        alert("Gagal membaca gambar.");
+      }
+    }
+  }
+
+  function addGuest() {
+    const n = guestName.trim();
+    if (n && !guests.includes(n)) setGuests([...guests, n]);
+    setGuestName("");
+  }
+
+  async function submit() {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const lg = await createLeague({
+        name,
+        visibility,
+        description,
+        notes,
+        photoUrl: photo,
+      });
+      // Undang akun
+      for (const u of invited) {
+        try {
+          await inviteUser(lg.id, u.userId);
+        } catch {
+          /* lanjut */
+        }
+      }
+      // Tambah tamu ke roster
+      if (guests.length) {
+        const ids: string[] = [];
+        for (const g of guests) {
+          const p = await createPlayer(g, { guest: true });
+          if (p) ids.push(p.id);
+        }
+        if (ids.length) await setLeagueMembers(lg.id, ids);
+      }
+      onCreated(lg.id);
+    } catch (e) {
+      alert("Gagal membuat liga: " + errMsg(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-5">
+      <button
+        onClick={onCancel}
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+      >
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
+      </button>
+
+      <h2 className="font-display text-2xl font-bold">Buat Liga</h2>
+
+      <Card title="🏆 Info Liga">
+        {/* Foto */}
+        <div className="mb-4 flex items-center gap-4">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-outline-variant bg-surface-container-low hover:border-primary-fixed-dim"
+          >
+            {photo ? (
+              <img src={photo} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="material-symbols-outlined text-on-surface-variant">
+                add_a_photo
+              </span>
+            )}
+          </button>
+          <div className="text-sm">
+            <div className="font-semibold">Foto liga (opsional)</div>
+            <div className="text-on-surface-variant">
+              Ketuk untuk pilih gambar.
+            </div>
+            {photo && (
+              <button
+                onClick={() => setPhoto(null)}
+                className="mt-1 text-xs font-medium text-loss-red hover:underline"
+              >
+                Hapus foto
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={pickPhoto}
+            className="hidden"
+          />
+        </div>
+
+        <Field label="Nama liga">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="mis. Liga Tarkam 2026"
+            className="input w-full"
+          />
+        </Field>
+
+        <Field label="Deskripsi (opsional)">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Deskripsi singkat liga…"
+            rows={2}
+            className="input w-full resize-y"
+          />
+        </Field>
+
+        <Field label="Notes (opsional)">
+          <RichText
+            value={notes}
+            onChange={setNotes}
+            placeholder="Aturan, jadwal, info lain… (bisa tebal/miring/daftar)"
+          />
+        </Field>
+
+        <Field label="Visibilitas">
+          <Toggle
+            value={visibility === "private"}
+            onChange={(v) => setVisibility(v ? "private" : "public")}
+            onLabel="🔒 Private"
+            offLabel="🌐 Public"
+          />
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {visibility === "private"
+              ? "Gabung lewat kode / undangan."
+              : "Muncul di Jelajah; orang bisa request gabung (perlu approval)."}
+          </p>
+        </Field>
+      </Card>
+
+      <Card title="👥 Anggota Awal (opsional)">
+        {/* Undang akun */}
+        <Field label="Undang akun (@username)">
+          <div className="relative">
+            <input
+              value={accQ}
+              onChange={(e) => setAccQ(e.target.value)}
+              placeholder="Cari nama / @username…"
+              className="input w-full"
+            />
+            {accHits.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                {accHits.map((u) => (
+                  <li key={u.userId}>
+                    <button
+                      onClick={() => {
+                        setInvited([...invited, u]);
+                        setAccQ("");
+                        setAccHits([]);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
+                    >
+                      <TeamAvatar name={u.name} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {u.name}
+                        {u.username && (
+                          <span className="text-on-surface-variant">
+                            {" "}
+                            @{u.username}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs font-medium text-primary">
+                        Undang
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Field>
+
+        {/* Tambah tamu */}
+        <Field label="Tambah tamu (tanpa akun)">
+          <div className="flex gap-2">
+            <input
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addGuest()}
+              placeholder="Nama tamu…"
+              className="input flex-1"
+            />
+            <button
+              onClick={addGuest}
+              className="rounded-lg bg-navy px-4 text-sm font-semibold text-white"
+            >
+              Tambah
+            </button>
+          </div>
+        </Field>
+
+        {(invited.length > 0 || guests.length > 0) && (
+          <ul className="flex flex-wrap gap-2">
+            {invited.map((u) => (
+              <li
+                key={"u" + u.userId}
+                className="flex items-center gap-1.5 rounded-full bg-sky-100 py-1 pl-2 pr-1 text-sm text-sky-800"
+              >
+                <TeamAvatar name={u.name} />
+                {u.name}
+                <button
+                  onClick={() =>
+                    setInvited(invited.filter((x) => x.userId !== u.userId))
+                  }
+                  className="grid h-5 w-5 place-items-center rounded-full hover:bg-black/10"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+            {guests.map((g) => (
+              <li
+                key={"g" + g}
+                className="flex items-center gap-1.5 rounded-full bg-amber-100 py-1 pl-2 pr-1 text-sm text-amber-800"
+              >
+                <TeamAvatar name={g} />
+                {g}
+                <span className="text-[10px] uppercase">tamu</span>
+                <button
+                  onClick={() => setGuests(guests.filter((x) => x !== g))}
+                  className="grid h-5 w-5 place-items-center rounded-full hover:bg-black/10"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <button
+        onClick={submit}
+        disabled={busy || !name.trim()}
+        className="w-full rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
+      >
+        {busy ? "Membuat…" : "Buat Liga"}
+      </button>
+    </div>
+  );
+}
 
 function CreateScreen({
   leagueId,
@@ -2145,7 +4067,7 @@ function CreateScreen({
         <button
           onClick={start}
           disabled={!canStart}
-          className="mt-2 w-full rounded-xl bg-lime-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          className="mt-2 w-full rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
         >
           {startLabel}
         </button>
@@ -2405,7 +4327,7 @@ function PlayerPicker({
                 await onAddGuest(term);
                 setQ("");
               }}
-              className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50"
+              className="flex w-full items-center gap-2 border-t border-outline-variant/30 px-3 py-2 text-sm font-medium text-elo-bronze hover:bg-elo-gold/10"
             >
               <span className="grid h-6 w-6 place-items-center rounded-full bg-amber-200 text-amber-800">
                 +
@@ -2509,34 +4431,45 @@ function MetaBar({
     `${config.courts} lapangan`,
   ];
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-900 px-5 py-4 text-white">
-      <div>
-        <button
-          onClick={() => onExit(event)}
-          className="mb-1 text-xs text-slate-400 hover:text-lime-400"
-        >
-          ← Kembali
-        </button>
-        <h2 className="text-lg font-bold">{config.name}</h2>
-        <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-300">
-          {items.map((it, i) => (
-            <span key={i}>
-              {i > 0 && <span className="mr-2 text-slate-600">·</span>}
-              {it}
+    <section className="relative overflow-hidden rounded-2xl bg-navy px-5 py-4 text-white">
+      <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary-fixed/10 blur-3xl" />
+      <div className="relative flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <button
+            onClick={() => onExit(event)}
+            className="mb-1 flex items-center gap-1 font-label-caps text-label-caps text-white/60 transition hover:text-primary-fixed"
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              arrow_back
             </span>
-          ))}
-        </p>
+            KEMBALI
+          </button>
+          <h2 className="truncate font-display text-xl font-bold">
+            {config.name}
+          </h2>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/60">
+            {items.map((it, i) => (
+              <span key={i} className="flex items-center gap-2">
+                {i > 0 && <span className="text-white/25">·</span>}
+                {it}
+              </span>
+            ))}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            await updateEvent(event.id, { status: "finished" });
+            onExit(event);
+          }}
+          className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            check_circle
+          </span>
+          Tandai selesai
+        </button>
       </div>
-      <button
-        onClick={async () => {
-          await updateEvent(event.id, { status: "finished" });
-          onExit(event);
-        }}
-        className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-      >
-        Tandai selesai
-      </button>
-    </div>
+    </section>
   );
 }
 
@@ -2564,10 +4497,10 @@ function RoundsPanel({ session }: { session: Session }) {
           <button
             key={r.index}
             onClick={() => setActive(i)}
-            className={`h-8 w-8 rounded-lg text-sm font-semibold ${
+            className={`h-9 w-9 rounded-lg font-data-mono text-sm font-bold transition ${
               i === active
-                ? "bg-lime-400 text-slate-900"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                ? "bg-primary-fixed text-on-primary-fixed"
+                : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
             }`}
           >
             {i + 1}
@@ -2578,7 +4511,7 @@ function RoundsPanel({ session }: { session: Session }) {
       {round && (
         <div className="space-y-3">
           {round.resting.length > 0 && (
-            <p className="text-xs text-slate-400">
+            <p className="rounded-lg border-l-2 border-primary-fixed-dim bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant">
               Istirahat: {round.resting.join(", ")}
             </p>
           )}
@@ -2588,13 +4521,13 @@ function RoundsPanel({ session }: { session: Session }) {
             return (
               <div
                 key={m.court}
-                className="rounded-xl border border-slate-200 p-3"
+                className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-3"
               >
-                <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-                  <span>Lapangan {m.court}</span>
+                <div className="mb-2 flex items-center justify-between font-label-caps text-label-caps text-on-surface-variant">
+                  <span>LAPANGAN {m.court}</span>
                   {played && (
-                    <span className="rounded-full bg-lime-100 px-2 py-0.5 font-semibold text-lime-700">
-                      selesai
+                    <span className="rounded-full bg-primary-container px-2 py-0.5 text-on-primary-container">
+                      SELESAI
                     </span>
                   )}
                 </div>
@@ -2602,21 +4535,21 @@ function RoundsPanel({ session }: { session: Session }) {
                   {/* Sisi kiri: klik → pilih skor tim A */}
                   <button
                     onClick={() => setPicking({ court: m.court, side: "a" })}
-                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition hover:bg-lime-50"
+                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition hover:bg-surface-container-high"
                   >
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-semibold">
                       {m.teamA.join(" & ")}
                     </span>
                     <ScoreChip value={s?.a} />
                   </button>
-                  <span className="text-slate-300">:</span>
+                  <span className="font-display text-outline">:</span>
                   {/* Sisi kanan: klik → pilih skor tim B */}
                   <button
                     onClick={() => setPicking({ court: m.court, side: "b" })}
-                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition hover:bg-lime-50"
+                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition hover:bg-surface-container-high"
                   >
                     <ScoreChip value={s?.b} />
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-semibold">
                       {m.teamB.join(" & ")}
                     </span>
                   </button>
@@ -2629,19 +4562,32 @@ function RoundsPanel({ session }: { session: Session }) {
 
       <div className="mt-4 flex gap-2">
         {isScheduledFormat(config.format) ? (
-          // Americano: semua ronde sudah tampil; cuma opsi acak ulang jadwal.
-          <button
-            onClick={session.reshuffle}
-            className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-100"
-          >
-            Acak ulang jadwal
-          </button>
+          // Americano: semua ronde tampil. Saat jadwal habis → tambah 1 siklus
+          // baru (lanjut tanpa sesi baru); + opsi acak ulang jadwal.
+          <>
+            <button
+              onClick={session.extendSchedule}
+              className="flex-1 rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+            >
+              Tambah ronde +
+            </button>
+            <button
+              onClick={session.reshuffle}
+              title="Acak ulang jadwal"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                shuffle
+              </span>
+              Acak
+            </button>
+          </>
         ) : (
           <>
             <button
               onClick={session.nextRound}
               disabled={!session.canAddRound}
-              className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              className="flex-1 rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
             >
               {!session.lastRoundComplete
                 ? "Lengkapi skor ronde ini dulu"
@@ -2650,7 +4596,7 @@ function RoundsPanel({ session }: { session: Session }) {
             {isLast && (
               <button
                 onClick={session.reshuffle}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-100"
+                className="rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
               >
                 Acak ulang
               </button>
@@ -2678,7 +4624,7 @@ function RoundsPanel({ session }: { session: Session }) {
 
 function ScoreChip({ value }: { value?: number }) {
   return (
-    <span className="grid h-11 w-12 place-items-center rounded-lg bg-slate-900 text-lg font-bold text-white tabular-nums">
+    <span className="grid h-11 w-12 place-items-center rounded-lg bg-navy font-data-mono text-lg font-bold text-primary-fixed tabular-nums">
       {value ?? "–"}
     </span>
   );
@@ -2723,15 +4669,15 @@ function ScorePicker({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 p-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-navy/60 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">
-          Ronde {roundIndex + 1} · Lapangan {match.court}
+        <div className="mb-3 font-label-caps text-label-caps text-on-surface-variant">
+          RONDE {roundIndex + 1} · LAPANGAN {match.court}
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-2">
@@ -2749,7 +4695,7 @@ function ScorePicker({
           />
         </div>
 
-        <div className="mb-1 text-sm font-medium text-slate-600">
+        <div className="mb-2 text-sm font-semibold text-on-surface-variant">
           Pilih skor · {spec.label}
         </div>
         <div className="grid grid-cols-6 gap-2">
@@ -2757,10 +4703,10 @@ function ScorePicker({
             <button
               key={n}
               onClick={() => pick(n)}
-              className={`rounded-lg py-2.5 text-sm font-semibold tabular-nums transition ${
+              className={`rounded-lg py-2.5 font-data-mono text-sm font-bold tabular-nums transition ${
                 activeValue === n
-                  ? "bg-lime-400 text-slate-900"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  ? "bg-primary-fixed text-on-primary-fixed"
+                  : "bg-surface-container text-on-surface hover:bg-surface-container-high"
               }`}
             >
               {n}
@@ -2774,13 +4720,13 @@ function ScorePicker({
               onPick(0, 0);
               onClose();
             }}
-            className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100"
+            className="rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-low"
           >
             Reset 0:0
           </button>
           <button
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+            className="rounded-lg px-4 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low"
           >
             Tutup
           </button>
@@ -2806,12 +4752,14 @@ function TeamScoreTab({
       onClick={onClick}
       className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition ${
         active
-          ? "border-lime-500 bg-lime-50 ring-1 ring-lime-500"
-          : "border-slate-200 hover:border-slate-300"
+          ? "border-primary bg-primary-container/30 ring-1 ring-primary"
+          : "border-outline-variant hover:border-outline"
       }`}
     >
-      <span className="truncate text-sm font-medium">{label}</span>
-      <span className="ml-2 text-lg font-bold tabular-nums">{value ?? "–"}</span>
+      <span className="truncate text-sm font-semibold">{label}</span>
+      <span className="ml-2 font-data-mono text-lg font-bold tabular-nums">
+        {value ?? "–"}
+      </span>
     </button>
   );
 }
@@ -2854,7 +4802,7 @@ function Leaderboard({ session }: { session: Session }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-outline-variant/30 text-left font-label-caps text-label-caps text-on-surface-variant">
                 <th className="pb-2 pr-2">#</th>
                 <th className="pb-2">Pemain</th>
                 <th className="pb-2 text-right">P</th>
@@ -2874,22 +4822,22 @@ function Leaderboard({ session }: { session: Session }) {
             </thead>
             <tbody>
               {standings.map((s, i) => (
-                <tr key={s.playerId} className="border-t border-slate-100">
-                  <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
-                  <td className="py-1.5 font-medium">{s.playerId}</td>
-                  <td className="py-1.5 text-right font-bold tabular-nums">
+                <tr key={s.playerId} className="border-b border-outline-variant/15 last:border-0">
+                  <td className="py-2 pr-2 text-on-surface-variant">{i + 1}</td>
+                  <td className="py-2 font-semibold">{s.playerId}</td>
+                  <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.adjustedPoints}
                   </td>
-                  <td className="py-1.5 text-right text-emerald-600">
+                  <td className="py-2 text-right text-win-green">
                     {s.compensation > 0 ? `+${s.compensation}` : "–"}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.wins}-{s.losses}-{s.ties}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.played}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.gamesDiff > 0 ? `+${s.gamesDiff}` : s.gamesDiff}
                   </td>
                 </tr>
@@ -2913,10 +4861,10 @@ function Leaderboard({ session }: { session: Session }) {
 
 function Legend({ items }: { items: [string, string][] }) {
   return (
-    <dl className="mt-4 space-y-1 border-t border-slate-100 pt-3 text-[11px] text-slate-400">
+    <dl className="mt-4 space-y-1 border-t border-outline-variant/30 pt-3 text-[11px] text-on-surface-variant">
       {items.map(([k, v]) => (
         <div key={k} className="flex gap-2">
-          <dt className="w-12 shrink-0 font-semibold text-slate-500">{k}</dt>
+          <dt className="w-12 shrink-0 font-semibold text-on-surface">{k}</dt>
           <dd>{v}</dd>
         </div>
       ))}
@@ -2957,7 +4905,7 @@ function TeamLeaderboard({ session }: { session: Session }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-outline-variant/30 text-left font-label-caps text-label-caps text-on-surface-variant">
                 <th className="pb-2 pr-2">#</th>
                 <th className="pb-2">Tim</th>
                 <th className="pb-2 text-right">P</th>
@@ -2976,20 +4924,20 @@ function TeamLeaderboard({ session }: { session: Session }) {
               {standings.map((s, i) => (
                 <tr
                   key={s.team.join("|")}
-                  className="border-t border-slate-100"
+                  className="border-b border-outline-variant/15 last:border-0"
                 >
-                  <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
-                  <td className="py-1.5 font-medium">{s.team.join(" & ")}</td>
-                  <td className="py-1.5 text-right font-bold tabular-nums">
+                  <td className="py-2 pr-2 text-on-surface-variant">{i + 1}</td>
+                  <td className="py-2 font-semibold">{s.team.join(" & ")}</td>
+                  <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.points}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.wins}-{s.losses}-{s.ties}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.played}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.gamesDiff > 0 ? `+${s.gamesDiff}` : s.gamesDiff}
                   </td>
                 </tr>
@@ -3031,8 +4979,8 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 font-semibold">{title}</h3>
+    <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+      <h3 className="mb-4 font-display text-base font-bold">{title}</h3>
       {children}
     </section>
   );
@@ -3047,7 +4995,7 @@ function Field({
 }) {
   return (
     <div className="mb-4">
-      <label className="mb-1.5 block text-sm font-medium text-slate-600">
+      <label className="mb-1.5 block font-label-caps text-label-caps text-on-surface-variant">
         {label}
       </label>
       {children}
@@ -3070,14 +5018,14 @@ function Stepper({
     <span className="inline-flex items-center gap-2">
       <button
         onClick={() => onChange(Math.max(min, value - 1))}
-        className="h-9 w-9 rounded-lg bg-slate-100 text-lg hover:bg-slate-200"
+        className="h-9 w-9 rounded-lg bg-surface-container text-lg text-on-surface hover:bg-surface-container-high"
       >
         −
       </button>
       <span className="w-6 text-center font-semibold tabular-nums">{value}</span>
       <button
         onClick={() => onChange(Math.min(max, value + 1))}
-        className="h-9 w-9 rounded-lg bg-slate-100 text-lg hover:bg-slate-200"
+        className="h-9 w-9 rounded-lg bg-surface-container text-lg text-on-surface hover:bg-surface-container-high"
       >
         +
       </button>
@@ -3097,10 +5045,10 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
         active
-          ? "bg-slate-900 text-white"
-          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          ? "bg-navy text-white"
+          : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
       }`}
     >
       {label}
@@ -3120,7 +5068,7 @@ function Toggle({
   offLabel: string;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm">
+    <div className="inline-flex rounded-lg bg-surface-container p-1 text-sm">
       {[
         { v: true, label: onLabel },
         { v: false, label: offLabel },
@@ -3128,10 +5076,10 @@ function Toggle({
         <button
           key={o.label}
           onClick={() => onChange(o.v)}
-          className={`rounded-md px-3 py-1.5 font-medium ${
+          className={`rounded-md px-3 py-2 font-semibold transition ${
             value === o.v
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500"
+              ? "bg-surface-container-lowest text-on-surface shadow-sm"
+              : "text-on-surface-variant"
           }`}
         >
           {o.label}
@@ -3203,8 +5151,8 @@ function TeamCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
-      <div className="mb-1.5 text-xs font-semibold text-lime-600">
+    <div className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2.5 shadow-sm">
+      <div className="mb-1.5 font-label-caps text-label-caps text-primary">
         Tim {index + 1}
       </div>
       <div className="space-y-1.5">{children}</div>
@@ -3214,7 +5162,7 @@ function TeamCard({
 
 const TEAM_GRID = "grid grid-cols-1 gap-2 sm:grid-cols-2";
 const EMPTY_HINT =
-  "rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-400";
+  "rounded-lg bg-surface-container-low px-3 py-4 text-center text-xs text-on-surface-variant";
 
 /**
  * Pratinjau pasangan otomatis (read-only) — kartu tim grid + tombol acak ulang.
@@ -3278,7 +5226,7 @@ function AutoTeamPreview({
         {(teams.length > 0 || hasLeftover) && (
           <button
             onClick={onReshuffle}
-            className="shrink-0 text-xs font-medium text-lime-700 hover:underline"
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
           >
             ↻ Acak ulang
           </button>
@@ -3405,7 +5353,7 @@ function ManualTeamEditor({
                                 setSeat(i, seat, op);
                                 setOpen(null);
                               }}
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
                             >
                               <TeamAvatar name={op.name} />
                               <span className="truncate">{op.name}</span>
@@ -3445,7 +5393,7 @@ function ManualTeamEditor({
         {pool.length >= 1 && (
           <button
             onClick={autoFill}
-            className="shrink-0 text-xs font-medium text-lime-700 hover:underline"
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
           >
             Isi otomatis sisanya
           </button>

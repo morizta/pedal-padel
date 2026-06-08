@@ -65,6 +65,9 @@ alter table public.events
 alter table public.events  add column if not exists description text;
 alter table public.events  add column if not exists start_at timestamptz;
 alter table public.leagues add column if not exists description text;
+-- Notes (HTML dari editor) + foto (data URL / link) liga.
+alter table public.leagues add column if not exists notes text;
+alter table public.leagues add column if not exists photo_url text;
 
 -- Username unik (handle) + avatar untuk profil.
 alter table public.profiles add column if not exists username   text;
@@ -75,6 +78,8 @@ create unique index if not exists profiles_username_lower_key
 create index if not exists events_league_idx on public.events (league_id);
 create index if not exists events_owner_idx  on public.events (owner_id);
 create index if not exists players_owner_idx on public.players (owner_id);
+-- GIN untuk query "turnamen yang kuikuti" (player_ids overlap self-player-ku).
+create index if not exists events_player_ids_idx on public.events using gin (player_ids);
 
 -- Sosial: liga private/public + kode join.
 alter table public.leagues
@@ -262,17 +267,12 @@ create policy lu_admin_update on public.league_users for update
   with check (public.is_league_admin(league_id, auth.uid()));
 
 -- events
---   Baca: owner, atau turnamen public (langsung/ikut liga), atau anggota liga.
+--   Baca: publik. "private" hanya membatasi siapa yang boleh BERGABUNG ke liga
+--   (lewat kode/undangan), bukan menyembunyikan hasil — jadi semua turnamen
+--   (termasuk dari liga private) ikut terhitung di ranking global. Tulis tetap
+--   hanya owner (events_write di bawah).
 drop policy if exists events_read on public.events;
-create policy events_read on public.events for select using (
-  owner_id = auth.uid()
-  or public.event_is_public(visibility, league_id)
-  or (league_id is not null and exists (
-       select 1 from public.league_users lu
-       where lu.league_id = events.league_id
-         and lu.user_id = auth.uid()
-         and lu.status = 'member'))
-);
+create policy events_read on public.events for select using (true);
 drop policy if exists events_write on public.events;
 create policy events_write on public.events for all
   using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
@@ -326,3 +326,59 @@ grant execute on function public.request_join(uuid)         to authenticated;
 grant execute on function public.join_with_code(text)       to authenticated;
 grant execute on function public.invite_user(uuid, uuid)    to authenticated;
 grant execute on function public.is_league_admin(uuid,uuid) to authenticated;
+
+-- ────────────────────────────────────────────────────────────────────
+-- 5. Kolom audit di SEMUA tabel: created_at, created_by, updated_at, updated_by.
+--    Diisi otomatis oleh trigger stamp_audit (created_* sekali, updated_* tiap
+--    UPDATE). Aman dijalankan ulang (add column if not exists + replace).
+-- ────────────────────────────────────────────────────────────────────
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'profiles','players','leagues','league_members','events','league_users'
+  ] loop
+    execute format('alter table public.%I add column if not exists created_at timestamptz not null default now()', t);
+    execute format('alter table public.%I add column if not exists created_by uuid references auth.users on delete set null', t);
+    execute format('alter table public.%I add column if not exists updated_at timestamptz not null default now()', t);
+    execute format('alter table public.%I add column if not exists updated_by uuid references auth.users on delete set null', t);
+  end loop;
+end $$;
+
+-- Stempel otomatis. created_* hanya saat INSERT (tak bisa diubah lewat UPDATE).
+create or replace function public.stamp_audit()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.created_at := coalesce(new.created_at, now());
+    new.created_by := coalesce(new.created_by, auth.uid());
+    new.updated_at := now();
+    new.updated_by := coalesce(new.updated_by, auth.uid());
+  else -- UPDATE
+    new.created_at := old.created_at;
+    new.created_by := old.created_by;
+    new.updated_at := now();
+    new.updated_by := auth.uid();
+  end if;
+  return new;
+end; $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'profiles','players','leagues','league_members','events','league_users'
+  ] loop
+    execute format('drop trigger if exists stamp_audit on public.%I', t);
+    execute format('create trigger stamp_audit before insert or update on public.%I for each row execute procedure public.stamp_audit()', t);
+  end loop;
+end $$;
+
+-- Backfill created_by untuk baris lama (dari pembuat yang sudah diketahui).
+update public.profiles      set created_by = id       where created_by is null;
+update public.players       set created_by = owner_id where created_by is null;
+update public.leagues       set created_by = owner_id where created_by is null;
+update public.events        set created_by = owner_id where created_by is null;
+update public.league_users  set created_by = user_id  where created_by is null;
+update public.league_members lm set created_by = l.owner_id
+  from public.leagues l where l.id = lm.league_id and lm.created_by is null;

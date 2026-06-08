@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PedalPadel | Matchmaking &amp; Leagues</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        body {
+            background-color: #f7f9fb;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "win-green": "#22C55E",
+                        "secondary": "#565e74",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-primary-fixed": "#161e00",
+                        "reliability-dimmed": "#64748B",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface-variant": "#444933",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed-variant": "#3c4d00",
+                        "tertiary-fixed": "#d8e2ff",
+                        "surface": "#f7f9fb",
+                        "inverse-on-surface": "#eff1f3",
+                        "surface-dim": "#d8dadc",
+                        "secondary-fixed": "#dae2fd",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#c3f400",
+                        "inverse-surface": "#2d3133",
+                        "background": "#f7f9fb",
+                        "surface-tint": "#506600",
+                        "tertiary-container": "#e7ecff",
+                        "surface-container-high": "#e6e8ea",
+                        "primary-container": "#ccff00",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed": "#131b2e",
+                        "elo-gold": "#F59E0B",
+                        "surface-container-highest": "#e0e3e5",
+                        "surface-container": "#eceef0",
+                        "primary-fixed-dim": "#abd600",
+                        "elo-bronze": "#B45309",
+                        "error": "#ba1a1a",
+                        "on-primary-container": "#5b7300",
+                        "on-tertiary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#0466d9",
+                        "error-container": "#ffdad6",
+                        "elo-silver": "#94A3B8",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-fixed": "#001a42",
+                        "loss-red": "#EF4444",
+                        "on-background": "#191c1e",
+                        "primary": "#506600",
+                        "tertiary-fixed-dim": "#adc6ff",
+                        "on-secondary-container": "#5c647a",
+                        "inverse-primary": "#abd600",
+                        "on-tertiary-fixed-variant": "#004395",
+                        "surface-bright": "#f7f9fb",
+                        "tertiary": "#005ac2",
+                        "outline-variant": "#c4c9ac",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "secondary-container": "#dae2fd",
+                        "surface-variant": "#e0e3e5",
+                        "surface-container-low": "#f2f4f6",
+                        "outline": "#747a60"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-md": "16px",
+                        "stack-sm": "8px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "40px",
+                        "inset-card": "20px",
+                        "gutter": "16px",
+                        "stack-lg": "24px",
+                        "touch-target": "44px"
+                    },
+                    "fontFamily": {
+                        "display-elo": ["Hanken Grotesk"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "data-mono": ["JetBrains Mono"],
+                        "title-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "display-elo": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                        "data-mono": ["13px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "title-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 w-full h-16 px-margin-mobile md:px-margin-desktop z-50 bg-on-secondary-fixed flex justify-between items-center shadow-md">
+<div class="flex items-center gap-2">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex items-center justify-center font-display-elo text-on-primary-fixed text-headline-lg-mobile">P</div>
+<h1 class="font-display-elo text-headline-lg text-primary-fixed">PedalPadel</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex gap-6 items-center">
+<span class="font-label-caps text-label-caps text-primary-fixed font-bold border-b-2 border-primary-fixed pb-1">Home</span>
+<span class="font-label-caps text-label-caps text-on-secondary-fixed-variant hover:text-primary-fixed transition-colors cursor-pointer px-2 py-1">Leagues</span>
+<span class="font-label-caps text-label-caps text-on-secondary-fixed-variant hover:text-primary-fixed transition-colors cursor-pointer px-2 py-1">Match</span>
+</div>
+<div class="flex items-center gap-3 bg-on-secondary-fixed-variant/40 p-1.5 rounded-full pr-4 border border-outline/20">
+<img alt="Rizky" class="w-8 h-8 rounded-full border border-primary-fixed/30 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8pP4wW65WXPg-INOkRDy7pOiv4T8LOz6hkQrW-1lTALSe7N-TwIy7FnrvYfMCvObflwTjrcOg9ZRqyljKZ2enem1xZn6LMW1bgT-_Mqv_6VXHiwg_OQzcngWy4Nsp9GpMx3u57jfTLtcbYQtAl-ZG1DC7IEoEoWmDOw8QGNbVFBCftMHF5OsWpvVPrl1gP_d3RQ2sTo0jlwUJS81Nlf-O3OPGlbBl26zgecRX0qsrEVzxfestR9Uxq95XjjhXmt6RM1E-KFWZwwhv"/>
+<span class="hidden sm:inline font-title-md text-primary-fixed text-sm">Rizky</span>
+</div>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-primary-fixed cursor-pointer active:scale-95 duration-100">notifications</span>
+<span class="material-symbols-outlined text-primary-fixed cursor-pointer active:scale-95 duration-100">settings</span>
+</div>
+</div>
+</header>
+<main class="pt-24 pb-24 px-margin-mobile md:px-margin-desktop max-w-[1400px] mx-auto min-h-screen">
+<!-- Hero / Welcome Area -->
+<section class="mb-stack-lg grid grid-cols-12 gap-gutter">
+<div class="col-span-12 lg:col-span-8 bg-on-secondary-fixed rounded-3xl p-8 relative overflow-hidden text-white shadow-xl min-h-[220px] flex flex-col justify-center"><div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6"><div class="space-y-2"><div class="flex items-center gap-2 mb-2"><span class="bg-primary-fixed text-on-primary-fixed text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">Community Rank #8</span></div><h2 class="font-display-elo text-[32px] md:text-5xl mb-2 leading-tight">Siap Beraksi,<br/>Rizky? 👋</h2><p class="text-on-secondary-fixed-variant font-body-md max-w-xs opacity-90">3 turnamen baru tersedia di areamu hari ini. Jangan biarkan raketmu berdebu!</p></div><div class="flex flex-col gap-3"><button class="bg-primary-fixed text-on-primary-fixed px-8 py-4 rounded-2xl font-extrabold text-lg flex items-center justify-center gap-3 hover:scale-105 transition-transform shadow-lg shadow-primary-fixed/20"><span class="material-symbols-outlined text-2xl">play_circle</span>Main Sekarang</button><div class="flex items-center justify-center gap-4 py-2 px-4 bg-white/10 backdrop-blur-md rounded-xl border border-white/10"><div class="text-center"><p class="text-[10px] uppercase opacity-60">Win Rate</p><p class="font-data-mono font-bold">68%</p></div><div class="w-px h-8 bg-white/20"></div><div class="text-center"><p class="text-[10px] uppercase opacity-60">Matches</p><p class="font-data-mono font-bold">24</p></div></div></div></div><div class="absolute right-[-5%] top-[-10%] w-[400px] h-[400px] bg-primary-fixed/20 rounded-full blur-[100px]"></div><div class="absolute right-8 bottom-0 opacity-20 translate-y-1/4"><span class="material-symbols-outlined text-[240px]" style="font-variation-settings: 'FILL' 1;">sports_tennis</span></div></div>
+<!-- Quick Stats Card -->
+<div class="col-span-12 lg:col-span-4 grid grid-cols-2 gap-4">
+<div class="col-span-1 bg-surface-container-lowest p-6 rounded-3xl border border-outline-variant/30 shadow-sm flex flex-col justify-between">
+<span class="material-symbols-outlined text-elo-gold text-3xl" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+<div>
+<p class="text-label-caps text-on-surface-variant/60 uppercase">Peringkat</p>
+<p class="font-display-elo text-2xl text-on-surface">#8 <span class="text-sm font-normal text-on-surface-variant">/ 8</span></p>
+</div>
+</div>
+<div class="col-span-1 bg-surface-container-lowest p-6 rounded-3xl border border-outline-variant/30 shadow-sm flex flex-col justify-between">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<div>
+<p class="text-label-caps text-on-surface-variant/60 uppercase">Rating ELO</p>
+<p class="font-data-mono text-2xl text-primary font-bold">991</p>
+</div>
+</div>
+<div class="col-span-2 bg-primary-container/30 p-6 rounded-3xl border border-primary-fixed/20 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary">calendar_today</span>
+</div>
+<div>
+<p class="text-label-caps text-on-surface-variant/60 uppercase">Next Match</p>
+<p class="font-title-md text-on-surface">Americano Open</p>
+<p class="text-xs text-on-surface-variant">Besok, 16:00 WIB</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+</div>
+</section>
+<!-- Prominent Search Bar -->
+<section class="mb-stack-lg">
+<div class="space-y-4"><div class="flex items-center justify-between px-2"><h3 class="font-display-elo text-xl">Jelajah Liga &amp; Turnamen</h3><div class="flex gap-2"><span class="text-xs bg-surface-container-high px-2 py-1 rounded-lg text-on-surface-variant">Jakarta Pusat</span><span class="text-xs bg-surface-container-high px-2 py-1 rounded-lg text-on-surface-variant">Open Registration</span></div></div><div class="relative group"><input class="w-full h-16 pl-14 pr-6 rounded-2xl bg-white border-2 border-outline-variant/20 shadow-lg focus:border-primary-fixed focus:ring-0 outline-none font-body-md transition-all group-hover:shadow-xl" placeholder="Cari komunitas, liga tarkam, atau rival..." type="text"/><span class="material-symbols-outlined absolute left-5 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors text-2xl">search</span><div class="absolute right-4 top-1/2 -translate-y-1/2 flex gap-2"><kbd class="hidden md:flex items-center px-2 py-1 rounded bg-surface-container border text-[10px] text-on-surface-variant font-mono">⌘K</kbd></div></div></div>
+</section>
+<!-- Live Now Section -->
+<section class="mb-stack-lg">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-loss-red animate-pulse"></div>
+<h3 class="font-display-elo text-xl">Sedang Berlangsung</h3>
+</div>
+<button class="text-primary font-label-caps text-sm hover:underline">Lihat Semua</button>
+</div>
+<div class="flex gap-4 overflow-x-auto hide-scrollbar pb-4 snap-x">
+<div class="min-w-[300px] md:min-w-[400px] snap-start bg-on-secondary-fixed rounded-2xl p-5 shadow-lg border border-outline/10 group cursor-pointer hover:scale-[1.02] transition-transform">
+<div class="flex justify-between items-center mb-4">
+<span class="bg-loss-red text-white text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">LIVE</span>
+<span class="text-on-secondary-fixed-variant text-xs font-data-mono">Set 2 • Game 4</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border border-white/20">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCoXF209u7zgkYOOsSTcs-l7ST1F920njYSgpGiwLHwkFREM-Wta24CCVppUeuNSuIhu4QPlFsZI6UwXXR7eFuRfN4sTHgXnMwIUANHvNA2WLtdZkKPL_Oz-ctRrM_bnoyqnL8_mDykYqzaPZWUXNaySRQJ5gVr686sFi56HpjleNPJJ4Jw3o7cvarZUNeOaMp31ElZqTPcJiiGKGOHxqPVOD6Fq1wq6pzETAbMN86cMv9M5Dmr8-dvo4fYPjaAakVBACVJWPJwKuJ9"/>
+</div>
+<span class="font-title-md text-white">Kevin / Marcus</span>
+</div>
+<span class="font-display-elo text-2xl text-primary-fixed">6</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 opacity-60">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border border-white/20">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhQ9Go3bNFlTGOO98yDyJDY7ghIGG1D5aum2F6lUIQ77fPy5rVUtm9gCJwREG69x4O3iq6fHycFcUNAjQEF1gSzyIc2Z-QmP2xcMBHS6hWxD8vxRMJODA84dI40csmenH_WcHQm1iFqxFdQWmvB78yb6BmG51CBURXcF6YO_kNx0X1XnHWb5D4fdwSyo8-RBIYXBJxbYzML_up3HiW3UoW3gLCnjdGW58calLJLKolLI1n_7uFb2hW6QaEOv0jPVEVOAfZLb0_xmQt"/>
+</div>
+<span class="font-title-md text-white">Fajar / Rian</span>
+</div>
+<span class="font-display-elo text-2xl text-white">3</span>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-outline/10 text-on-secondary-fixed-variant text-xs flex justify-between items-center">
+<span>Final Liga Tarkam 2026</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">visibility</span> 142</span>
+</div>
+</div>
+<!-- Second Live Card Placeholder -->
+<div class="min-w-[300px] md:min-w-[400px] snap-start bg-white rounded-2xl p-5 shadow-md border border-outline-variant/30 group cursor-pointer hover:border-primary-fixed/50 transition-colors">
+<div class="flex justify-between items-center mb-4">
+<span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">UPCOMING</span>
+<span class="text-on-surface-variant/60 text-xs font-data-mono">Mulai 19:30</span>
+</div>
+<div class="flex flex-col items-center justify-center py-4 space-y-2">
+<div class="flex -space-x-3 mb-2">
+<div class="w-12 h-12 rounded-full bg-surface-container border-2 border-white flex items-center justify-center">?</div>
+<div class="w-12 h-12 rounded-full bg-surface-container border-2 border-white flex items-center justify-center">?</div>
+</div>
+<p class="font-title-md text-on-surface">Americano Night Sesi 4</p>
+<p class="text-xs text-on-surface-variant">Tinggal 2 slot pemain lagi!</p>
+</div>
+<button class="w-full mt-4 py-2 bg-primary-container text-on-primary-container font-bold rounded-xl text-sm">Ikut Sesi</button>
+</div>
+</div>
+</section>
+<!-- Main Content Grid -->
+<div class="grid grid-cols-12 gap-gutter items-start">
+<!-- Discovery & Social Column -->
+<div class="col-span-12 lg:col-span-8 space-y-stack-lg">
+<!-- Recommended Leagues -->
+<section>
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-display-elo text-xl">Liga Unggulan</h3>
+<div class="flex gap-2">
+<button class="p-2 rounded-full bg-white border border-outline-variant/30 hover:bg-surface-container transition-colors shadow-sm"><span class="material-symbols-outlined text-sm">arrow_back_ios</span></button>
+<button class="p-2 rounded-full bg-white border border-outline-variant/30 hover:bg-surface-container transition-colors shadow-sm"><span class="material-symbols-outlined text-sm">arrow_forward_ios</span></button>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- League Card 1 -->
+<div class="group relative overflow-hidden rounded-3xl aspect-[4/3] cursor-pointer shadow-md hover:shadow-xl transition-shadow">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYiDVK_0hWVXF-8M4dVEuHfZU0ho6TuJQyV9KPY0vhlZ1G9Bhn9SFDewr5NXRSvFUuTxoZUy_wazZvAP-AlsfYXmu_zLvMby1Z2rvBU6b2HIfM05wrou6o6ifRKk-PuXc9yhxOD0n6dVP666f9ARTCb6rIrmHinlEvsF7aIX0i0wnkourpN6kJrlZPqwUS-CGIJUZr_Qq4hUIKrZ5yFoeoDhRMGrnyx1S0mRl7xHRpOaq_gTn04a6zewMSg1Exgpro_lGZA3xUNJIZ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-secondary-fixed via-on-secondary-fixed/40 to-transparent opacity-90"></div>
+<div class="absolute inset-0 p-6 flex flex-col justify-end text-white">
+<div class="flex gap-2 mb-2">
+<span class="bg-primary-fixed text-on-primary-fixed text-[10px] font-bold px-2 py-0.5 rounded uppercase">POPULAR</span>
+<span class="bg-white/20 backdrop-blur-md text-[10px] font-bold px-2 py-0.5 rounded uppercase">JAKARTA PUSAT</span>
+</div>
+<h4 class="font-display-elo text-2xl mb-1">SiCopa X Primasys</h4>
+<p class="text-xs text-white/70 mb-4">Padel pro league dengan format americano kustom setiap minggu.</p>
+<div class="flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-on-secondary-fixed bg-surface-container-highest"></div>
+<div class="w-8 h-8 rounded-full border-2 border-on-secondary-fixed bg-surface-container-high"></div>
+<div class="w-8 h-8 rounded-full border-2 border-on-secondary-fixed bg-surface-container flex items-center justify-center text-[10px] text-white">+12</div>
+</div>
+<button class="px-4 py-2 bg-white text-on-secondary-fixed rounded-xl font-bold text-xs hover:bg-primary-fixed hover:text-on-primary-fixed transition-colors">Gabung</button>
+</div>
+</div>
+</div>
+<!-- League Card 2 -->
+<div class="group relative overflow-hidden rounded-3xl aspect-[4/3] cursor-pointer shadow-md hover:shadow-xl transition-shadow">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ4Pr404l40dCAhHk38vmzexLOSxO451k-R4InKKPouhh_dJwvzinFNswx-KyVIlTsWZizbss2jR05YgICHsOdV6AxhB90omnUV9LorOBVV-75yGS4EZPrx_cSg5qWVMYhGCC1hpvzRW9ItsIru0ajGwpSYrMS1Ngwp4t4jfGeUsELVYFjeZg9QHKGTSvog9zD86_1KUXr0WpT8VfbavUJ0Oo2VYCvii61BteUM0O14ZifKKRM_mgjmZ254ccIXIoLbGT3j_IQZvSs"/>
+<div class="absolute inset-0 bg-gradient-to-t from-on-secondary-fixed via-on-secondary-fixed/40 to-transparent opacity-90"></div>
+<div class="absolute inset-0 p-6 flex flex-col justify-end text-white">
+<div class="flex gap-2 mb-2">
+<span class="bg-tertiary text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">NEW</span>
+<span class="bg-white/20 backdrop-blur-md text-[10px] font-bold px-2 py-0.5 rounded uppercase">JAKARTA SELATAN</span>
+</div>
+<h4 class="font-display-elo text-2xl mb-1">Kemang Padel Club</h4>
+<p class="text-xs text-white/70 mb-4">Komunitas santai untuk pemain pemula hingga menengah.</p>
+<div class="flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-on-secondary-fixed bg-surface-container-highest"></div>
+<div class="w-8 h-8 rounded-full border-2 border-on-secondary-fixed bg-surface-container flex items-center justify-center text-[10px] text-white">+4</div>
+</div>
+<button class="px-4 py-2 bg-white text-on-secondary-fixed rounded-xl font-bold text-xs hover:bg-primary-fixed hover:text-on-primary-fixed transition-colors">Gabung</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Activity Feed -->
+<section class="bg-white rounded-3xl p-6 border border-outline-variant/30 shadow-sm bg-surface-container-lowest">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary">groups</span>
+<h3 class="font-display-elo text-xl">Aktivitas Terkini</h3>
+</div>
+<div class="space-y-6">
+<div class="flex gap-4 group">
+<div class="relative">
+<img class="w-12 h-12 rounded-2xl object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB08WrJlxHPk-37g-kdwjGmr4wR4HXg7CiiTDcGrgQI2joZi_MbHEyF1TP6D0r88jH8C8uu56d1RIfUFpSQI6TT5UK-rOsrCIRWX_nkciGadmOf6XW4HBNu9VGgEPxSsNpx6yHexP4Pl64dNwTqP_Kjib4LL_f-304V5Q6i5UnYQpg--sRd0J08oNjv8iWAZF8Py20ROcOEvobSCsDZq544aLVuHkwXkwcrIwexzvqHWeAHhqCu-gmrIs3jwuz-ZiQc8rSGECodz_nP"/>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 bg-win-green border-2 border-white rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-[12px] font-bold">trophy</span>
+</div>
+</div>
+<div class="flex-grow">
+<p class="font-body-md text-on-surface"><strong>Marcus Gideon</strong> baru saja memenangkan <span class="text-primary font-bold">Elite Weekend Open</span></p>
+<p class="text-xs text-on-surface-variant/60">2 jam yang lalu • Jakarta</p>
+</div>
+</div>
+<div class="flex gap-4 group">
+<div class="relative">
+<div class="w-12 h-12 rounded-2xl bg-tertiary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary">add_business</span>
+</div>
+</div>
+<div class="flex-grow">
+<p class="font-body-md text-on-surface">Liga baru <strong>Liga Tarkam 2026</strong> telah dibuat oleh <span class="font-bold">Arbi</span></p>
+<p class="text-xs text-on-surface-variant/60">5 jam yang lalu • Bekasi</p>
+</div>
+</div>
+<div class="flex gap-4 group">
+<div class="relative">
+<img class="w-12 h-12 rounded-2xl object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhQ9Go3bNFlTGOO98yDyJDY7ghIGG1D5aum2F6lUIQ77fPy5rVUtm9gCJwREG69x4O3iq6fHycFcUNAjQEF1gSzyIc2Z-QmP2xcMBHS6hWxD8vxRMJODA84dI40csmenH_WcHQm1iFqxFdQWmvB78yb6BmG51CBURXcF6YO_kNx0X1XnHWb5D4fdwSyo8-RBIYXBJxbYzML_up3HiW3UoW3gLCnjdGW58calLJLKolLI1n_7uFb2hW6QaEOv0jPVEVOAfZLb0_xmQt"/>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 bg-primary-fixed border-2 border-white rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-fixed text-[12px] font-bold">trending_up</span>
+</div>
+</div>
+<div class="flex-grow">
+<p class="font-body-md text-on-surface"><strong>Siti Fadia</strong> naik ke <span class="text-elo-silver font-bold">Peringkat #2</span> Global</p>
+<p class="text-xs text-on-surface-variant/60">1 hari yang lalu • Nasional</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-8 py-3 bg-surface-container-high rounded-xl text-on-surface-variant font-bold text-sm hover:bg-surface-container-highest transition-colors">Lihat Semua Aktivitas</button>
+</section>
+</div>
+<!-- Sidebar Column -->
+<div class="col-span-12 lg:col-span-4 space-y-stack-lg">
+<!-- Rankings Card -->
+<div class="bg-white rounded-3xl p-6 border border-outline-variant/30 shadow-md sticky top-24">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-display-elo text-xl">Global Rankings</h3>
+<span class="material-symbols-outlined text-primary cursor-pointer hover:scale-110 transition-transform">leaderboard</span>
+</div>
+<div class="space-y-4">
+<!-- Top 1 -->
+<div class="flex items-center gap-4 p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-colors cursor-pointer group">
+<div class="relative">
+<img alt="Kevin" class="w-12 h-12 rounded-full border-2 border-white shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCoXF209u7zgkYOOsSTcs-l7ST1F920njYSgpGiwLHwkFREM-Wta24CCVppUeuNSuIhu4QPlFsZI6UwXXR7eFuRfN4sTHgXnMwIUANHvNA2WLtdZkKPL_Oz-ctRrM_bnoyqnL8_mDykYqzaPZWUXNaySRQJ5gVr686sFi56HpjleNPJJ4Jw3o7cvarZUNeOaMp31ElZqTPcJiiGKGOHxqPVOD6Fq1wq6pzETAbMN86cMv9M5Dmr8-dvo4fYPjaAakVBACVJWPJwKuJ9"/>
+<div class="absolute -top-2 -left-2 w-6 h-6 bg-elo-gold rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-md">1</div>
+</div>
+<div class="flex-grow">
+<p class="font-title-md text-sm">Kevin Sanjaya</p>
+<p class="text-xs text-on-surface-variant/60">98% Reliability</p>
+</div>
+<div class="font-data-mono text-primary font-bold">1420</div>
+</div>
+<!-- Top 2 -->
+<div class="flex items-center gap-4 p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-colors cursor-pointer">
+<div class="relative">
+<img alt="Siti" class="w-12 h-12 rounded-full border-2 border-white shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhQ9Go3bNFlTGOO98yDyJDY7ghIGG1D5aum2F6lUIQ77fPy5rVUtm9gCJwREG69x4O3iq6fHycFcUNAjQEF1gSzyIc2Z-QmP2xcMBHS6hWxD8vxRMJODA84dI40csmenH_WcHQm1iFqxFdQWmvB78yb6BmG51CBURXcF6YO_kNx0X1XnHWb5D4fdwSyo8-RBIYXBJxbYzML_up3HiW3UoW3gLCnjdGW58calLJLKolLI1n_7uFb2hW6QaEOv0jPVEVOAfZLb0_xmQt"/>
+<div class="absolute -top-2 -left-2 w-6 h-6 bg-elo-silver rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-md">2</div>
+</div>
+<div class="flex-grow">
+<p class="font-title-md text-sm">Siti Fadia</p>
+<p class="text-xs text-on-surface-variant/60">95% Reliability</p>
+</div>
+<div class="font-data-mono text-primary font-bold">1385</div>
+</div>
+<!-- Separator -->
+<div class="py-2 flex items-center gap-4">
+<div class="h-px flex-grow bg-outline-variant/30"></div>
+<span class="text-[10px] text-on-surface-variant/40 uppercase font-bold tracking-widest">You</span>
+<div class="h-px flex-grow bg-outline-variant/30"></div>
+</div>
+<!-- User Row -->
+<div class="flex items-center gap-4 p-4 rounded-2xl bg-primary-fixed/20 border border-primary-fixed/30 ring-2 ring-primary-fixed/10">
+<div class="relative">
+<img alt="Rizky" class="w-12 h-12 rounded-full border-2 border-primary-fixed shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8pP4wW65WXPg-INOkRDy7pOiv4T8LOz6hkQrW-1lTALSe7N-TwIy7FnrvYfMCvObflwTjrcOg9ZRqyljKZ2enem1xZn6LMW1bgT-_Mqv_6VXHiwg_OQzcngWy4Nsp9GpMx3u57jfTLtcbYQtAl-ZG1DC7IEoEoWmDOw8QGNbVFBCftMHF5OsWpvVPrl1gP_d3RQ2sTo0jlwUJS81Nlf-O3OPGlbBl26zgecRX0qsrEVzxfestR9Uxq95XjjhXmt6RM1E-KFWZwwhv"/>
+<div class="absolute -top-2 -left-2 w-6 h-6 bg-on-secondary-fixed rounded-full flex items-center justify-center text-primary-fixed text-[10px] font-bold shadow-md">8</div>
+</div>
+<div class="flex-grow">
+<p class="font-title-md text-sm">Rizky (You)</p>
+<p class="text-xs text-primary font-bold">Best: 1020</p>
+</div>
+<div class="font-data-mono text-primary font-extrabold">991</div>
+</div>
+</div>
+<div class="mt-6 space-y-2"><button class="w-full py-3 bg-on-secondary-fixed text-primary-fixed rounded-xl font-bold text-sm hover:bg-on-secondary-fixed-variant transition-colors flex items-center justify-center gap-2">See Full Dashboard <span class="material-symbols-outlined text-sm">dashboard_customize</span></button><button class="w-full py-2 text-label-caps text-on-surface-variant/40 hover:text-on-surface-variant transition-colors text-[10px] uppercase tracking-widest">View Global Leaderboard</button></div>
+</div>
+<!-- Create New Card -->
+<div class="bg-gradient-to-br from-primary-fixed to-win-green rounded-3xl p-8 text-on-primary-fixed shadow-xl relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all hover:shadow-2xl">
+<div class="relative z-10"><div class="flex flex-col h-full justify-between"><div class="space-y-2"><h4 class="font-display-elo text-3xl mb-2">Bangun Komunitasmu</h4><p class="text-on-primary-fixed-variant text-sm mb-6 max-w-[220px] font-medium">Buat liga tarkam, atur jadwal, dan kelola klasemen otomatis dalam hitungan detik.</p></div><div class="flex items-center gap-3"><div class="w-12 h-12 bg-on-primary-fixed text-primary-fixed rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform"><span class="material-symbols-outlined text-2xl">add_box</span></div><span class="font-bold text-on-primary-fixed">Mulai Sekarang</span></div></div></div>
+<div class="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-transform duration-500">
+<span class="material-symbols-outlined text-[150px]">trophy</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation (Mobile Only) -->
+<nav class="md:hidden fixed bottom-4 left-4 right-4 z-50 flex justify-around items-center h-16 bg-on-secondary-fixed text-white rounded-2xl shadow-2xl border border-white/10 px-2">
+<div class="flex flex-col items-center justify-center text-primary-fixed p-2 transition-all">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-label-caps text-[10px] mt-1">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-fixed-variant p-2 transition-all">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-label-caps text-[10px] mt-1">Leagues</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-fixed-variant p-2 transition-all">
+<span class="material-symbols-outlined">sports_tennis</span>
+<span class="font-label-caps text-[10px] mt-1">Match</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-fixed-variant p-2 transition-all">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-label-caps text-[10px] mt-1">Rankings</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-fixed-variant p-2 transition-all">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-caps text-[10px] mt-1">Profile</span>
+</div>
+</nav>
+<!-- FAB (Mobile Focus) -->
+<button class="md:hidden fixed bottom-24 right-6 w-14 h-14 bg-primary-fixed text-on-primary-fixed rounded-2xl shadow-xl flex items-center justify-center z-40 active:scale-95 transition-transform ring-4 ring-white ring-offset-2 ring-offset-transparent">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+<script>
+    // Micro-interactions and effects
+    document.querySelectorAll('button, .cursor-pointer').forEach(el => {
+        el.addEventListener('touchstart', () => {
+            el.style.transform = 'scale(0.97)';
+        });
+        el.addEventListener('touchend', () => {
+            el.style.transform = 'scale(1)';
+        });
+    });
+
+    // Horizontal scroll mouse wheel support
+    const scrolls = document.querySelectorAll('.hide-scrollbar');
+    scrolls.forEach(el => {
+        el.addEventListener('wheel', (evt) => {
+            evt.preventDefault();
+            el.scrollLeft += evt.deltaY;
+        });
+    });
+
+    // Simple parallax on hero background
+    window.addEventListener('mousemove', (e) => {
+        const bgIcon = document.querySelector('.absolute.right-4.bottom-4.opacity-10');
+        if (bgIcon) {
+            const moveX = (e.clientX - window.innerWidth / 2) * 0.02;
+            const moveY = (e.clientY - window.innerHeight / 2) * 0.02;
+            bgIcon.style.transform = `translate(${moveX}px, ${moveY}px)`;
+        }
+    });
+</script>
+</body></html>

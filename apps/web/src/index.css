@@ -1,17 +1,143 @@
 @import "tailwindcss";
 
+/* ── Design system "Vibrant Matchmaker" (lihat ui-revamp/vibrant_matchmaker) ──
+   Token ditambahkan; palet default Tailwind (slate/lime/dst) tetap tersedia
+   supaya layar lama belum-revamp masih jalan. */
+@theme {
+  /* Brand & surface */
+  --color-primary: #506600;
+  --color-on-primary: #ffffff;
+  --color-primary-fixed: #c3f400; /* Vibrant Lime — aksi & status live */
+  --color-primary-fixed-dim: #abd600;
+  --color-on-primary-fixed: #161e00;
+  --color-on-primary-fixed-variant: #3c4d00;
+  --color-primary-container: #ccff00;
+  --color-on-primary-container: #5b7300;
+
+  --color-navy: #131b2e; /* header gelap / on-secondary-fixed */
+  --color-on-secondary-fixed: #131b2e;
+  --color-on-secondary-fixed-variant: #3f465c;
+  --color-secondary: #565e74;
+  --color-secondary-container: #dae2fd;
+  --color-on-secondary-container: #5c647a;
+  --color-tertiary: #005ac2;
+  --color-tertiary-container: #e7ecff;
+  --color-on-tertiary-container: #0466d9;
+
+  --color-surface: #f7f9fb;
+  --color-surface-dim: #d8dadc;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container: #eceef0;
+  --color-surface-container-high: #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #444933;
+  --color-outline: #747a60;
+  --color-outline-variant: #c4c9ac;
+  --color-inverse-surface: #2d3133;
+  --color-inverse-on-surface: #eff1f3;
+
+  /* Semantic */
+  --color-elo-gold: #f59e0b;
+  --color-elo-silver: #94a3b8;
+  --color-elo-bronze: #b45309;
+  --color-win-green: #22c55e;
+  --color-loss-red: #ef4444;
+  --color-reliability-dimmed: #64748b;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Fonts */
+  --font-display: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display-elo: "Hanken Grotesk", sans-serif;
+  --font-headline-lg: "Hanken Grotesk", sans-serif;
+  --font-title-md: "Hanken Grotesk", sans-serif;
+  --font-body-md: "Inter", sans-serif;
+  --font-body-sm: "Inter", sans-serif;
+  --font-label-caps: "Inter", sans-serif;
+  --font-data-mono: "JetBrains Mono", monospace;
+
+  /* Named text sizes */
+  --text-display-elo: 48px;
+  --text-display-elo--line-height: 56px;
+  --text-display-elo--font-weight: 800;
+  --text-display-elo--letter-spacing: -0.02em;
+  --text-headline-lg: 24px;
+  --text-headline-lg--line-height: 32px;
+  --text-headline-lg--font-weight: 700;
+  --text-headline-lg-mobile: 20px;
+  --text-headline-lg-mobile--line-height: 28px;
+  --text-headline-lg-mobile--font-weight: 700;
+  --text-title-md: 18px;
+  --text-title-md--line-height: 24px;
+  --text-title-md--font-weight: 600;
+  --text-body-md: 16px;
+  --text-body-md--line-height: 24px;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 20px;
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--font-weight: 600;
+  --text-label-caps--letter-spacing: 0.05em;
+  --text-data-mono: 13px;
+  --text-data-mono--line-height: 16px;
+  --text-data-mono--font-weight: 500;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    sans-serif;
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+/* Material Symbols */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+.material-symbols-outlined.fill {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* Placeholder untuk editor WYSIWYG (contenteditable kosong). */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-outline);
+  pointer-events: none;
+}
+
+/* Helpers dari mockup */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 @layer components {
   .input {
-    @apply rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-lime-500 focus:outline-none focus:ring-1 focus:ring-lime-500;
+    @apply rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/40;
   }
 }
