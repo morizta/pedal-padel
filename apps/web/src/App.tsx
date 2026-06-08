@@ -3263,34 +3263,45 @@ function MetaBar({
     `${config.courts} lapangan`,
   ];
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-900 px-5 py-4 text-white">
-      <div>
-        <button
-          onClick={() => onExit(event)}
-          className="mb-1 text-xs text-slate-400 hover:text-lime-400"
-        >
-          ← Kembali
-        </button>
-        <h2 className="text-lg font-bold">{config.name}</h2>
-        <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-300">
-          {items.map((it, i) => (
-            <span key={i}>
-              {i > 0 && <span className="mr-2 text-slate-600">·</span>}
-              {it}
+    <section className="relative overflow-hidden rounded-2xl bg-navy px-5 py-4 text-white">
+      <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-primary-fixed/10 blur-3xl" />
+      <div className="relative flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <button
+            onClick={() => onExit(event)}
+            className="mb-1 flex items-center gap-1 font-label-caps text-label-caps text-white/60 transition hover:text-primary-fixed"
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              arrow_back
             </span>
-          ))}
-        </p>
+            KEMBALI
+          </button>
+          <h2 className="truncate font-display text-xl font-bold">
+            {config.name}
+          </h2>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/60">
+            {items.map((it, i) => (
+              <span key={i} className="flex items-center gap-2">
+                {i > 0 && <span className="text-white/25">·</span>}
+                {it}
+              </span>
+            ))}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            await updateEvent(event.id, { status: "finished" });
+            onExit(event);
+          }}
+          className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            check_circle
+          </span>
+          Tandai selesai
+        </button>
       </div>
-      <button
-        onClick={async () => {
-          await updateEvent(event.id, { status: "finished" });
-          onExit(event);
-        }}
-        className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-      >
-        Tandai selesai
-      </button>
-    </div>
+    </section>
   );
 }
 
@@ -3318,10 +3329,10 @@ function RoundsPanel({ session }: { session: Session }) {
           <button
             key={r.index}
             onClick={() => setActive(i)}
-            className={`h-8 w-8 rounded-lg text-sm font-semibold ${
+            className={`h-9 w-9 rounded-lg font-data-mono text-sm font-bold transition ${
               i === active
-                ? "bg-lime-400 text-slate-900"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                ? "bg-primary-fixed text-on-primary-fixed"
+                : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
             }`}
           >
             {i + 1}
@@ -3332,7 +3343,7 @@ function RoundsPanel({ session }: { session: Session }) {
       {round && (
         <div className="space-y-3">
           {round.resting.length > 0 && (
-            <p className="text-xs text-slate-400">
+            <p className="rounded-lg border-l-2 border-primary-fixed-dim bg-surface-container-low px-3 py-2 text-xs text-on-surface-variant">
               Istirahat: {round.resting.join(", ")}
             </p>
           )}
@@ -3342,13 +3353,13 @@ function RoundsPanel({ session }: { session: Session }) {
             return (
               <div
                 key={m.court}
-                className="rounded-xl border border-slate-200 p-3"
+                className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-3"
               >
-                <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-                  <span>Lapangan {m.court}</span>
+                <div className="mb-2 flex items-center justify-between font-label-caps text-label-caps text-on-surface-variant">
+                  <span>LAPANGAN {m.court}</span>
                   {played && (
-                    <span className="rounded-full bg-lime-100 px-2 py-0.5 font-semibold text-lime-700">
-                      selesai
+                    <span className="rounded-full bg-primary-container px-2 py-0.5 text-on-primary-container">
+                      SELESAI
                     </span>
                   )}
                 </div>
@@ -3356,21 +3367,21 @@ function RoundsPanel({ session }: { session: Session }) {
                   {/* Sisi kiri: klik → pilih skor tim A */}
                   <button
                     onClick={() => setPicking({ court: m.court, side: "a" })}
-                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition hover:bg-lime-50"
+                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition hover:bg-surface-container-high"
                   >
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-semibold">
                       {m.teamA.join(" & ")}
                     </span>
                     <ScoreChip value={s?.a} />
                   </button>
-                  <span className="text-slate-300">:</span>
+                  <span className="font-display text-outline">:</span>
                   {/* Sisi kanan: klik → pilih skor tim B */}
                   <button
                     onClick={() => setPicking({ court: m.court, side: "b" })}
-                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition hover:bg-lime-50"
+                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition hover:bg-surface-container-high"
                   >
                     <ScoreChip value={s?.b} />
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-semibold">
                       {m.teamB.join(" & ")}
                     </span>
                   </button>
@@ -3386,8 +3397,9 @@ function RoundsPanel({ session }: { session: Session }) {
           // Americano: semua ronde sudah tampil; cuma opsi acak ulang jadwal.
           <button
             onClick={session.reshuffle}
-            className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-100"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
           >
+            <span className="material-symbols-outlined text-[18px]">shuffle</span>
             Acak ulang jadwal
           </button>
         ) : (
@@ -3395,7 +3407,7 @@ function RoundsPanel({ session }: { session: Session }) {
             <button
               onClick={session.nextRound}
               disabled={!session.canAddRound}
-              className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              className="flex-1 rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
             >
               {!session.lastRoundComplete
                 ? "Lengkapi skor ronde ini dulu"
@@ -3404,7 +3416,7 @@ function RoundsPanel({ session }: { session: Session }) {
             {isLast && (
               <button
                 onClick={session.reshuffle}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-100"
+                className="rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
               >
                 Acak ulang
               </button>
@@ -3432,7 +3444,7 @@ function RoundsPanel({ session }: { session: Session }) {
 
 function ScoreChip({ value }: { value?: number }) {
   return (
-    <span className="grid h-11 w-12 place-items-center rounded-lg bg-slate-900 text-lg font-bold text-white tabular-nums">
+    <span className="grid h-11 w-12 place-items-center rounded-lg bg-navy font-data-mono text-lg font-bold text-primary-fixed tabular-nums">
       {value ?? "–"}
     </span>
   );
@@ -3477,15 +3489,15 @@ function ScorePicker({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 p-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-navy/60 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">
-          Ronde {roundIndex + 1} · Lapangan {match.court}
+        <div className="mb-3 font-label-caps text-label-caps text-on-surface-variant">
+          RONDE {roundIndex + 1} · LAPANGAN {match.court}
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-2">
@@ -3503,7 +3515,7 @@ function ScorePicker({
           />
         </div>
 
-        <div className="mb-1 text-sm font-medium text-slate-600">
+        <div className="mb-2 text-sm font-semibold text-on-surface-variant">
           Pilih skor · {spec.label}
         </div>
         <div className="grid grid-cols-6 gap-2">
@@ -3511,10 +3523,10 @@ function ScorePicker({
             <button
               key={n}
               onClick={() => pick(n)}
-              className={`rounded-lg py-2.5 text-sm font-semibold tabular-nums transition ${
+              className={`rounded-lg py-2.5 font-data-mono text-sm font-bold tabular-nums transition ${
                 activeValue === n
-                  ? "bg-lime-400 text-slate-900"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  ? "bg-primary-fixed text-on-primary-fixed"
+                  : "bg-surface-container text-on-surface hover:bg-surface-container-high"
               }`}
             >
               {n}
@@ -3528,13 +3540,13 @@ function ScorePicker({
               onPick(0, 0);
               onClose();
             }}
-            className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100"
+            className="rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-low"
           >
             Reset 0:0
           </button>
           <button
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+            className="rounded-lg px-4 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low"
           >
             Tutup
           </button>
@@ -3560,12 +3572,14 @@ function TeamScoreTab({
       onClick={onClick}
       className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition ${
         active
-          ? "border-lime-500 bg-lime-50 ring-1 ring-lime-500"
-          : "border-slate-200 hover:border-slate-300"
+          ? "border-primary bg-primary-container/30 ring-1 ring-primary"
+          : "border-outline-variant hover:border-outline"
       }`}
     >
-      <span className="truncate text-sm font-medium">{label}</span>
-      <span className="ml-2 text-lg font-bold tabular-nums">{value ?? "–"}</span>
+      <span className="truncate text-sm font-semibold">{label}</span>
+      <span className="ml-2 font-data-mono text-lg font-bold tabular-nums">
+        {value ?? "–"}
+      </span>
     </button>
   );
 }
@@ -3608,7 +3622,7 @@ function Leaderboard({ session }: { session: Session }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-outline-variant/30 text-left font-label-caps text-label-caps text-on-surface-variant">
                 <th className="pb-2 pr-2">#</th>
                 <th className="pb-2">Pemain</th>
                 <th className="pb-2 text-right">P</th>
@@ -3628,22 +3642,22 @@ function Leaderboard({ session }: { session: Session }) {
             </thead>
             <tbody>
               {standings.map((s, i) => (
-                <tr key={s.playerId} className="border-t border-slate-100">
-                  <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
-                  <td className="py-1.5 font-medium">{s.playerId}</td>
-                  <td className="py-1.5 text-right font-bold tabular-nums">
+                <tr key={s.playerId} className="border-b border-outline-variant/15 last:border-0">
+                  <td className="py-2 pr-2 text-on-surface-variant">{i + 1}</td>
+                  <td className="py-2 font-semibold">{s.playerId}</td>
+                  <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.adjustedPoints}
                   </td>
-                  <td className="py-1.5 text-right text-emerald-600">
+                  <td className="py-2 text-right text-win-green">
                     {s.compensation > 0 ? `+${s.compensation}` : "–"}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.wins}-{s.losses}-{s.ties}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.played}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.gamesDiff > 0 ? `+${s.gamesDiff}` : s.gamesDiff}
                   </td>
                 </tr>
@@ -3667,10 +3681,10 @@ function Leaderboard({ session }: { session: Session }) {
 
 function Legend({ items }: { items: [string, string][] }) {
   return (
-    <dl className="mt-4 space-y-1 border-t border-slate-100 pt-3 text-[11px] text-slate-400">
+    <dl className="mt-4 space-y-1 border-t border-outline-variant/30 pt-3 text-[11px] text-on-surface-variant">
       {items.map(([k, v]) => (
         <div key={k} className="flex gap-2">
-          <dt className="w-12 shrink-0 font-semibold text-slate-500">{k}</dt>
+          <dt className="w-12 shrink-0 font-semibold text-on-surface">{k}</dt>
           <dd>{v}</dd>
         </div>
       ))}
@@ -3711,7 +3725,7 @@ function TeamLeaderboard({ session }: { session: Session }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-outline-variant/30 text-left font-label-caps text-label-caps text-on-surface-variant">
                 <th className="pb-2 pr-2">#</th>
                 <th className="pb-2">Tim</th>
                 <th className="pb-2 text-right">P</th>
@@ -3730,20 +3744,20 @@ function TeamLeaderboard({ session }: { session: Session }) {
               {standings.map((s, i) => (
                 <tr
                   key={s.team.join("|")}
-                  className="border-t border-slate-100"
+                  className="border-b border-outline-variant/15 last:border-0"
                 >
-                  <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
-                  <td className="py-1.5 font-medium">{s.team.join(" & ")}</td>
-                  <td className="py-1.5 text-right font-bold tabular-nums">
+                  <td className="py-2 pr-2 text-on-surface-variant">{i + 1}</td>
+                  <td className="py-2 font-semibold">{s.team.join(" & ")}</td>
+                  <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.points}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.wins}-{s.losses}-{s.ties}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.played}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500">
+                  <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.gamesDiff > 0 ? `+${s.gamesDiff}` : s.gamesDiff}
                   </td>
                 </tr>
@@ -3882,7 +3896,7 @@ function Toggle({
         <button
           key={o.label}
           onClick={() => onChange(o.v)}
-          className={`rounded-md px-3 py-1.5 font-medium ${
+          className={`rounded-md px-3 py-2 font-semibold ${
             value === o.v
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500"
