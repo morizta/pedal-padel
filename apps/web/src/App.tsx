@@ -1240,17 +1240,11 @@ function LeaderboardScreen({
 }) {
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
-  const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(10);
+  const [unrankedLimit, setUnrankedLimit] = useState(4);
   const meName = user ? displayName(user) : "";
 
-  async function register() {
-    if (await createPlayer(newName)) {
-      setNewName("");
-      roster.reload();
-    }
-  }
   async function remove(id: string, name: string) {
     if (!confirm(`Hapus pemain "${name}" dari daftar?`)) return;
     await deletePlayer(id);
@@ -1329,26 +1323,6 @@ function LeaderboardScreen({
             className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
-      </div>
-
-      {/* Daftarkan pemain */}
-      <div className="flex gap-2">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && register()}
-          placeholder="Daftarkan pemain baru…"
-          className="h-12 flex-1 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 outline-none focus:ring-2 focus:ring-primary"
-        />
-        <button
-          onClick={register}
-          className="flex h-12 items-center gap-2 rounded-xl bg-primary-container px-5 font-semibold text-on-primary-container transition hover:brightness-95 active:scale-95"
-        >
-          <span className="material-symbols-outlined text-[20px]">
-            person_add
-          </span>
-          <span className="hidden sm:inline">Daftar</span>
-        </button>
       </div>
 
       <StateText
@@ -1449,23 +1423,39 @@ function LeaderboardScreen({
         </section>
       )}
 
-      {/* Belum main */}
+      {/* Belum main / unranked */}
       {unranked.length > 0 && (
         <section>
           <div className="mb-2 font-label-caps text-label-caps text-on-surface-variant">
-            BELUM MAIN ({unranked.length})
+            BELUM MAIN / UNRANKED ({unranked.length})
           </div>
-          <ul className="flex flex-wrap gap-2">
-            {unranked.map((r) => (
+          <ul className="space-y-2">
+            {unranked.slice(0, unrankedLimit).map((r) => (
               <li
                 key={r.id}
-                className="flex items-center gap-1.5 rounded-full bg-surface-container px-2 py-1 text-sm"
+                className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 shadow-sm"
               >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-container text-sm text-on-surface-variant">
+                  –
+                </span>
                 <TeamAvatar name={r.name} />
-                <span className="truncate">{r.name}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate font-semibold">{r.name}</span>
+                    {r.isGuest && (
+                      <span className="rounded bg-elo-bronze/15 px-1 text-[10px] font-semibold uppercase text-elo-bronze">
+                        tamu
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-on-surface-variant">belum main</div>
+                </div>
+                <div className="font-data-mono text-sm font-bold text-outline">
+                  1000
+                </div>
                 <button
                   onClick={() => remove(r.id, r.name)}
-                  className="text-outline hover:text-error"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-outline hover:bg-error-container hover:text-error"
                   aria-label={`Hapus ${r.name}`}
                 >
                   ×
@@ -1473,13 +1463,21 @@ function LeaderboardScreen({
               </li>
             ))}
           </ul>
+          {unranked.length > unrankedLimit && (
+            <button
+              onClick={() => setUnrankedLimit((n) => n + 4)}
+              className="mt-2 w-full rounded-xl border border-outline-variant/40 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
+            >
+              Muat lebih banyak ({unranked.length - unrankedLimit} lagi)
+            </button>
+          )}
         </section>
       )}
     </div>
   );
 }
 
-/** Kartu podium top-3 (juara navy elevated, perak/perunggu putih). */
+/** Kartu podium top-3 (juara emas elevated, perak/perunggu putih). */
 function PodiumCard({
   r,
   rank,
@@ -1492,20 +1490,7 @@ function PodiumCard({
   onOpen: () => void;
 }) {
   const champ = rank === 1;
-  const tier =
-    rank === 1
-      ? { label: "JUARA", num: "bg-elo-gold text-navy", ring: "ring-elo-gold/30" }
-      : rank === 2
-        ? {
-            label: "PERAK",
-            num: "bg-elo-silver text-white",
-            ring: "ring-elo-silver/30",
-          }
-        : {
-            label: "PERUNGGU",
-            num: "bg-elo-bronze text-white",
-            ring: "ring-elo-bronze/30",
-          };
+  const tierLabel = rank === 1 ? "JUARA" : rank === 2 ? "PERAK" : "PERUNGGU";
   const order =
     rank === 1 ? "order-1 md:order-2" : rank === 2 ? "order-2 md:order-1" : "order-3";
   const rel = Math.round(reliability(r.played) * 100);
@@ -1514,58 +1499,83 @@ function PodiumCard({
     : "0–0";
   const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
 
+  const accent =
+    rank === 1
+      ? {
+          bar: "bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500",
+          glow: "bg-amber-400/25",
+          ring: "ring-amber-400",
+          medal: "bg-gradient-to-br from-amber-300 to-amber-500 text-navy",
+          badge: "bg-amber-400/15 text-amber-600",
+          elo: "text-amber-500",
+        }
+      : rank === 2
+        ? {
+            bar: "bg-gradient-to-r from-slate-300 to-slate-400",
+            glow: "bg-slate-300/25",
+            ring: "ring-slate-300",
+            medal: "bg-gradient-to-br from-slate-300 to-slate-400 text-white",
+            badge: "bg-slate-300/20 text-slate-500",
+            elo: "text-on-surface",
+          }
+        : {
+            bar: "bg-gradient-to-r from-orange-300 to-orange-500",
+            glow: "bg-orange-400/20",
+            ring: "ring-orange-400",
+            medal: "bg-gradient-to-br from-orange-300 to-orange-500 text-white",
+            badge: "bg-orange-400/15 text-orange-600",
+            elo: "text-on-surface",
+          };
+  const cardCls = champ
+    ? "bg-gradient-to-b from-amber-50 to-surface-container-lowest ring-2 ring-amber-300 shadow-lg shadow-amber-500/10 md:-translate-y-4"
+    : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm";
+
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl p-5 ${order} ${
-        champ
-          ? "bg-navy text-white shadow-xl ring-2 ring-elo-gold md:-translate-y-3"
-          : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm"
-      }`}
+      className={`relative flex flex-col items-center overflow-hidden rounded-2xl px-5 pb-5 pt-7 text-center text-on-surface ${order} ${cardCls}`}
     >
-      <div className="mb-4 flex items-start justify-between">
-        <span
-          className={`grid h-12 w-12 place-items-center rounded-full font-display text-xl font-extrabold shadow ${tier.num}`}
-        >
-          {rank}
+      <div className={`absolute inset-x-0 top-0 h-1.5 ${accent.bar}`} />
+      <div
+        className={`pointer-events-none absolute -top-12 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full blur-3xl ${accent.glow}`}
+      />
+      <span
+        className={`absolute right-3 top-4 font-label-caps text-label-caps rounded px-2 py-1 ${accent.badge}`}
+      >
+        {tierLabel}
+      </span>
+
+      {champ && (
+        <span className="material-symbols-outlined fill relative mb-1 text-[22px] text-amber-500">
+          emoji_events
         </span>
-        <span
-          className={`font-label-caps text-label-caps rounded px-2 py-1 ${
-            champ
-              ? "bg-elo-gold/15 text-elo-gold"
-              : rank === 2
-                ? "bg-elo-silver/15 text-elo-silver"
-                : "bg-elo-bronze/15 text-elo-bronze"
-          }`}
-        >
-          {tier.label}
-        </span>
-      </div>
-      <button onClick={onOpen} className="flex w-full items-center gap-3 text-left">
-        <span
-          className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-lg font-bold ring-2 ${
-            tier.ring
-          } ${avatarColor(r.name)}`}
-        >
-          {initialsOf(r.name)}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate font-display text-lg font-bold">
-            {r.name}
-            {me && <span className="ml-1 text-xs opacity-60">(kamu)</span>}
+      )}
+
+      <button onClick={onOpen} className="relative flex flex-col items-center">
+        <span className="relative">
+          <span
+            className={`grid h-20 w-20 place-items-center rounded-full text-2xl font-bold ring-4 ${accent.ring} ${avatarColor(
+              r.name
+            )}`}
+          >
+            {initialsOf(r.name)}
           </span>
           <span
-            className={`text-sm ${champ ? "text-white/60" : "text-on-surface-variant"}`}
+            className={`absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full font-data-mono text-xs font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
           >
-            {wl} · {wr}% menang
+            {rank}
           </span>
         </span>
+        <span className="mt-3 block max-w-full truncate font-display text-lg font-bold">
+          {r.name}
+          {me && <span className="ml-1 text-xs opacity-60">(kamu)</span>}
+        </span>
+        <span className="text-sm text-on-surface-variant">
+          {wl} · {wr}% menang
+        </span>
       </button>
-      <div
-        className={`mt-5 flex items-end justify-between border-t pt-4 ${
-          champ ? "border-white/15" : "border-outline-variant/20"
-        }`}
-      >
-        <div>
+
+      <div className="relative mt-4 flex w-full items-end justify-between border-t border-outline-variant/20 pt-3">
+        <div className="text-left">
           <div className="font-label-caps text-label-caps text-reliability-dimmed">
             KEANDALAN
           </div>
@@ -1576,9 +1586,7 @@ function PodiumCard({
             ELO
           </div>
           <div
-            className={`font-display text-2xl font-extrabold ${
-              champ ? "text-primary-fixed" : ""
-            }`}
+            className={`font-display text-3xl font-extrabold leading-none ${accent.elo}`}
           >
             {Math.round(r.rating ?? 1000)}
           </div>
