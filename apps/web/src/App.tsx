@@ -1054,7 +1054,7 @@ function HomeScreen({
           />
           <button
             onClick={addLeague}
-            className="rounded-lg bg-lime-400 px-4 text-sm font-semibold text-slate-900 hover:bg-lime-300"
+            className="rounded-lg bg-primary-fixed px-4 text-sm font-semibold text-on-primary-fixed hover:bg-primary-fixed-dim"
           >
             + Liga
           </button>
@@ -1881,7 +1881,7 @@ function DiscoverScreen({
           <button
             onClick={joinByCode}
             disabled={busy || !code.trim()}
-            className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-300"
+            className="rounded-lg bg-navy px-4 text-sm font-medium text-white hover:opacity-90 disabled:bg-surface-container disabled:text-outline"
           >
             Gabung
           </button>
@@ -1921,19 +1921,19 @@ function DiscoverScreen({
               {l.myStatus === "member" ? (
                 <button
                   onClick={() => onOpenLeague(l.id)}
-                  className="shrink-0 rounded-lg bg-lime-100 px-3 py-1.5 text-sm font-medium text-lime-700 hover:bg-lime-200"
+                  className="shrink-0 rounded-lg bg-primary-container px-3 py-1.5 text-sm font-medium text-on-primary-container hover:brightness-95"
                 >
                   Buka
                 </button>
               ) : l.myStatus === "pending" ? (
-                <span className="shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-700">
+                <span className="shrink-0 rounded-lg bg-elo-gold/15 px-3 py-1.5 text-sm font-medium text-elo-bronze">
                   Menunggu
                 </span>
               ) : (
                 <button
                   onClick={() => request(l.id)}
                   disabled={busy}
-                  className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:bg-slate-300"
+                  className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:bg-surface-container disabled:text-outline"
                 >
                   Join
                 </button>
@@ -2379,7 +2379,7 @@ function LeaguePeople({
                           setHits([]);
                         })
                       }
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
                     >
                       <TeamAvatar name={u.name} />
                       <span className="min-w-0 flex-1 truncate">
@@ -2388,7 +2388,7 @@ function LeaguePeople({
                           <span className="text-slate-400"> @{u.username}</span>
                         )}
                       </span>
-                      <span className="text-xs font-medium text-lime-700">
+                      <span className="text-xs font-medium text-primary">
                         Undang
                       </span>
                     </button>
@@ -2422,7 +2422,7 @@ function LeaguePeople({
                           setR([...rosterIds, p.id]);
                           setAddQ("");
                         }}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
                       >
                         <TeamAvatar name={p.name} />
                         <span className="min-w-0 flex-1 truncate">{p.name}</span>
@@ -2431,7 +2431,7 @@ function LeaguePeople({
                             tamu
                           </span>
                         )}
-                        <span className="text-xs font-medium text-lime-700">
+                        <span className="text-xs font-medium text-primary">
                           Tambah
                         </span>
                       </button>
@@ -2899,7 +2899,7 @@ function CreateScreen({
         <button
           onClick={start}
           disabled={!canStart}
-          className="mt-2 w-full rounded-xl bg-lime-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          className="mt-2 w-full rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
         >
           {startLabel}
         </button>
@@ -3159,7 +3159,7 @@ function PlayerPicker({
                 await onAddGuest(term);
                 setQ("");
               }}
-              className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50"
+              className="flex w-full items-center gap-2 border-t border-outline-variant/30 px-3 py-2 text-sm font-medium text-elo-bronze hover:bg-elo-gold/10"
             >
               <span className="grid h-6 w-6 place-items-center rounded-full bg-amber-200 text-amber-800">
                 +
@@ -4046,7 +4046,7 @@ function AutoTeamPreview({
         {(teams.length > 0 || hasLeftover) && (
           <button
             onClick={onReshuffle}
-            className="shrink-0 text-xs font-medium text-lime-700 hover:underline"
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
           >
             ↻ Acak ulang
           </button>
@@ -4173,7 +4173,7 @@ function ManualTeamEditor({
                                 setSeat(i, seat, op);
                                 setOpen(null);
                               }}
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-lime-100"
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
                             >
                               <TeamAvatar name={op.name} />
                               <span className="truncate">{op.name}</span>
@@ -4213,7 +4213,7 @@ function ManualTeamEditor({
         {pool.length >= 1 && (
           <button
             onClick={autoFill}
-            className="shrink-0 text-xs font-medium text-lime-700 hover:underline"
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
           >
             Isi otomatis sisanya
           </button>
