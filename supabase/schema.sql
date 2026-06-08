@@ -56,6 +56,11 @@ create table if not exists public.events (
 alter table public.events
   add column if not exists player_names text[] not null default '{}';
 
+-- Visibilitas turnamen: inherit (ikut liga) | private | public.
+alter table public.events
+  add column if not exists visibility text not null default 'inherit'
+    check (visibility in ('inherit', 'private', 'public'));
+
 -- Username unik (handle) + avatar untuk profil.
 alter table public.profiles add column if not exists username   text;
 alter table public.profiles add column if not exists avatar_url text;
@@ -185,6 +190,18 @@ returns boolean language sql security definer set search_path = public as $$
   );
 $$;
 
+-- Apakah turnamen boleh dilihat publik (non-anggota). inherit → ikut liga.
+create or replace function public.event_is_public(vis text, lid uuid)
+returns boolean language sql security definer set search_path = public as $$
+  select case
+    when vis = 'public'  then true
+    when vis = 'private' then false
+    else coalesce(
+      (select l.visibility = 'public' from public.leagues l where l.id = lid),
+      false)
+  end;
+$$;
+
 -- ────────────────────────────────────────────────────────────────────
 -- 3. Row Level Security
 --    Baca: publik (mendukung link share read-only).
@@ -240,8 +257,17 @@ create policy lu_admin_update on public.league_users for update
   with check (public.is_league_admin(league_id, auth.uid()));
 
 -- events
+--   Baca: owner, atau turnamen public (langsung/ikut liga), atau anggota liga.
 drop policy if exists events_read on public.events;
-create policy events_read on public.events for select using (true);
+create policy events_read on public.events for select using (
+  owner_id = auth.uid()
+  or public.event_is_public(visibility, league_id)
+  or (league_id is not null and exists (
+       select 1 from public.league_users lu
+       where lu.league_id = events.league_id
+         and lu.user_id = auth.uid()
+         and lu.status = 'member'))
+);
 drop policy if exists events_write on public.events;
 create policy events_write on public.events for all
   using (auth.uid() = owner_id) with check (auth.uid() = owner_id);

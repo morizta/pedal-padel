@@ -1211,7 +1211,14 @@ function EventList({
             className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
           >
             <span className="min-w-0">
-              <span className="block truncate font-semibold">{e.name}</span>
+              <span className="block truncate font-semibold">
+                {e.visibility === "public"
+                  ? "🌐 "
+                  : e.visibility === "private"
+                    ? "🔒 "
+                    : ""}
+                {e.name}
+              </span>
               <span className="text-xs text-slate-400">
                 {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
                 {fmtDate(e.createdAt)}
@@ -1658,6 +1665,9 @@ function CreateScreen({
   const [normalTarget, setNormalTarget] = useState(5);
   const [randomize, setRandomize] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [visibility, setVisibility] = useState<
+    "inherit" | "private" | "public"
+  >(leagueId ? "inherit" : "public");
   const [pairing, setPairing] = useState<"auto" | "manual">("auto");
   const [manualTeams, setManualTeams] = useState<
     { id: string; name: string }[][]
@@ -1768,6 +1778,7 @@ function CreateScreen({
               (t) => [t[0]!.name, t[1]!.name] as [string, string]
             )
           : undefined,
+        visibility,
       });
       onCreated(event.id);
     } catch (e) {
@@ -1920,6 +1931,38 @@ function CreateScreen({
             onLabel="Acak"
             offLabel="Sesuai input"
           />
+        </Field>
+
+        <Field label="Visibilitas">
+          <div className="flex flex-wrap gap-1.5">
+            {(leagueId
+              ? ([
+                  ["inherit", `Ikut liga (${inLeague?.visibility === "public" ? "public" : "private"})`],
+                  ["public", "🌐 Public"],
+                  ["private", "🔒 Private"],
+                ] as const)
+              : ([
+                  ["public", "🌐 Public"],
+                  ["private", "🔒 Private"],
+                ] as const)
+            ).map(([key, label]) => (
+              <Chip
+                key={key}
+                active={visibility === key}
+                onClick={() => setVisibility(key)}
+                label={label}
+              />
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-slate-400">
+            {visibility === "public"
+              ? "Siapa pun bisa melihat turnamen ini."
+              : visibility === "private"
+                ? "Hanya kamu" +
+                  (leagueId ? " & anggota liga" : "") +
+                  " yang bisa melihat."
+                : `Ikut pengaturan liga (${inLeague?.visibility === "public" ? "publik" : "privat — anggota saja"}).`}
+          </p>
         </Field>
 
         <button

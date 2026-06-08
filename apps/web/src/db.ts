@@ -490,6 +490,7 @@ export interface DbEvent {
   scoring: ScoringConfig;
   randomizeStart: boolean;
   status: "live" | "finished";
+  visibility: "inherit" | "private" | "public";
   playerIds: string[];
   /** Nama peserta (identitas engine). */
   players: string[];
@@ -500,7 +501,7 @@ export interface DbEvent {
 }
 
 const EVENT_COLS =
-  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,player_ids,player_names,teams,rounds,scores,created_at";
+  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,player_ids,player_names,teams,rounds,scores,created_at";
 
 function mapEvent(r: any): DbEvent {
   return {
@@ -512,6 +513,7 @@ function mapEvent(r: any): DbEvent {
     scoring: r.scoring,
     randomizeStart: r.randomize_start,
     status: r.status,
+    visibility: r.visibility ?? "inherit",
     playerIds: r.player_ids ?? [],
     players: r.player_names ?? [],
     teams: r.teams ?? [],
@@ -529,10 +531,17 @@ export async function listEvents(
   let q = db()
     .from("events")
     .select(EVENT_COLS)
-    .eq("owner_id", owner)
     .order("created_at", { ascending: false });
-  if (leagueId === null) q = q.is("league_id", null);
-  else if (typeof leagueId === "string") q = q.eq("league_id", leagueId);
+  if (leagueId === null) {
+    // Turnamen lepas milikku.
+    q = q.eq("owner_id", owner).is("league_id", null);
+  } else if (typeof leagueId === "string") {
+    // Semua sesi liga yang boleh kulihat (RLS yang menyaring).
+    q = q.eq("league_id", leagueId);
+  } else {
+    // Tanpa argumen: semua sesiku (untuk leaderboard/profil).
+    q = q.eq("owner_id", owner);
+  }
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map(mapEvent);
@@ -559,6 +568,8 @@ export interface NewEvent {
   participants: { id: string; name: string }[];
   /** Tim manual (format tim). Kosong/undefined = auto-pairing. */
   teams?: Pair[];
+  /** Visibilitas: inherit (ikut liga) | private | public. Default inherit. */
+  visibility?: "inherit" | "private" | "public";
 }
 
 export async function createEvent(input: NewEvent): Promise<DbEvent> {
@@ -575,6 +586,7 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
       scoring: input.scoring,
       randomize_start: input.randomizeStart,
       status: "live",
+      visibility: input.visibility ?? "inherit",
       player_ids: input.participants.map((p) => p.id),
       player_names: input.participants.map((p) => p.name),
       teams: input.teams ?? [],
