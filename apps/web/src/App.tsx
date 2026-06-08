@@ -680,194 +680,250 @@ function ProfileScreen({
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-5">
-      <button
-        onClick={onBack}
-        className="text-sm text-slate-500 hover:text-slate-900"
-      >
-        ← Kembali
-      </button>
-
+    <div className="mx-auto max-w-2xl space-y-5">
       {/* Header */}
-      <div className="rounded-2xl bg-slate-900 p-5 text-white">
+      <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary-fixed/10 blur-3xl" />
         {editing ? (
-          <div className="space-y-3">
-            <label className="block text-xs text-slate-400">Nama lengkap</label>
+          <div className="relative space-y-3">
+            <label className="block font-label-caps text-label-caps text-white/60">
+              Nama lengkap
+            </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-slate-900"
+              className="w-full rounded-lg px-3 py-2 text-on-surface"
               placeholder="Nama"
             />
-            <label className="block text-xs text-slate-400">Username (unik)</label>
-            <div className="flex items-center rounded-lg bg-white px-3 text-slate-900">
-              <span className="text-slate-400">@</span>
+            <label className="block font-label-caps text-label-caps text-white/60">
+              Username (unik)
+            </label>
+            <div className="flex items-center rounded-lg bg-white px-3 text-on-surface">
+              <span className="text-outline">@</span>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full py-2 focus:outline-none"
+                className="w-full py-2 outline-none"
                 placeholder="username"
               />
             </div>
-            <label className="block text-xs text-slate-400">
+            <label className="block font-label-caps text-label-caps text-white/60">
               URL foto (opsional)
             </label>
             <input
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-slate-900"
+              className="w-full rounded-lg px-3 py-2 text-on-surface"
               placeholder="https://…/foto.jpg"
             />
-            {err && <p className="text-sm text-red-400">{err}</p>}
+            {err && <p className="text-sm text-loss-red">{err}</p>}
             <div className="flex gap-2">
               <button
                 onClick={save}
                 disabled={saving}
-                className="rounded-lg bg-lime-400 px-4 py-2 text-sm font-semibold text-slate-900 disabled:opacity-60"
+                className="rounded-lg bg-primary-fixed px-4 py-2 text-sm font-semibold text-on-primary-fixed disabled:opacity-60"
               >
                 {saving ? "Menyimpan…" : "Simpan"}
               </button>
               <button
                 onClick={() => setEditing(false)}
-                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
               >
                 Batal
               </button>
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            {shownAvatar ? (
-              <img
-                src={shownAvatar}
-                alt=""
-                className="h-16 w-16 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-lime-400 text-2xl font-black text-slate-900">
-                {shownName.charAt(0).toUpperCase()}
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-bold">{shownName}</div>
-              <div className="text-sm text-slate-400">@{shownUser}</div>
+          <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              {shownAvatar ? (
+                <img
+                  src={shownAvatar}
+                  alt=""
+                  className="h-20 w-20 shrink-0 rounded-full border-4 border-on-secondary-fixed-variant object-cover"
+                />
+              ) : (
+                <span className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-on-secondary-fixed-variant bg-primary-fixed font-display text-3xl font-extrabold text-on-primary-fixed">
+                  {shownName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0">
+                <h1 className="truncate font-display text-2xl font-bold">
+                  {shownName}
+                </h1>
+                <div className="text-sm text-white/60">@{shownUser}</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {me?.rank != null && (
+                    <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                      #{me.rank} GLOBAL
+                    </span>
+                  )}
+                  <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                    {me?.played ?? 0} MATCH
+                  </span>
+                </div>
+              </div>
             </div>
             <button
               onClick={startEdit}
-              className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-5 py-2.5 font-label-caps text-label-caps transition hover:bg-primary-fixed hover:text-on-primary-fixed active:scale-95"
             >
-              ✎ Ubah
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+              Ubah Profil
             </button>
           </div>
         )}
+      </section>
+
+      {/* Rating + Statistik */}
+      <div className="grid gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              trending_up
+            </span>
+            Rating
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat
+              label="Peringkat"
+              value={me?.rank != null ? `#${me.rank}` : "–"}
+              sub={me?.rank != null ? `dari ${me.totalRanked}` : "belum main"}
+            />
+            <ProfileStat
+              label="ELO"
+              value={me && me.played > 0 ? Math.round(me.rating!) : "–"}
+              sub="rating"
+            />
+            <ProfileStat
+              label="Keandalan"
+              value={me && me.played > 0 ? `${rel}%` : "–"}
+              sub={me && me.played > 0 ? `${me.played}/20 match` : "—"}
+            />
+          </div>
+          <p className="mt-3 text-xs text-on-surface-variant">
+            <b>Keandalan</b> = seberapa stabil rating-mu; 100% (stabil) setelah 20
+            match.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              bar_chart
+            </span>
+            Statistik
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat label="Main" value={me?.played ?? 0} />
+            <ProfileStat label="Menang" value={me?.st?.wins ?? 0} />
+            <ProfileStat
+              label="Win %"
+              value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
+            />
+          </div>
+          {history.length > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant">
+                FORM TERAKHIR
+              </span>
+              <div className="flex gap-1">
+                {history.slice(0, 5).map((m, i) => {
+                  const c =
+                    m.result === "win"
+                      ? "bg-primary-container text-on-primary-container"
+                      : m.result === "loss"
+                        ? "bg-error-container text-error"
+                        : "bg-surface-container-high text-on-surface-variant";
+                  const l =
+                    m.result === "win" ? "M" : m.result === "loss" ? "K" : "S";
+                  return (
+                    <span
+                      key={i}
+                      className={`grid h-6 w-6 place-items-center rounded text-[10px] font-bold ${c}`}
+                    >
+                      {l}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Rating */}
-      <Card title="📈 Rating">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            {
-              k: "Peringkat",
-              v:
-                me?.rank != null ? `#${me.rank}` : "–",
-              sub: me?.rank != null ? `dari ${me.totalRanked}` : "belum main",
-            },
-            {
-              k: "ELO",
-              v: me && me.played > 0 ? Math.round(me.rating!) : "–",
-              sub: "rating",
-            },
-            {
-              k: "Keandalan",
-              v: me && me.played > 0 ? `${rel}%` : "–",
-              sub: me && me.played > 0 ? `${me.played}/20 match` : "—",
-            },
-          ].map((r) => (
-            <div key={r.k} className="rounded-xl bg-slate-50 py-4">
-              <div className="text-[10px] uppercase tracking-wide text-slate-400">
-                {r.k}
-              </div>
-              <div className="mt-1 text-2xl font-bold">{r.v}</div>
-              <div className="mt-0.5 text-[10px] text-slate-400">{r.sub}</div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-xs text-slate-400">
-          <b>Keandalan</b> = seberapa stabil rating-mu, naik tiap main; 100%
-          (stabil) setelah 20 match. Di bawah itu, rating masih bergerak besar
-          tiap menang/kalah.
-        </p>
-      </Card>
-
-      {/* Statistik */}
-      <Card title="📊 Statistik">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            { k: "Main", v: me?.played ?? 0 },
-            { k: "Menang", v: me?.st?.wins ?? 0 },
-            {
-              k: "Win %",
-              v: me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%",
-            },
-          ].map((s) => (
-            <div key={s.k} className="rounded-xl bg-slate-50 py-4">
-              <div className="text-xs uppercase tracking-wide text-slate-400">
-                {s.k}
-              </div>
-              <div className="mt-1 text-2xl font-bold">{s.v}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Riwayat */}
-      <Card title="🎾 Pertandingan Terakhir">
+      {/* Pertandingan Terakhir */}
+      <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+        <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+          <span className="material-symbols-outlined text-[20px] text-primary">
+            history
+          </span>
+          Pertandingan Terakhir
+        </h3>
         <StateText
           loading={histQ.loading}
           error={histQ.error}
           empty={!histQ.loading && !histQ.error && history.length === 0}
           emptyText="Belum ada pertandingan."
         />
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {history.slice(0, 10).map((m, i) => {
-            const [label, cls] =
-              m.result === "win"
-                ? ["Menang", "bg-emerald-100 text-emerald-700"]
-                : m.result === "loss"
-                  ? ["Kalah", "bg-rose-100 text-rose-700"]
-                  : ["Seri", "bg-slate-100 text-slate-600"];
+            const win = m.result === "win";
+            const loss = m.result === "loss";
+            const badge = win
+              ? ["Menang", "bg-primary-container text-on-primary-container"]
+              : loss
+                ? ["Kalah", "bg-error-container text-error"]
+                : ["Seri", "bg-surface-container-high text-on-surface-variant"];
+            const box = win
+              ? "bg-primary-container/40"
+              : loss
+                ? "bg-error-container/40"
+                : "bg-surface-container-high";
             return (
-              <li key={i} className="rounded-xl border border-slate-200 p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-sm">
-                    <b className="tabular-nums">
-                      {m.scoreFor}–{m.scoreAgainst}
-                    </b>{" "}
-                    <span className="text-slate-400">vs</span>{" "}
-                    {m.opponents.join(" & ")}
+              <li
+                key={i}
+                className="flex items-center gap-3 rounded-xl border border-outline-variant/40 p-3"
+              >
+                <div
+                  className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg ${box}`}
+                >
+                  <span className="font-data-mono text-base font-bold">
+                    {m.scoreFor}–{m.scoreAgainst}
                   </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}
-                  >
-                    {label}
+                  <span className="font-label-caps text-[8px] uppercase text-outline">
+                    {win ? "WIN" : loss ? "LOSS" : "DRAW"}
                   </span>
                 </div>
-                <div className="mt-0.5 truncate text-xs text-slate-400">
-                  bareng {m.partner} · {m.eventName} · {fmtDate(m.date)}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">
+                    vs {m.opponents.join(" & ")}
+                  </div>
+                  <div className="truncate text-xs text-on-surface-variant">
+                    Partner: {m.partner} · {m.eventName} · {fmtDate(m.date)}
+                  </div>
                 </div>
+                <span
+                  className={`shrink-0 rounded-full px-3 py-1 font-label-caps text-label-caps ${badge[1]}`}
+                >
+                  {badge[0]}
+                </span>
               </li>
             );
           })}
         </ul>
-      </Card>
+      </section>
 
       <button
         onClick={() => {
           signOut();
           onBack();
         }}
-        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest py-3 font-semibold text-on-surface hover:bg-surface-container-high"
       >
+        <span className="material-symbols-outlined text-[20px] text-error">
+          logout
+        </span>
         Logout
       </button>
     </div>
@@ -1535,14 +1591,23 @@ function PodiumCard({
 function ProfileStat({
   label,
   value,
+  sub,
 }: {
   label: string;
   value: React.ReactNode;
+  sub?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2 text-center">
-      <div className="text-lg font-bold tabular-nums">{value}</div>
-      <div className="text-[11px] text-slate-400">{label}</div>
+    <div className="flex flex-col items-center justify-center rounded-lg bg-surface-container-low px-2 py-3 text-center">
+      <span className="font-label-caps text-label-caps text-on-surface-variant">
+        {label}
+      </span>
+      <span className="mt-1 font-display text-xl font-bold tabular-nums">
+        {value}
+      </span>
+      {sub && (
+        <span className="mt-0.5 text-[10px] text-outline">{sub}</span>
+      )}
     </div>
   );
 }
@@ -1560,108 +1625,187 @@ function PlayerProfileScreen({
 
   const me = (() => {
     if (!stats.data) return null;
-    const r = computeRatings(stats.data.names, stats.data.results).find(
-      (x) => x.name === name
-    );
+    const ratings = computeRatings(stats.data.names, stats.data.results);
+    const played = ratings.filter((r) => r.matchesPlayed > 0);
+    const idx = played.findIndex((x) => x.name === name);
+    const r = ratings.find((x) => x.name === name);
     const s = computeStandings(stats.data.results, { compensate: false }).find(
       (x) => x.playerId === name
     );
-    return { rating: r?.rating ?? null, played: r?.matchesPlayed ?? 0, st: s ?? null };
+    return {
+      rating: r?.rating ?? null,
+      played: r?.matchesPlayed ?? 0,
+      st: s ?? null,
+      rank: idx >= 0 ? idx + 1 : null,
+      totalRanked: played.length,
+    };
   })();
-
   const history = hist.data ?? [];
-  const rel = me ? Math.round(reliability(me.played) * 100) : 0;
+  const rel = me && me.played > 0 ? Math.round(reliability(me.played) * 100) : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-2xl space-y-5">
       <button
         onClick={onBack}
-        className="text-sm text-slate-500 hover:text-slate-900"
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
       >
-        ← Kembali
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
       </button>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-4">
+      <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary-fixed/10 blur-3xl" />
+        <div className="relative flex items-center gap-4">
           <span
-            className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-lg font-bold ${avatarColor(
+            className={`grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-on-secondary-fixed-variant text-3xl font-extrabold ${avatarColor(
               name
             )}`}
           >
             {initialsOf(name)}
           </span>
           <div className="min-w-0">
-            <h2 className="truncate text-xl font-bold">{name}</h2>
-            <p className="text-sm text-slate-400">
-              {me && me.played > 0
-                ? rel < 100
-                  ? `Keandalan ${rel}% · ${me.played} match`
-                  : `Rating stabil · ${me.played} match`
-                : "Belum main"}
-            </p>
-          </div>
-          <div className="ml-auto shrink-0 text-right">
-            <div className="text-2xl font-bold tabular-nums">
-              {me?.rating != null ? Math.round(me.rating) : 1000}
-            </div>
-            <div className="text-[10px] uppercase tracking-wide text-slate-400">
-              ELO
+            <h1 className="truncate font-display text-2xl font-bold">{name}</h1>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {me?.rank != null && (
+                <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                  #{me.rank} GLOBAL
+                </span>
+              )}
+              <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                {me?.played ?? 0} MATCH
+              </span>
             </div>
           </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <ProfileStat label="Match" value={me?.played ?? 0} />
-          <ProfileStat
-            label="Menang–Kalah"
-            value={me?.st ? `${me.st.wins}–${me.st.losses}` : "0–0"}
-          />
-          <ProfileStat
-            label="Win Rate"
-            value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
-          />
-          <ProfileStat label="Poin" value={me?.st?.points ?? 0} />
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-3 font-semibold">Riwayat Pertandingan</h3>
+      <div className="grid gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              trending_up
+            </span>
+            Rating
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat
+              label="Peringkat"
+              value={me?.rank != null ? `#${me.rank}` : "–"}
+              sub={me?.rank != null ? `dari ${me.totalRanked}` : "belum main"}
+            />
+            <ProfileStat
+              label="ELO"
+              value={me && me.played > 0 ? Math.round(me.rating!) : "–"}
+              sub="rating"
+            />
+            <ProfileStat
+              label="Keandalan"
+              value={me && me.played > 0 ? `${rel}%` : "–"}
+              sub={me && me.played > 0 ? `${me.played}/20 match` : "—"}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+            <span className="material-symbols-outlined text-[20px] text-primary">
+              bar_chart
+            </span>
+            Statistik
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <ProfileStat label="Main" value={me?.played ?? 0} />
+            <ProfileStat label="Menang" value={me?.st?.wins ?? 0} />
+            <ProfileStat
+              label="Win %"
+              value={me?.st ? `${Math.round(me.st.winRate * 100)}%` : "0%"}
+            />
+          </div>
+          {history.length > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <span className="font-label-caps text-label-caps text-on-surface-variant">
+                FORM TERAKHIR
+              </span>
+              <div className="flex gap-1">
+                {history.slice(0, 5).map((m, i) => {
+                  const c =
+                    m.result === "win"
+                      ? "bg-primary-container text-on-primary-container"
+                      : m.result === "loss"
+                        ? "bg-error-container text-error"
+                        : "bg-surface-container-high text-on-surface-variant";
+                  const l =
+                    m.result === "win" ? "M" : m.result === "loss" ? "K" : "S";
+                  return (
+                    <span
+                      key={i}
+                      className={`grid h-6 w-6 place-items-center rounded text-[10px] font-bold ${c}`}
+                    >
+                      {l}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+        <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
+          <span className="material-symbols-outlined text-[20px] text-primary">
+            history
+          </span>
+          Pertandingan Terakhir
+        </h3>
         <StateText
           loading={hist.loading}
           error={hist.error}
           empty={!hist.loading && !hist.error && history.length === 0}
           emptyText="Belum ada pertandingan."
         />
-        <ul className="space-y-1.5">
-          {history.map((m, i) => {
-            const [label, cls] =
-              m.result === "win"
-                ? ["Menang", "bg-emerald-100 text-emerald-700"]
-                : m.result === "loss"
-                  ? ["Kalah", "bg-rose-100 text-rose-700"]
-                  : ["Seri", "bg-slate-100 text-slate-600"];
+        <ul className="space-y-2">
+          {history.slice(0, 10).map((m, i) => {
+            const win = m.result === "win";
+            const loss = m.result === "loss";
+            const badge = win
+              ? ["Menang", "bg-primary-container text-on-primary-container"]
+              : loss
+                ? ["Kalah", "bg-error-container text-error"]
+                : ["Seri", "bg-surface-container-high text-on-surface-variant"];
+            const box = win
+              ? "bg-primary-container/40"
+              : loss
+                ? "bg-error-container/40"
+                : "bg-surface-container-high";
             return (
               <li
                 key={i}
-                className="rounded-xl border border-slate-200 p-2.5"
+                className="flex items-center gap-3 rounded-xl border border-outline-variant/40 p-3"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-sm">
-                    <b className="tabular-nums">
-                      {m.scoreFor}–{m.scoreAgainst}
-                    </b>{" "}
-                    <span className="text-slate-400">vs</span>{" "}
-                    {m.opponents.join(" & ")}
+                <div
+                  className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg ${box}`}
+                >
+                  <span className="font-data-mono text-base font-bold">
+                    {m.scoreFor}–{m.scoreAgainst}
                   </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}
-                  >
-                    {label}
+                  <span className="font-label-caps text-[8px] uppercase text-outline">
+                    {win ? "WIN" : loss ? "LOSS" : "DRAW"}
                   </span>
                 </div>
-                <div className="mt-0.5 truncate text-xs text-slate-400">
-                  bareng {m.partner} · {m.eventName} · {fmtDate(m.date)}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">
+                    vs {m.opponents.join(" & ")}
+                  </div>
+                  <div className="truncate text-xs text-on-surface-variant">
+                    Partner: {m.partner} · {m.eventName} · {fmtDate(m.date)}
+                  </div>
                 </div>
+                <span
+                  className={`shrink-0 rounded-full px-3 py-1 font-label-caps text-label-caps ${badge[1]}`}
+                >
+                  {badge[0]}
+                </span>
               </li>
             );
           })}
