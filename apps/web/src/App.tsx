@@ -33,6 +33,7 @@ import {
   listEvents,
   listPlayers,
   createPlayer,
+  deletePlayer,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -424,9 +425,9 @@ function HomeScreen({
         className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-lime-400 hover:bg-lime-50/40"
       >
         <span className="min-w-0">
-          <span className="block font-semibold">🏅 Leaderboard ELO</span>
+          <span className="block font-semibold">🏅 Pemain &amp; Ranking</span>
           <span className="block text-sm text-slate-400">
-            Ranking pemain dari semua sesimu
+            Daftar pemain + leaderboard ELO dari semua sesimu
           </span>
         </span>
         <span className="shrink-0 text-xl text-slate-300">›</span>
@@ -536,23 +537,65 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
-/** Leaderboard ELO global — ranking pemain dari semua sesi user (hitung ulang). */
+/**
+ * Pemain & Ranking — semua pemain terdaftar dengan rank/rating ELO (dari semua
+ * sesi user), plus daftar/hapus pemain. Yang sudah main diperingkat; yang belum
+ * tampil di bawah. Rating dihitung ulang dari hasil match (keyed by nama).
+ */
 function LeaderboardScreen({ onBack }: { onBack: () => void }) {
-  const q = useAsync(() => globalStats(), []);
+  const stats = useAsync(() => globalStats(), []);
+  const roster = useAsync(() => listPlayers(), []);
+  const [newName, setNewName] = useState("");
+
+  async function register() {
+    if (await createPlayer(newName)) {
+      setNewName("");
+      roster.reload();
+    }
+  }
+  async function remove(id: string, name: string) {
+    if (!confirm(`Hapus pemain "${name}" dari daftar?`)) return;
+    await deletePlayer(id);
+    roster.reload();
+  }
 
   const rows = (() => {
-    if (!q.data) return [];
-    const { results, names } = q.data;
-    const st = new Map(
-      computeStandings(results, { compensate: false }).map((s) => [
-        s.playerId,
-        s,
+    const players = roster.data ?? [];
+    const data = stats.data;
+    const byName = new Map(
+      (data ? computeRatings(data.names, data.results) : []).map((r) => [
+        r.name,
+        r,
       ])
     );
-    return computeRatings(names, results)
-      .filter((r) => r.matchesPlayed > 0)
-      .map((r) => ({ ...r, st: st.get(r.name) }));
+    const st = new Map(
+      (data
+        ? computeStandings(data.results, { compensate: false })
+        : []
+      ).map((s) => [s.playerId, s])
+    );
+    return players
+      .map((p) => {
+        const r = byName.get(p.name);
+        return {
+          id: p.id,
+          name: p.name,
+          isGuest: p.isGuest,
+          rating: r?.rating ?? null,
+          played: r?.matchesPlayed ?? 0,
+          st: st.get(p.name),
+        };
+      })
+      .sort((a, b) => {
+        if ((a.played > 0) !== (b.played > 0)) return a.played > 0 ? -1 : 1;
+        if (a.played > 0 && b.played > 0)
+          return b.rating! - a.rating! || a.name.localeCompare(b.name);
+        return a.name.localeCompare(b.name);
+      });
   })();
+
+  const playedCount = rows.filter((r) => r.played > 0).length;
+  let rank = 0;
 
   return (
     <div className="space-y-4">
@@ -565,26 +608,47 @@ function LeaderboardScreen({ onBack }: { onBack: () => void }) {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-lg font-bold">🏅 Leaderboard ELO</h2>
-          {q.data && (
-            <span className="text-xs text-slate-400">{q.data.eventCount} sesi</span>
+          <h2 className="text-lg font-bold">🏅 Pemain &amp; Ranking</h2>
+          {stats.data && (
+            <span className="text-xs text-slate-400">
+              {stats.data.eventCount} sesi
+            </span>
           )}
         </div>
-        <p className="mb-4 text-sm text-slate-400">
-          Ranking gabungan dari semua sesimu. Rating awal 1000; makin banyak main,
-          makin stabil.
+        <p className="mb-3 text-sm text-slate-400">
+          Ranking ELO gabungan dari semua sesimu (rating awal 1000). Pemain belum
+          main tampil di bawah.
         </p>
 
+        {/* Daftarkan pemain */}
+        <div className="mb-4 flex gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && register()}
+            placeholder="Daftarkan pemain baru…"
+            className="input flex-1"
+          />
+          <button
+            onClick={register}
+            className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            Daftar
+          </button>
+        </div>
+
         <StateText
-          loading={q.loading}
-          error={q.error}
-          empty={!q.loading && !q.error && rows.length === 0}
-          emptyText="Belum ada match selesai. Main dulu, ranking muncul otomatis."
+          loading={stats.loading || roster.loading}
+          error={stats.error || roster.error}
+          empty={!stats.loading && !roster.loading && rows.length === 0}
+          emptyText="Belum ada pemain. Daftarkan di atas."
         />
 
         <ol className="space-y-1.5">
-          {rows.map((r, i) => {
-            const rel = Math.round(reliability(r.matchesPlayed) * 100);
+          {rows.map((r) => {
+            const played = r.played > 0;
+            if (played) rank += 1;
+            const rel = Math.round(reliability(r.played) * 100);
             const wl = r.st
               ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
               : "0–0";
@@ -592,30 +656,64 @@ function LeaderboardScreen({ onBack }: { onBack: () => void }) {
             return (
               <li
                 key={r.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5"
+                className={`flex items-center gap-3 rounded-xl border p-2.5 ${
+                  played ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50/60"
+                }`}
               >
-                <RankBadge rank={i + 1} />
+                {played ? (
+                  <RankBadge rank={rank} />
+                ) : (
+                  <span className="grid h-7 w-7 shrink-0 place-items-center text-xs text-slate-300">
+                    –
+                  </span>
+                )}
                 <TeamAvatar name={r.name} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-slate-800">
-                    {r.name}
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate font-semibold text-slate-800">
+                      {r.name}
+                    </span>
+                    {r.isGuest && (
+                      <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
+                        tamu
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-slate-400">
-                    {r.matchesPlayed} match · {wl} · {wr}% menang
+                    {played ? `${r.played} match · ${wl} · ${wr}% menang` : "belum main"}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="font-bold tabular-nums">
-                    {Math.round(r.rating)}
+                  <div
+                    className={`font-bold tabular-nums ${
+                      played ? "" : "text-slate-300"
+                    }`}
+                  >
+                    {Math.round(r.rating ?? 1000)}
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    {rel < 100 ? `andal ${rel}%` : "stabil"}
-                  </div>
+                  {played && (
+                    <div className="text-[10px] text-slate-400">
+                      {rel < 100 ? `andal ${rel}%` : "stabil"}
+                    </div>
+                  )}
                 </div>
+                <button
+                  onClick={() => remove(r.id, r.name)}
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-slate-300 hover:bg-red-50 hover:text-red-600"
+                  aria-label={`Hapus ${r.name}`}
+                >
+                  ×
+                </button>
               </li>
             );
           })}
         </ol>
+
+        {playedCount > 0 && (
+          <p className="mt-3 text-center text-xs text-slate-400">
+            {playedCount} pemain sudah main · {rows.length} terdaftar
+          </p>
+        )}
       </section>
     </div>
   );
