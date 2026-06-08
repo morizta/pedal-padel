@@ -284,12 +284,15 @@ bisa memakai lebih sedikit lapangan.
 - [x] **Home dashboard** — rank-mu + filter turnamen All/Aktif/Selesai
 - [x] **Sosial**: liga Private/Public, gabung via kode/invite/approval,
       kelola anggota & role (lihat §14)
+- [x] **Visibilitas turnamen** (inherit/public/private) + RLS per-akses (§16)
+- [x] **Deskripsi** liga & turnamen + **jadwal mulai** turnamen (§16, §17)
+- [x] Kartu **"Pemain & Anggota"** liga terpadu (akun + roster tamu) (§17)
 
-**Berikutnya:**
+**Berikutnya:** roadmap lengkap di **§18**. Ringkas:
 - [ ] Format King of the Hill di UI
-- [ ] Simpan RatingHistory di DB (ELO dipersist, bukan dihitung ulang)
+- [ ] RatingHistory dipersist di DB (ELO tidak dihitung ulang tiap load)
 - [ ] Live scoreboard real-time + share link publik (Supabase Realtime)
-- [ ] Layar "Pemain & Ranking" ditarik per-liga (leaderboard per komunitas)
+- [ ] Leaderboard ELO per-liga; role management; notifikasi pending
 
 Jalankan: `npm install` lalu `npm run dev --workspace=@pedal/web`
 (buka http://localhost:5173). Test engine: `npm test`.
@@ -453,8 +456,9 @@ Selalu ada jalur **invite oleh owner/admin** di kedua mode.
   di header liga).
 - **Discover** (Home → "Cari & gabung liga"): gabung via kode + cari liga publik
   + tombol Join (request).
-- **Panel Anggota** (layar liga): permintaan pending (✓/✕), daftar anggota +
-  role, invite by @username, keluarkan anggota.
+- **Kartu "Pemain & Anggota"** (layar liga, lihat §17): permintaan pending
+  (✓/✕), undang akun by @username, daftar gabungan akun + tamu dengan badge,
+  keluarkan anggota.
 - **Home**: menampilkan liga yang **diikuti** (bukan cuma buatan sendiri) dengan
   badge role; owner hapus / anggota keluar.
 
@@ -462,3 +466,133 @@ Selalu ada jalur **invite oleh owner/admin** di kedua mode.
 - Notifikasi/badge jumlah permintaan pending.
 - Admin mengangkat anggota jadi admin (role management).
 - Leaderboard ELO difilter per-liga.
+
+---
+
+## 15. Leaderboard ELO & Profil Pemain — terimplementasi
+
+### 15.1 Layar "Pemain & Ranking" (Home → kartu 🏅)
+- Ranking ELO **gabungan dari semua sesi** user (dihitung ulang client-side via
+  `globalStats` + engine `computeRatings`/`computeStandings`; rating awal 1000).
+- Tiap baris: **badge peringkat** (emas/perak/perunggu untuk top-3), avatar
+  inisial berwarna, **rating ELO**, **keandalan %**, dan `match · W-L(-seri) ·
+  % menang`.
+- Pemain yang **belum main** tampil di bawah (rating 1000 redup, "belum main").
+- **Load more**: tampil 10 dulu, tombol "Muat lebih banyak (+10)".
+- Sekaligus **kelola roster pemain**: daftar/hapus pemain (input "Daftarkan
+  pemain"); klik pemain → buka profilnya.
+
+### 15.2 Profil pemain (tap pemain) & Profil sendiri (header)
+- **Header**: avatar besar, nama (+@username), **ELO** besar, keandalan, jumlah
+  match.
+- **Peringkat keseluruhan** (#N dari M) di profil sendiri.
+- **Statistik**: Match · Menang-Kalah · Win Rate · Poin.
+- **Riwayat Pertandingan** (terbaru dulu, via `playerHistory(name)`): skor,
+  lawan, badge Menang/Kalah/Seri, "bareng {partner} · {sesi} · {tanggal}".
+
+### 15.3 Keandalan (reliability)
+Ukuran seberapa stabil rating, dari jumlah match: `min(1, played/20)`.
+- < 100% → rating masih bergerak besar (K-factor 40, provisional).
+- 100% (≥ 20 match) → "stabil" (K-factor 20). UI menampilkan "X/20 match".
+
+### 15.4 Catatan teknis
+- "Global" = semua sesi **milik user** (RLS membatasi ke owner). Leaderboard
+  benar-benar lintas-user menyusul saat ELO dipersist + dibagikan (§18).
+- ELO masih **dihitung ulang** tiap load (belum disimpan ke DB) — lihat §18.
+
+---
+
+## 16. Visibilitas, Deskripsi & Jadwal Turnamen — terimplementasi
+
+### 16.1 Visibilitas turnamen (override)
+Kolom `events.visibility` = `inherit | private | public` (default `inherit`).
+
+| Pilihan | Efek (siapa boleh lihat) |
+|---|---|
+| **inherit** (default in-liga) | Ikut liga: liga private → anggota saja; public → semua |
+| **public** | Siapa pun (mis. share hasil dari liga private) |
+| **private** | Non-anggota tak bisa lihat (owner + anggota liga tetap bisa) |
+| **Turnamen lepas** | Pilih langsung public/private (default public) |
+
+- Ditegakkan di **RLS** `events_read`: `owner OR event_is_public(visibility,
+  league_id) OR anggota liga`. Fungsi `event_is_public` menerjemahkan `inherit`
+  jadi visibilitas liga.
+- `listEvents(leagueId)` menampilkan **semua sesi liga yang boleh dilihat** (RLS
+  yang menyaring), bukan hanya milik sendiri.
+- Kartu sesi menampilkan ikon 🌐/🔒.
+
+### 16.2 Deskripsi
+- `leagues.description` & `events.description` (opsional). Tampil di header liga
+  & kartu/daftar sesi.
+
+### 16.3 Jadwal mulai
+- `events.start_at` (timestamptz, null = mulai sekarang).
+- Form buat sesi: toggle **Sekarang / Pilih tanggal** + **date picker + time
+  picker** terpisah.
+- Sesi terjadwal (start_at di masa depan) → badge **"mendatang"** (amber) +
+  tanggal 🗓 di kartu, sampai waktunya. Saat ini bersifat **informatif** (belum
+  mengunci akses bermain).
+
+---
+
+## 17. Pemain & Anggota Liga (kartu terpadu) — terimplementasi
+
+Dua konsep berbeda disatukan dalam **satu kartu** "🎾 Pemain & Anggota":
+
+| Kategori | Sumber data | Sifat |
+|---|---|---|
+| **Akun** (owner/admin/member) | `league_users` | Akses kelola; wajib punya akun |
+| **Tamu / pemain** | `league_members` (roster) | Hanya main; tamu tak punya akun |
+
+- Satu daftar gabungan, **dedup berdasarkan nama** agar tak dobel; badge
+  `OWNER`/`ADMIN`/`MEMBER`/`TAMU`/`AKUN`.
+- **Pending approve/tolak** (admin) di atas.
+- Dua kotak tambah (admin): **Undang akun** (by @username → `inviteUser`) &
+  **Tambah pemain/tamu ke roster** (cari pemain terdaftar lokal).
+- Roster (pemain) inilah yang **otomatis terpilih** saat tambah sesi.
+- **Kenapa dua sumber?** Tamu tidak punya akun (tak bisa login/akses), tapi
+  harus bisa jadi pemain di match & leaderboard; akses/keamanan butuh user auth
+  (RLS). UI disatukan, model data tetap dua.
+
+---
+
+## 18. Roadmap — Yang Akan Datang
+
+Diurutkan kira-kira berdasarkan nilai & ketergantungan.
+
+### 18.1 Rating & leaderboard
+- [ ] **Persist RatingHistory di DB** — simpan delta ELO per match (tabel
+      `rating_history` + `players.rating`), tak hitung ulang dari nol tiap load.
+      Prasyarat leaderboard lintas-user yang cepat & benar.
+- [ ] **Leaderboard global lintas-user** — setelah persist, ranking gabungan
+      semua user (bukan hanya sesi sendiri).
+- [ ] **Leaderboard ELO per-liga** — filter ranking per komunitas.
+- [ ] **Grafik progres rating** per pemain (sparkline dari RatingHistory).
+- [ ] **Rating Solo vs Team terpisah** (opsional) — atau lanjut satu ELO.
+
+### 18.2 Format pertandingan
+- [ ] **King of the Hill** di UI (engine perlu dilengkapi).
+- [ ] **Mix Americano / Mixicano** (tim campuran ♂♀).
+- [ ] **Club formats** (dua klub) & **Knockout / Group Stage** (bracket).
+- [ ] **`+M` compensation** sudah ada di engine — pastikan tampil jelas di UI.
+
+### 18.3 Sosial & komunitas
+- [ ] **Role management** — owner mengangkat/menurunkan admin.
+- [ ] **Notifikasi / badge** jumlah permintaan pending (Home & liga).
+- [ ] **Profil publik pemain** lewat link share.
+- [ ] **Klaim pemain tamu** jadi akun (skema sudah mendukung `user_id`).
+
+### 18.4 Live & sharing
+- [ ] **Live scoreboard real-time** (Supabase Realtime) — skor update langsung.
+- [ ] **Share link publik read-only** turnamen/leaderboard (ala PDLUP).
+- [ ] **Sembunyikan leaderboard** sampai turnamen selesai (PDLUP §12.3).
+
+### 18.5 Jadwal & manajemen
+- [ ] **Kunci sesi mendatang** sampai `start_at` (sekarang baru informatif).
+- [ ] **Edit** nama/deskripsi liga & sesi.
+- [ ] **Reshuffle / Finish round** eksplisit (PDLUP §12.4).
+
+### 18.6 Mobile & gamifikasi (fase lanjut)
+- [ ] **Mobile app (Expo)** memakai engine & Supabase yang sama.
+- [ ] **Badge/achievement** ringan (tanpa koin, sesuai keputusan §9.4).
+- [ ] **PWA / offline cache** untuk dipakai di lapangan tanpa sinyal stabil.
