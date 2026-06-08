@@ -114,6 +114,10 @@ export interface Session {
   lastRoundComplete: boolean;
   /** Boleh buka ronde berikutnya (ada lagi & ronde ini lengkap). */
   canAddRound: boolean;
+  /** Format terjadwal: tambah satu SIKLUS jadwal baru agar bisa lanjut main. */
+  extendSchedule: () => void;
+  /** Boleh menambah siklus (format terjadwal & ronde terakhir lengkap). */
+  canExtend: boolean;
   reshuffle: () => void;
   reset: () => void;
 }
@@ -222,6 +226,27 @@ export function useSession(
 
   const canAddRound = hasMoreRounds && lastRoundComplete;
 
+  // Format terjadwal habis setelah 1 siklus round-robin. Tombol ini menambah
+  // satu siklus baru (jumlah ronde = total ronde) lalu lanjut main. Selalu
+  // aktif untuk format terjadwal — tak perlu menunggu ronde terakhir lengkap.
+  const canExtend = isScheduledFormat(config.format);
+
+  const extendSchedule = useCallback(() => {
+    if (!isScheduledFormat(config.format)) return;
+    setRounds((prev) => {
+      const offset = prev.length
+        ? Math.max(...prev.map((r) => r.index)) + 1
+        : 0;
+      const fresh =
+        config.format === "americano"
+          ? generateAmericano(shuffle(players), { courts })
+          : generateTeamAmericano(shuffle(teamsRef.current), { courts });
+      const reindexed = fresh.map((r) => ({ ...r, index: r.index + offset }));
+      scheduleRef.current = [...(scheduleRef.current ?? []), ...reindexed];
+      return [...prev, ...reindexed];
+    });
+  }, [config.format, players, courts]);
+
   const nextRound = useCallback(() => {
     setRounds((prev) => {
       const idx = prev.length;
@@ -304,6 +329,8 @@ export function useSession(
     hasMoreRounds,
     lastRoundComplete,
     canAddRound,
+    extendSchedule,
+    canExtend,
     reshuffle,
     reset: onReset,
   };

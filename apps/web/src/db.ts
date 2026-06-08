@@ -369,6 +369,42 @@ export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
   });
 }
 
+export interface LatestLeague {
+  id: string;
+  name: string;
+  createdAt: number;
+  memberCount: number;
+  visibility: "private" | "public";
+  myStatus: "member" | "pending" | null;
+}
+
+/**
+ * Liga terbaru GLOBAL (private + public) untuk Beranda. RLS leagues = baca
+ * publik; "private" hanya membatasi bergabung, bukan menyembunyikan dari daftar.
+ */
+export async function latestLeagues(limit = 8): Promise<LatestLeague[]> {
+  const uid = await currentUserId();
+  const { data, error } = await db()
+    .from("leagues")
+    .select("id,name,created_at,visibility,league_users(user_id,status)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => {
+    const lu = r.league_users ?? [];
+    return {
+      id: r.id,
+      name: r.name,
+      createdAt: Date.parse(r.created_at),
+      memberCount: lu.filter((m: any) => m.status === "member").length,
+      visibility: (r.visibility ?? "private") as "private" | "public",
+      myStatus: uid
+        ? (lu.find((m: any) => m.user_id === uid)?.status ?? null)
+        : null,
+    };
+  });
+}
+
 /** Turnamen publik (untuk halaman Jelajah). */
 export async function discoverEvents(q?: string): Promise<DbEvent[]> {
   let query = db()
@@ -602,6 +638,45 @@ export async function listEvents(
   return (data ?? []).map(mapEvent);
 }
 
+/**
+ * Semua sesi yang BOLEH dilihat user (RLS yang menyaring): sesi sendiri +
+ * turnamen publik + sesi liga yang diikuti. Dipakai leaderboard & riwayat
+ * pemain global — beda dari listEvents() tanpa arg yang hanya sesi sendiri.
+ */
+export async function listVisibleEvents(): Promise<DbEvent[]> {
+  const { data, error } = await db()
+    .from("events")
+    .select(EVENT_COLS)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(mapEvent);
+}
+
+/**
+ * Turnamen yang KUIKUTI: yang kubuat (owner) ATAU yang menyertakan aku sebagai
+ * peserta (self-player-ku ada di player_ids). Untuk halaman "Kelola turnamen".
+ * Dua query lalu digabung — overlap array via .or() rawan salah-parse koma.
+ */
+export async function myInvolvedEvents(): Promise<DbEvent[]> {
+  const uid = await currentUserId();
+  if (!uid) return [];
+  const { data: pl } = await db().from("players").select("id").eq("user_id", uid);
+  const myPlayerIds = (pl ?? []).map((p: any) => p.id as string);
+
+  const queries = [db().from("events").select(EVENT_COLS).eq("owner_id", uid)];
+  if (myPlayerIds.length)
+    queries.push(
+      db().from("events").select(EVENT_COLS).overlaps("player_ids", myPlayerIds)
+    );
+
+  const byId = new Map<string, DbEvent>();
+  for (const { data, error } of await Promise.all(queries)) {
+    if (error) throw error;
+    for (const row of data ?? []) byId.set(row.id, mapEvent(row));
+  }
+  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+}
+
 export async function getEvent(id: string): Promise<DbEvent | undefined> {
   const { data, error } = await db()
     .from("events")
@@ -707,7 +782,7 @@ export async function globalStats(): Promise<{
   names: string[];
   eventCount: number;
 }> {
-  const events = await listEvents();
+  const events = await listVisibleEvents();
   const results = events.flatMap(eventResults);
   const names = Array.from(new Set(events.flatMap((e) => e.players)));
   return { results, names, eventCount: events.length };
@@ -728,7 +803,7 @@ export interface PlayerMatch {
 
 /** Riwayat match seorang pemain (by nama) lintas semua sesi, terbaru dulu. */
 export async function playerHistory(name: string): Promise<PlayerMatch[]> {
-  const events = await listEvents();
+  const events = await listVisibleEvents();
   const out: PlayerMatch[] = [];
   for (const e of events) {
     for (const { match, scoreA, scoreB } of eventResults(e)) {
