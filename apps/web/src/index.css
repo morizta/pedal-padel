@@ -117,6 +117,13 @@ body {
   font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
 }
 
+/* Placeholder untuk editor WYSIWYG (contenteditable kosong). */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-outline);
+  pointer-events: none;
+}
+
 /* Helpers dari mockup */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);

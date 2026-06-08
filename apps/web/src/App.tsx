@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   useAuth,
@@ -43,6 +43,8 @@ import {
   setLeagueMembers,
   deleteLeague,
   discoverLeagues,
+  discoverEvents,
+  discoverPlayers,
   requestJoin,
   joinWithCode,
   inviteUser,
@@ -67,6 +69,7 @@ type View =
   | { t: "home" }
   | { t: "leagues" }
   | { t: "league"; id: string }
+  | { t: "createLeague" }
   | { t: "create"; leagueId: string | null }
   | { t: "session"; id: string }
   | { t: "leaderboard" }
@@ -78,7 +81,7 @@ type TabKey = "home" | "leagues" | "main" | "rank" | "profile";
 
 const NAV_TABS: { key: TabKey; label: string; icon: string; view: View }[] = [
   { key: "home", label: "Beranda", icon: "dashboard", view: { t: "home" } },
-  { key: "leagues", label: "Liga", icon: "groups", view: { t: "leagues" } },
+  { key: "leagues", label: "Jelajah", icon: "explore", view: { t: "leagues" } },
   { key: "main", label: "Main", icon: "sports_tennis", view: { t: "create", leagueId: null } },
   { key: "rank", label: "Ranking", icon: "leaderboard", view: { t: "leaderboard" } },
   { key: "profile", label: "Profil", icon: "person", view: { t: "profile" } },
@@ -88,6 +91,7 @@ function activeTab(v: View): TabKey {
   switch (v.t) {
     case "leagues":
     case "league":
+    case "createLeague":
     case "discover":
       return "leagues";
     case "create":
@@ -118,7 +122,13 @@ export function App() {
         <DashboardScreen user={user} onNavigate={setView} />
       )}
       {view.t === "leagues" && (
-        <HomeScreen user={user} onNavigate={setView} />
+        <ExploreScreen user={user} onNavigate={setView} />
+      )}
+      {view.t === "createLeague" && (
+        <CreateLeagueScreen
+          onCreated={(id) => setView({ t: "league", id })}
+          onCancel={() => setView({ t: "leagues" })}
+        />
       )}
       {view.t === "league" && (
         <LeagueScreen leagueId={view.id} onNavigate={setView} />
@@ -278,6 +288,7 @@ function DashboardScreen({
   const statsQ = useAsync(() => globalStats(), []);
   const leaguesQ = useAsync(() => listLeagues(), []);
   const eventsQ = useAsync(() => listEvents(), []);
+  const discoverQ = useAsync(() => discoverLeagues(), []);
 
   if (!user) {
     return (
@@ -369,13 +380,13 @@ function DashboardScreen({
           Main Sekarang
         </button>
         <button
-          onClick={() => onNavigate({ t: "discover" })}
+          onClick={() => onNavigate({ t: "leagues" })}
           className="flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-semibold transition hover:border-primary-fixed-dim"
         >
           <span className="material-symbols-outlined text-on-surface-variant">
-            travel_explore
+            explore
           </span>
-          Jelajah Liga
+          Jelajah
         </button>
         <button
           onClick={() => onNavigate({ t: "leagues" })}
@@ -474,6 +485,46 @@ function DashboardScreen({
                       </span>
                       <span className="text-xs text-on-surface-variant">
                         {l.memberIds.length} pemain
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </DashCard>
+
+          <DashCard
+            title="Liga Terbaru"
+            action={
+              <button
+                onClick={() => onNavigate({ t: "leagues" })}
+                className="text-xs font-semibold text-primary"
+              >
+                Jelajah
+              </button>
+            }
+          >
+            {(discoverQ.data ?? []).length === 0 ? (
+              <DashEmpty text="Belum ada liga publik." />
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(discoverQ.data ?? []).slice(0, 4).map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => onNavigate({ t: "league", id: l.id })}
+                    className="flex items-center gap-2.5 rounded-xl border border-outline-variant/50 px-3 py-2.5 text-left hover:border-primary-fixed-dim"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container">
+                      <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                        public
+                      </span>
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">
+                        {l.name}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">
+                        {l.memberCount} anggota
                       </span>
                     </span>
                   </button>
@@ -964,238 +1015,309 @@ function StateText({
   return null;
 }
 
-function HomeScreen({
+function ExploreScreen({
   user,
   onNavigate,
 }: {
   user: User | null;
   onNavigate: (v: View) => void;
 }) {
-  const leagues = useAsync(() => listLeagues(), []);
-  const standalone = useAsync(() => listEvents(null), []);
-  const me = useAsync(() => globalStats(), []);
-  const [newLeague, setNewLeague] = useState("");
-  const [newLeagueDesc, setNewLeagueDesc] = useState("");
-  const [newVisibility, setNewVisibility] = useState<"private" | "public">(
-    "private"
+  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("liga");
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const leaguesQ = useAsync(() => discoverLeagues(), []);
+  const eventsQ = useAsync(() => discoverEvents(), []);
+  const [players, setPlayers] = useState<AccountUser[] | null>(null);
+
+  const [code, setCode] = useState("");
+
+  useEffect(() => {
+    if (tab !== "pemain") return;
+    let done = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await discoverPlayers(q);
+        if (!done) setPlayers(r);
+      } catch {
+        if (!done) setPlayers([]);
+      }
+    }, 300);
+    return () => {
+      done = true;
+      clearTimeout(t);
+    };
+  }, [q, tab]);
+
+  const term = q.trim().toLowerCase();
+  const ligaShown = (leaguesQ.data ?? []).filter(
+    (l) => !term || l.name.toLowerCase().includes(term)
   );
-  const [tab, setTab] = useState<"all" | "active" | "past">("all");
+  const turnamenShown = (eventsQ.data ?? []).filter(
+    (e) => !term || e.name.toLowerCase().includes(term)
+  );
+
+  async function joinByCode() {
+    if (!code.trim()) return;
+    setBusy(true);
+    try {
+      const id = await joinWithCode(code);
+      onNavigate({ t: "league", id });
+    } catch (e) {
+      alert("Gagal: " + errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function requestJoinLiga(id: string) {
+    setBusy(true);
+    try {
+      await requestJoin(id);
+      leaguesQ.reload();
+      alert("Permintaan terkirim. Menunggu persetujuan owner.");
+    } catch (e) {
+      alert("Gagal: " + errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!user) {
     return (
-      <Card title="Selamat datang di PedalPadel">
-        <p className="text-sm text-slate-500">
-          Klik <b>Masuk / Daftar</b> di kanan atas untuk membuat liga &
-          turnamen, dan menyimpan datanya di cloud.
+      <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
+        <span className="material-symbols-outlined mb-2 text-5xl text-primary-fixed-dim">
+          explore
+        </span>
+        <h2 className="font-display text-xl font-bold">Jelajah</h2>
+        <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
+          Masuk untuk menjelajah liga, turnamen, dan pemain.
         </p>
-      </Card>
+      </div>
     );
   }
-
-  async function addLeague() {
-    const name = newLeague.trim();
-    if (!name) return;
-    const lg = await createLeague(name, newVisibility, newLeagueDesc);
-    setNewLeague("");
-    setNewLeagueDesc("");
-    onNavigate({ t: "league", id: lg.id });
-  }
-
-  const lgList = leagues.data ?? [];
-
-  // Rank pemilik akun (self-player) di leaderboard ELO miliknya.
-  const myRank = (() => {
-    if (!me.data) return null;
-    const played = computeRatings(me.data.names, me.data.results).filter(
-      (r) => r.matchesPlayed > 0
-    );
-    const idx = played.findIndex((r) => r.name === displayName(user));
-    if (idx < 0) return null;
-    return {
-      rank: idx + 1,
-      total: played.length,
-      rating: Math.round(played[idx]!.rating),
-    };
-  })();
-
-  const allEvents = standalone.data ?? [];
-  const events =
-    tab === "all"
-      ? allEvents
-      : allEvents.filter((e) =>
-          tab === "active" ? e.status === "live" : e.status === "finished"
-        );
 
   return (
-    <div className="space-y-6">
-      <button
-        onClick={() => onNavigate({ t: "leaderboard" })}
-        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-lime-400 hover:bg-lime-50/40"
-      >
-        <span className="min-w-0">
-          <span className="block font-semibold">🏅 Pemain &amp; Ranking</span>
-          <span className="block text-sm text-slate-400">
-            {myRank
-              ? `Rank-mu #${myRank.rank} dari ${myRank.total} · ELO ${myRank.rating}`
-              : "Daftar pemain + leaderboard ELO dari semua sesimu"}
-          </span>
-        </span>
-        <span className="shrink-0 text-xl text-slate-300">›</span>
-      </button>
+    <div className="space-y-5">
+      <div>
+        <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
+          <span className="material-symbols-outlined text-primary">explore</span>
+          Jelajah
+        </h2>
+        <p className="text-sm text-on-surface-variant">
+          Temukan liga, turnamen, dan pemain.
+        </p>
+      </div>
 
-      <Card title="🏆 Liga">
-        <div className="mb-2 flex gap-2">
-          <input
-            value={newLeague}
-            onChange={(e) => setNewLeague(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addLeague()}
-            placeholder="Nama liga baru… (mis. Liga Tarkam 2026)"
-            className="input flex-1"
-          />
+      {/* Tab full-width (segmented) */}
+      <div className="flex rounded-2xl border border-outline-variant/40 bg-surface-container p-1 shadow-sm">
+        {(
+          [
+            ["liga", "Liga", "emoji_events"],
+            ["turnamen", "Turnamen", "sports_tennis"],
+            ["pemain", "Pemain", "group"],
+          ] as const
+        ).map(([k, l, icon]) => (
           <button
-            onClick={addLeague}
-            className="rounded-lg bg-primary-fixed px-4 text-sm font-semibold text-on-primary-fixed hover:bg-primary-fixed-dim"
+            key={k}
+            onClick={() => setTab(k)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition ${
+              tab === k
+                ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface"
+            }`}
           >
-            + Liga
-          </button>
-        </div>
-        <input
-          value={newLeagueDesc}
-          onChange={(e) => setNewLeagueDesc(e.target.value)}
-          placeholder="Deskripsi liga (opsional)…"
-          className="input mb-2 w-full"
-        />
-        <div className="mb-4 flex items-center gap-2">
-          <Toggle
-            value={newVisibility === "private"}
-            onChange={(v) => setNewVisibility(v ? "private" : "public")}
-            onLabel="🔒 Private"
-            offLabel="🌐 Public"
-          />
-          <span className="text-xs text-slate-400">
-            {newVisibility === "private"
-              ? "Gabung lewat kode / undangan."
-              : "Bisa ditemukan & di-request gabung (perlu approval)."}
-          </span>
-        </div>
-        <button
-          onClick={() => onNavigate({ t: "discover" })}
-          className="mb-4 w-full rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
-        >
-          🔍 Cari &amp; gabung liga lain
-        </button>
-        <StateText
-          loading={leagues.loading}
-          error={leagues.error}
-          empty={lgList.length === 0}
-          emptyText="Belum ikut liga. Buat baru atau cari liga lain."
-        />
-        <ul className="space-y-2">
-          {lgList.map((l) => (
-            <li
-              key={l.id}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 hover:border-lime-400 hover:bg-lime-50/40"
+            <span
+              className={`material-symbols-outlined text-[18px] ${
+                tab === k ? "fill text-primary" : ""
+              }`}
             >
-              <button
-                onClick={() => onNavigate({ t: "league", id: l.id })}
-                className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">
-                    {l.visibility === "private" ? "🔒" : "🌐"} {l.name}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {l.memberIds.length} pemain · {fmtDate(l.createdAt)}
-                    {l.myRole && l.myRole !== "owner"
-                      ? ` · ${l.myRole === "admin" ? "admin" : "anggota"}`
-                      : ""}
-                  </span>
-                </span>
-              </button>
-              {l.myRole === "owner" ? (
-                <button
-                  onClick={async () => {
-                    if (
-                      confirm(
-                        `Hapus liga "${l.name}"? Sesi di dalamnya jadi turnamen lepas (tidak ikut terhapus).`
-                      )
-                    ) {
-                      await deleteLeague(l.id);
-                      leagues.reload();
-                      standalone.reload();
-                    }
-                  }}
-                  className="shrink-0 rounded-lg px-2 py-1 text-slate-300 hover:bg-red-50 hover:text-red-600"
-                  aria-label="Hapus liga"
-                  title="Hapus liga"
-                >
-                  🗑
-                </button>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (confirm(`Keluar dari liga "${l.name}"?`)) {
-                      await leaveLeague(l.id);
-                      leagues.reload();
-                    }
-                  }}
-                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  title="Keluar liga"
-                >
-                  Keluar
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
+              {icon}
+            </span>
+            {l}
+          </button>
+        ))}
+      </div>
 
-      <Card title="🎾 Turnamen Lepas">
+      <div className="relative">
+        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline">
+          search
+        </span>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={
+            tab === "pemain"
+              ? "Cari pemain / @username…"
+              : tab === "turnamen"
+                ? "Cari turnamen…"
+                : "Cari liga…"
+          }
+          className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => onNavigate({ t: "createLeague" })}
+          className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined text-[20px]">add</span>
+          Buat Liga
+        </button>
         <button
           onClick={() => onNavigate({ t: "create", leagueId: null })}
-          className="mb-4 w-full rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
+          className="flex items-center gap-1.5 rounded-xl border border-outline-variant px-4 py-2.5 font-semibold transition hover:bg-surface-container-low"
         >
-          + Buat Turnamen Lepas
+          <span className="material-symbols-outlined text-[20px]">add</span>
+          Buat Turnamen
         </button>
-        {allEvents.length > 0 && (
-          <div className="mb-3 flex gap-1.5">
-            {(
-              [
-                ["all", "Semua"],
-                ["active", "Aktif"],
-                ["past", "Selesai"],
-              ] as const
-            ).map(([key, label]) => (
-              <Chip
-                key={key}
-                active={tab === key}
-                onClick={() => setTab(key)}
-                label={label}
-              />
-            ))}
+      </div>
+
+      {tab === "liga" && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="Punya kode liga? Masukkan…"
+              className="input flex-1 font-data-mono tracking-wider"
+            />
+            <button
+              onClick={joinByCode}
+              disabled={busy || !code.trim()}
+              className="rounded-lg bg-navy px-4 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Gabung
+            </button>
           </div>
-        )}
-        <StateText
-          loading={standalone.loading}
-          error={standalone.error}
-          empty={events.length === 0}
-          emptyText={
-            allEvents.length === 0
-              ? "Belum ada turnamen."
-              : tab === "active"
-                ? "Tidak ada turnamen aktif."
-                : "Tidak ada turnamen selesai."
-          }
-        />
-        <EventList
-          events={events}
-          onOpen={(id) => onNavigate({ t: "session", id })}
-          onDelete={async (id) => {
-            await deleteEvent(id);
-            standalone.reload();
-          }}
-        />
-      </Card>
+          <StateText
+            loading={leaguesQ.loading}
+            error={leaguesQ.error}
+            empty={!leaguesQ.loading && ligaShown.length === 0}
+            emptyText="Tidak ada liga publik."
+          />
+          <ul className="space-y-2">
+            {ligaShown.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 shadow-sm"
+              >
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
+                  <span className="material-symbols-outlined text-on-surface-variant">
+                    emoji_events
+                  </span>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{l.name}</div>
+                  <div className="text-xs text-on-surface-variant">
+                    {l.memberCount} anggota · {fmtDate(l.createdAt)}
+                  </div>
+                </div>
+                {l.myStatus === "member" ? (
+                  <button
+                    onClick={() => onNavigate({ t: "league", id: l.id })}
+                    className="shrink-0 rounded-lg bg-primary-container px-3 py-1.5 text-sm font-semibold text-on-primary-container hover:brightness-95"
+                  >
+                    Buka
+                  </button>
+                ) : l.myStatus === "pending" ? (
+                  <span className="shrink-0 rounded-lg bg-elo-gold/15 px-3 py-1.5 text-sm font-semibold text-elo-bronze">
+                    Menunggu
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => requestJoinLiga(l.id)}
+                    disabled={busy}
+                    className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    Join
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tab === "turnamen" && (
+        <div>
+          <StateText
+            loading={eventsQ.loading}
+            error={eventsQ.error}
+            empty={!eventsQ.loading && turnamenShown.length === 0}
+            emptyText="Tidak ada turnamen publik."
+          />
+          <ul className="space-y-2">
+            {turnamenShown.map((e) => (
+              <li key={e.id}>
+                <button
+                  onClick={() => onNavigate({ t: "session", id: e.id })}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+                >
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
+                    <span className="material-symbols-outlined text-on-surface-variant">
+                      sports_tennis
+                    </span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">
+                      {e.name}
+                    </span>
+                    <span className="text-xs text-on-surface-variant">
+                      {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                      {fmtDate(e.startAt ?? e.createdAt)}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
+                      e.status === "finished"
+                        ? "bg-surface-container text-on-surface-variant"
+                        : "bg-primary-container text-on-primary-container"
+                    }`}
+                  >
+                    {e.status === "finished" ? "SELESAI" : "LIVE"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tab === "pemain" && (
+        <div>
+          <StateText
+            loading={players === null}
+            error={null}
+            empty={players !== null && players.length === 0}
+            emptyText="Tidak ada pemain."
+          />
+          <ul className="space-y-2">
+            {(players ?? []).map((p) => (
+              <li key={p.userId}>
+                <button
+                  onClick={() => onNavigate({ t: "player", name: p.name })}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+                >
+                  <TeamAvatar name={p.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">
+                      {p.name}
+                    </span>
+                    {p.username && (
+                      <span className="text-xs text-on-surface-variant">
+                        @{p.username}
+                      </span>
+                    )}
+                  </span>
+                  <span className="material-symbols-outlined text-outline">
+                    chevron_right
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -2096,13 +2218,44 @@ function LeagueScreen({
               )}
             </div>
           </div>
-          <button
-            onClick={() => onNavigate({ t: "create", leagueId })}
-            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
-          >
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            Tambah Sesi
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <button
+              onClick={() => onNavigate({ t: "create", leagueId })}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">add</span>
+              Tambah Sesi
+            </button>
+            {league.myRole === "owner" ? (
+              <button
+                onClick={async () => {
+                  if (
+                    confirm(
+                      `Hapus liga "${league.name}"? Sesi di dalamnya jadi turnamen lepas.`
+                    )
+                  ) {
+                    await deleteLeague(league.id);
+                    onNavigate({ t: "leagues" });
+                  }
+                }}
+                className="font-label-caps text-label-caps text-white/50 transition hover:text-loss-red"
+              >
+                Hapus liga
+              </button>
+            ) : league.myRole ? (
+              <button
+                onClick={async () => {
+                  if (confirm(`Keluar dari liga "${league.name}"?`)) {
+                    await leaveLeague(league.id);
+                    onNavigate({ t: "leagues" });
+                  }
+                }}
+                className="font-label-caps text-label-caps text-white/50 transition hover:text-loss-red"
+              >
+                Keluar liga
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -2521,6 +2674,379 @@ const FORMATS: { id: Format; name: string; desc: string }[] = [
 
 const POINT_OPTIONS = [16, 21, 24, 32, 0]; // 0 = Undefined / bebas
 const NORMAL_TARGETS = [3, 4, 5, 6, 7];
+
+/** Editor WYSIWYG ringan (contentEditable + execCommand) — ramah mobile. */
+function RichText({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== value)
+      ref.current.innerHTML = value;
+    // sekali saat mount saja
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const cmd = (c: string) => {
+    document.execCommand(c, false);
+    ref.current?.focus();
+    onChange(ref.current?.innerHTML ?? "");
+  };
+  const Btn = ({ c, icon }: { c: string; icon: string }) => (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => cmd(c)}
+      className="grid h-8 w-8 place-items-center rounded text-on-surface-variant hover:bg-surface-container-high"
+    >
+      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+    </button>
+  );
+  return (
+    <div className="overflow-hidden rounded-lg border border-outline-variant">
+      <div className="flex gap-0.5 border-b border-outline-variant/50 bg-surface-container-low p-1">
+        <Btn c="bold" icon="format_bold" />
+        <Btn c="italic" icon="format_italic" />
+        <Btn c="insertUnorderedList" icon="format_list_bulleted" />
+        <Btn c="insertOrderedList" icon="format_list_numbered" />
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => onChange(ref.current?.innerHTML ?? "")}
+        data-placeholder={placeholder}
+        className="min-h-24 px-3 py-2 text-sm outline-none [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+      />
+    </div>
+  );
+}
+
+/** Baca file gambar → data URL terkompres (maks sisi terpanjang `max` px). */
+function readImageDataUrl(file: File, max = 256): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.75));
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Halaman buat liga (proper): foto, nama, deskripsi, notes (WYSIWYG),
+ *  visibilitas, dan tambah anggota (undang akun / tamu). */
+function CreateLeagueScreen({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (id: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<"private" | "public">("private");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // anggota
+  const [invited, setInvited] = useState<AccountUser[]>([]);
+  const [guests, setGuests] = useState<string[]>([]);
+  const [accQ, setAccQ] = useState("");
+  const [accHits, setAccHits] = useState<AccountUser[]>([]);
+  const [guestName, setGuestName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const t = accQ.trim();
+    if (t.length < 3) {
+      setAccHits([]);
+      return;
+    }
+    const tm = setTimeout(async () => {
+      try {
+        const r = await searchAccounts(t);
+        const have = new Set(invited.map((u) => u.userId));
+        setAccHits(r.filter((u) => !have.has(u.userId)));
+      } catch {
+        setAccHits([]);
+      }
+    }, 300);
+    return () => clearTimeout(tm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accQ, invited.length]);
+
+  async function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) {
+      try {
+        setPhoto(await readImageDataUrl(f));
+      } catch {
+        alert("Gagal membaca gambar.");
+      }
+    }
+  }
+
+  function addGuest() {
+    const n = guestName.trim();
+    if (n && !guests.includes(n)) setGuests([...guests, n]);
+    setGuestName("");
+  }
+
+  async function submit() {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const lg = await createLeague({
+        name,
+        visibility,
+        description,
+        notes,
+        photoUrl: photo,
+      });
+      // Undang akun
+      for (const u of invited) {
+        try {
+          await inviteUser(lg.id, u.userId);
+        } catch {
+          /* lanjut */
+        }
+      }
+      // Tambah tamu ke roster
+      if (guests.length) {
+        const ids: string[] = [];
+        for (const g of guests) {
+          const p = await createPlayer(g, { guest: true });
+          if (p) ids.push(p.id);
+        }
+        if (ids.length) await setLeagueMembers(lg.id, ids);
+      }
+      onCreated(lg.id);
+    } catch (e) {
+      alert("Gagal membuat liga: " + errMsg(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-5">
+      <button
+        onClick={onCancel}
+        className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+      >
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        Kembali
+      </button>
+
+      <h2 className="font-display text-2xl font-bold">Buat Liga</h2>
+
+      <Card title="🏆 Info Liga">
+        {/* Foto */}
+        <div className="mb-4 flex items-center gap-4">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-outline-variant bg-surface-container-low hover:border-primary-fixed-dim"
+          >
+            {photo ? (
+              <img src={photo} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="material-symbols-outlined text-on-surface-variant">
+                add_a_photo
+              </span>
+            )}
+          </button>
+          <div className="text-sm">
+            <div className="font-semibold">Foto liga (opsional)</div>
+            <div className="text-on-surface-variant">
+              Ketuk untuk pilih gambar.
+            </div>
+            {photo && (
+              <button
+                onClick={() => setPhoto(null)}
+                className="mt-1 text-xs font-medium text-loss-red hover:underline"
+              >
+                Hapus foto
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={pickPhoto}
+            className="hidden"
+          />
+        </div>
+
+        <Field label="Nama liga">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="mis. Liga Tarkam 2026"
+            className="input w-full"
+          />
+        </Field>
+
+        <Field label="Deskripsi (opsional)">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Deskripsi singkat liga…"
+            rows={2}
+            className="input w-full resize-y"
+          />
+        </Field>
+
+        <Field label="Notes (opsional)">
+          <RichText
+            value={notes}
+            onChange={setNotes}
+            placeholder="Aturan, jadwal, info lain… (bisa tebal/miring/daftar)"
+          />
+        </Field>
+
+        <Field label="Visibilitas">
+          <Toggle
+            value={visibility === "private"}
+            onChange={(v) => setVisibility(v ? "private" : "public")}
+            onLabel="🔒 Private"
+            offLabel="🌐 Public"
+          />
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {visibility === "private"
+              ? "Gabung lewat kode / undangan."
+              : "Muncul di Jelajah; orang bisa request gabung (perlu approval)."}
+          </p>
+        </Field>
+      </Card>
+
+      <Card title="👥 Anggota Awal (opsional)">
+        {/* Undang akun */}
+        <Field label="Undang akun (@username)">
+          <div className="relative">
+            <input
+              value={accQ}
+              onChange={(e) => setAccQ(e.target.value)}
+              placeholder="Cari nama / @username…"
+              className="input w-full"
+            />
+            {accHits.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                {accHits.map((u) => (
+                  <li key={u.userId}>
+                    <button
+                      onClick={() => {
+                        setInvited([...invited, u]);
+                        setAccQ("");
+                        setAccHits([]);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary-container/40"
+                    >
+                      <TeamAvatar name={u.name} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {u.name}
+                        {u.username && (
+                          <span className="text-on-surface-variant">
+                            {" "}
+                            @{u.username}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs font-medium text-primary">
+                        Undang
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Field>
+
+        {/* Tambah tamu */}
+        <Field label="Tambah tamu (tanpa akun)">
+          <div className="flex gap-2">
+            <input
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addGuest()}
+              placeholder="Nama tamu…"
+              className="input flex-1"
+            />
+            <button
+              onClick={addGuest}
+              className="rounded-lg bg-navy px-4 text-sm font-semibold text-white"
+            >
+              Tambah
+            </button>
+          </div>
+        </Field>
+
+        {(invited.length > 0 || guests.length > 0) && (
+          <ul className="flex flex-wrap gap-2">
+            {invited.map((u) => (
+              <li
+                key={"u" + u.userId}
+                className="flex items-center gap-1.5 rounded-full bg-sky-100 py-1 pl-2 pr-1 text-sm text-sky-800"
+              >
+                <TeamAvatar name={u.name} />
+                {u.name}
+                <button
+                  onClick={() =>
+                    setInvited(invited.filter((x) => x.userId !== u.userId))
+                  }
+                  className="grid h-5 w-5 place-items-center rounded-full hover:bg-black/10"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+            {guests.map((g) => (
+              <li
+                key={"g" + g}
+                className="flex items-center gap-1.5 rounded-full bg-amber-100 py-1 pl-2 pr-1 text-sm text-amber-800"
+              >
+                <TeamAvatar name={g} />
+                {g}
+                <span className="text-[10px] uppercase">tamu</span>
+                <button
+                  onClick={() => setGuests(guests.filter((x) => x !== g))}
+                  className="grid h-5 w-5 place-items-center rounded-full hover:bg-black/10"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <button
+        onClick={submit}
+        disabled={busy || !name.trim()}
+        className="w-full rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
+      >
+        {busy ? "Membuat…" : "Buat Liga"}
+      </button>
+    </div>
+  );
+}
 
 function CreateScreen({
   leagueId,

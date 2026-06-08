@@ -209,6 +209,8 @@ export interface League {
   id: string;
   name: string;
   description: string | null;
+  notes: string | null;
+  photoUrl: string | null;
   createdAt: number;
   memberIds: string[];
   visibility: "private" | "public";
@@ -218,13 +220,15 @@ export interface League {
 }
 
 const LEAGUE_COLS =
-  "id,name,description,created_at,visibility,join_code,league_members(player_id)";
+  "id,name,description,notes,photo_url,created_at,visibility,join_code,league_members(player_id)";
 
 function mapLeague(r: any, myRole: League["myRole"] = null): League {
   return {
     id: r.id,
     name: r.name,
     description: r.description ?? null,
+    notes: r.notes ?? null,
+    photoUrl: r.photo_url ?? null,
     createdAt: Date.parse(r.created_at),
     memberIds: (r.league_members ?? []).map((m: any) => m.player_id),
     visibility: r.visibility ?? "private",
@@ -279,19 +283,26 @@ export async function getLeague(id: string): Promise<League | undefined> {
   return mapLeague(data, role);
 }
 
-export async function createLeague(
-  name: string,
-  visibility: "private" | "public" = "private",
-  description?: string
-): Promise<League> {
+export interface NewLeague {
+  name: string;
+  visibility?: "private" | "public";
+  description?: string;
+  notes?: string;
+  photoUrl?: string | null;
+}
+
+export async function createLeague(input: NewLeague): Promise<League> {
   const owner = await currentUserId();
   if (!owner) throw new Error("Harus login untuk membuat liga.");
+  const visibility = input.visibility ?? "private";
   const { data, error } = await db()
     .from("leagues")
     .insert({
-      name: name.trim() || "Liga Tanpa Nama",
+      name: input.name.trim() || "Liga Tanpa Nama",
       owner_id: owner,
-      description: description?.trim() || null,
+      description: input.description?.trim() || null,
+      notes: input.notes?.trim() || null,
+      photo_url: input.photoUrl || null,
       visibility,
       join_code: visibility === "private" ? genJoinCode() : null,
     })
@@ -356,6 +367,41 @@ export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
         : null,
     };
   });
+}
+
+/** Turnamen publik (untuk halaman Jelajah). */
+export async function discoverEvents(q?: string): Promise<DbEvent[]> {
+  let query = db()
+    .from("events")
+    .select(EVENT_COLS)
+    .eq("visibility", "public")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (q && q.trim()) query = query.ilike("name", `%${q.trim()}%`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(mapEvent);
+}
+
+/** Daftar/cari pemain akun (untuk halaman Jelajah). */
+export async function discoverPlayers(q?: string): Promise<AccountUser[]> {
+  let query = db()
+    .from("profiles")
+    .select("id,name,username,avatar_url")
+    .order("name")
+    .limit(50);
+  if (q && q.trim())
+    query = query.or(
+      `name.ilike.%${q.trim()}%,username.ilike.%${q.trim()}%`
+    );
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map((p: any) => ({
+    userId: p.id,
+    name: p.name ?? p.username ?? "Pemain",
+    username: p.username,
+    avatarUrl: p.avatar_url,
+  }));
 }
 
 /** Request gabung liga public → status pending (perlu approval). */

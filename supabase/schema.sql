@@ -65,6 +65,9 @@ alter table public.events
 alter table public.events  add column if not exists description text;
 alter table public.events  add column if not exists start_at timestamptz;
 alter table public.leagues add column if not exists description text;
+-- Notes (HTML dari editor) + foto (data URL / link) liga.
+alter table public.leagues add column if not exists notes text;
+alter table public.leagues add column if not exists photo_url text;
 
 -- Username unik (handle) + avatar untuk profil.
 alter table public.profiles add column if not exists username   text;
