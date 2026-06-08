@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitignore
+*.log
+.DS_Store
+# Jangan ikutkan .env ke image (kredensial dilewatkan via build args)
+**/.env
+**/.env.*
+!**/.env.example
+Dockerfile
+docker-compose.yml
+.dockerignore

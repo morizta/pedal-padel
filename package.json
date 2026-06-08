@@ -1,0 +1,14 @@
+{
+  "name": "pedal-padel",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Aplikasi matchmaking padel dengan leaderboard individual (ELO)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace=@pedal/engine",
+    "build:engine": "npm run build --workspace=@pedal/engine"
+  }
+}
