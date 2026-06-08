@@ -212,12 +212,14 @@ export interface League {
   memberIds: string[];
   visibility: "private" | "public";
   joinCode: string | null;
+  /** Peran user saat ini di liga ini (null bila bukan anggota). */
+  myRole: "owner" | "admin" | "member" | null;
 }
 
 const LEAGUE_COLS =
   "id,name,created_at,visibility,join_code,league_members(player_id)";
 
-function mapLeague(r: any): League {
+function mapLeague(r: any, myRole: League["myRole"] = null): League {
   return {
     id: r.id,
     name: r.name,
@@ -225,6 +227,7 @@ function mapLeague(r: any): League {
     memberIds: (r.league_members ?? []).map((m: any) => m.player_id),
     visibility: r.visibility ?? "private",
     joinCode: r.join_code ?? null,
+    myRole,
   };
 }
 
@@ -236,26 +239,42 @@ function genJoinCode(): string {
   return s;
 }
 
+/** Liga yang user ikuti (sebagai anggota) — termasuk yang dibuat sendiri. */
 export async function listLeagues(): Promise<League[]> {
-  const owner = await currentUserId();
-  if (!owner) return [];
+  const uid = await currentUserId();
+  if (!uid) return [];
   const { data, error } = await db()
-    .from("leagues")
-    .select(LEAGUE_COLS)
-    .eq("owner_id", owner)
-    .order("created_at", { ascending: false });
+    .from("league_users")
+    .select(`role, leagues(${LEAGUE_COLS})`)
+    .eq("user_id", uid)
+    .eq("status", "member");
   if (error) throw error;
-  return (data ?? []).map(mapLeague);
+  return (data ?? [])
+    .filter((r: any) => r.leagues)
+    .map((r: any) => mapLeague(r.leagues, r.role))
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function getLeague(id: string): Promise<League | undefined> {
+  const uid = await currentUserId();
   const { data, error } = await db()
     .from("leagues")
     .select(LEAGUE_COLS)
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return data ? mapLeague(data) : undefined;
+  if (!data) return undefined;
+  let role: League["myRole"] = null;
+  if (uid) {
+    const { data: mem } = await db()
+      .from("league_users")
+      .select("role,status")
+      .eq("league_id", id)
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (mem?.status === "member") role = mem.role;
+  }
+  return mapLeague(data, role);
 }
 
 export async function createLeague(
@@ -297,6 +316,167 @@ export async function setLeagueMembers(
     const { error } = await client.from("league_members").insert(rows);
     if (error) throw error;
   }
+}
+
+/* ---------- Sosial: discover / join / anggota ---------- */
+
+export interface DiscoverLeague {
+  id: string;
+  name: string;
+  createdAt: number;
+  memberCount: number;
+  myStatus: "member" | "pending" | null;
+}
+
+/** Liga PUBLIC yang bisa ditemukan & di-request gabung. */
+export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
+  const uid = await currentUserId();
+  let query = db()
+    .from("leagues")
+    .select("id,name,created_at,league_users(user_id,status)")
+    .eq("visibility", "public")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (q && q.trim()) query = query.ilike("name", `%${q.trim()}%`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map((r: any) => {
+    const lu = r.league_users ?? [];
+    return {
+      id: r.id,
+      name: r.name,
+      createdAt: Date.parse(r.created_at),
+      memberCount: lu.filter((m: any) => m.status === "member").length,
+      myStatus: uid
+        ? (lu.find((m: any) => m.user_id === uid)?.status ?? null)
+        : null,
+    };
+  });
+}
+
+/** Request gabung liga public → status pending (perlu approval). */
+export async function requestJoin(leagueId: string): Promise<void> {
+  const { error } = await db().rpc("request_join", { lid: leagueId });
+  if (error) throw error;
+}
+
+/** Gabung liga private via kode → langsung member. Mengembalikan id liga. */
+export async function joinWithCode(code: string): Promise<string> {
+  const { data, error } = await db().rpc("join_with_code", {
+    code: code.trim().toUpperCase(),
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Undang user (oleh admin/owner) → langsung member. */
+export async function inviteUser(
+  leagueId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await db().rpc("invite_user", {
+    lid: leagueId,
+    uid: userId,
+  });
+  if (error) throw error;
+}
+
+export interface LeagueMember {
+  userId: string;
+  status: "pending" | "member";
+  role: "owner" | "admin" | "member";
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+}
+
+/** Daftar anggota + permintaan pending sebuah liga (dengan profil). */
+export async function listLeagueMembers(
+  leagueId: string
+): Promise<LeagueMember[]> {
+  const { data: lus, error } = await db()
+    .from("league_users")
+    .select("user_id,status,role,created_at")
+    .eq("league_id", leagueId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  const ids = (lus ?? []).map((m: any) => m.user_id);
+  const profs = new Map<string, any>();
+  if (ids.length) {
+    const { data: ps } = await db()
+      .from("profiles")
+      .select("id,name,username,avatar_url")
+      .in("id", ids);
+    for (const p of ps ?? []) profs.set(p.id, p);
+  }
+  return (lus ?? []).map((m: any) => {
+    const p = profs.get(m.user_id);
+    return {
+      userId: m.user_id,
+      status: m.status,
+      role: m.role,
+      name: p?.name ?? p?.username ?? "Pemain",
+      username: p?.username ?? null,
+      avatarUrl: p?.avatar_url ?? null,
+    };
+  });
+}
+
+/** Keluar dari liga (diri sendiri). */
+export async function leaveLeague(leagueId: string): Promise<void> {
+  const uid = await currentUserId();
+  if (uid) await removeMember(leagueId, uid);
+}
+
+/** Setujui permintaan gabung (admin/owner). */
+export async function approveMember(
+  leagueId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await db()
+    .from("league_users")
+    .update({ status: "member" })
+    .eq("league_id", leagueId)
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+/** Tolak permintaan / keluarkan anggota (admin/owner) atau keluar sendiri. */
+export async function removeMember(
+  leagueId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await db()
+    .from("league_users")
+    .delete()
+    .eq("league_id", leagueId)
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+export interface AccountUser {
+  userId: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+}
+
+/** Cari user akun (untuk invite) — mengembalikan user_id (= auth/profile id). */
+export async function searchAccounts(query: string): Promise<AccountUser[]> {
+  const q = query.trim().replace(/[%,]/g, "");
+  if (!q) return [];
+  const { data, error } = await db()
+    .from("profiles")
+    .select("id,name,username,avatar_url")
+    .or(`name.ilike.%${q}%,username.ilike.%${q}%`)
+    .limit(15);
+  if (error) throw error;
+  return (data ?? []).map((p: any) => ({
+    userId: p.id,
+    name: p.name ?? p.username ?? "Pemain",
+    username: p.username,
+    avatarUrl: p.avatar_url,
+  }));
 }
 
 /* ---------- Event ---------- */
