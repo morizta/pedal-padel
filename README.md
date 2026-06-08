@@ -111,10 +111,13 @@ Build multi-stage: Vite build statis → disajikan via nginx. Env Supabase di-*i
 ## 📌 Status
 
 - [x] Engine: ELO, Americano, Mexicano, Team, standings — **39 test lolos**
-- [x] Web SPA: setup pemain → generate ronde → input skor → leaderboard event + ELO global
+- [x] Web SPA: setup pemain → ronde → input skor → klasemen event + ELO
+- [x] Format Team (auto/manual pairing + preview tim)
 - [x] Integrasi Supabase (skema, auth, persistensi)
-- [ ] Format Mexicano & King of the Hill di UI
-- [ ] Halaman profil & history pemain
-- [ ] Share link publik leaderboard
+- [x] Leaderboard ELO global + profil pemain & riwayat match
+- [x] Home dashboard: rank-mu + filter turnamen All/Aktif/Selesai
+- [x] Sosial: liga Private/Public, gabung via kode/invite/approval ([DESIGN.md §14](DESIGN.md))
+- [ ] Format King of the Hill di UI
+- [ ] Live scoreboard + share link publik (Supabase Realtime)
 
-Roadmap detail per fase ada di [DESIGN.md §8](DESIGN.md).
+Roadmap & status detail ada di [DESIGN.md §11](DESIGN.md).

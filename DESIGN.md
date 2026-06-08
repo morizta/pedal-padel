@@ -269,14 +269,27 @@ bisa memakai lebih sedikit lapangan.
 
 ## 11. Status & Langkah Berikutnya
 
+**Selesai:**
 - [x] Monorepo (npm workspaces) + git
-- [x] Engine: ELO, Americano, Mexicano, standings + 22 test lolos
+- [x] Engine: ELO, Americano, Mexicano, Team, standings + 39 test lolos
 - [x] `apps/web` — Vite + React + TS + Tailwind v4 (build & dev OK)
-- [x] UI demo Americano: setup pemain → generate ronde → input skor →
-      klasemen event + leaderboard ELO global (in-memory, real-time saat ketik)
-- [ ] Integrasi Supabase (skema DB §4 + Auth + Realtime) — persistensi
-- [ ] Auth pemain & event multi-user, simpan RatingHistory
-- [ ] Format Mexicano & King of the Hill di UI
+- [x] UI Americano/Mexicano/Team: setup → ronde → input skor → klasemen event
+- [x] Format **Team** (Americano/Mexicano) dengan pasangan **auto/manual**
+      (preview tim sebelum mulai; editor susun tim slot + isi kursi)
+- [x] **Supabase**: skema penuh (`supabase/schema.sql`) + Auth + persistensi
+- [x] Auth pemain & multi-user; profil + username
+- [x] **ELO Leaderboard global** — layar "Pemain & Ranking" (rating, keandalan,
+      W-L, win-rate; dihitung dari semua sesi)
+- [x] **Profil pemain + riwayat match** (tap pemain → rating, statistik, riwayat)
+- [x] **Home dashboard** — rank-mu + filter turnamen All/Aktif/Selesai
+- [x] **Sosial**: liga Private/Public, gabung via kode/invite/approval,
+      kelola anggota & role (lihat §14)
+
+**Berikutnya:**
+- [ ] Format King of the Hill di UI
+- [ ] Simpan RatingHistory di DB (ELO dipersist, bukan dihitung ulang)
+- [ ] Live scoreboard real-time + share link publik (Supabase Realtime)
+- [ ] Layar "Pemain & Ranking" ditarik per-liga (leaderboard per komunitas)
 
 Jalankan: `npm install` lalu `npm run dev --workspace=@pedal/web`
 (buka http://localhost:5173). Test engine: `npm test`.
@@ -403,9 +416,49 @@ pertandingan + statistik (menang/kalah, poin, lawan). Klasemen liga = agregasi
 3. Tambah Auth (login/daftar) + halaman **Profil** & **History**.
 4. Share link liga/turnamen (read-only publik).
 
-### 13.5 Status polish UI (selesai sebagian)
+### 13.5 Status polish UI
 - [x] Hapus sesi & liga (konfirmasi) + auto-refresh
 - [x] Tanggal & info format di kartu sesi
+- [x] Halaman profil & history pemain (§14)
 - [ ] Edit nama sesi/liga
-- [ ] Halaman profil & history (butuh Supabase)
-- [ ] Share link publik (butuh Supabase)
+- [ ] Share link publik read-only (butuh Supabase Realtime)
+
+---
+
+## 14. Fitur Sosial (multi-user) — terimplementasi
+
+Liga/turnamen bisa diikuti banyak user dengan kontrol akses. Skema di
+`supabase/schema.sql` (tabel `league_users`, RPC, RLS).
+
+### 14.1 Model visibilitas & gabung
+| Visibilitas | Cara gabung |
+|---|---|
+| **Private** | Kode undangan (`join_code`) atau invite langsung by @username → **langsung member** |
+| **Public** | Muncul di Discover → **request join** → status `pending` → owner/admin **approve** |
+
+Selalu ada jalur **invite oleh owner/admin** di kedua mode.
+
+### 14.2 Data & keamanan
+- **`league_users`** (`league_id`, `user_id`, `status` pending|member, `role`
+  owner|admin|member) — keanggotaan USER, terpisah dari `league_members`
+  (roster PEMAIN untuk sesi).
+- Owner otomatis jadi anggota (trigger `add_league_owner`).
+- **Insert keanggotaan hanya lewat RPC `SECURITY DEFINER`** (`request_join`,
+  `join_with_code`, `invite_user`) — mencegah user menambah diri jadi
+  member/owner via anon key. Approve = update oleh admin (RLS); tolak/keluar =
+  delete (RLS: diri sendiri atau admin).
+
+### 14.3 UI
+- **Buat liga**: pilih Private/Public; private dapat kode (tampil & bisa disalin
+  di header liga).
+- **Discover** (Home → "Cari & gabung liga"): gabung via kode + cari liga publik
+  + tombol Join (request).
+- **Panel Anggota** (layar liga): permintaan pending (✓/✕), daftar anggota +
+  role, invite by @username, keluarkan anggota.
+- **Home**: menampilkan liga yang **diikuti** (bukan cuma buatan sendiri) dengan
+  badge role; owner hapus / anggota keluar.
+
+### 14.4 Belum (lanjutan)
+- Notifikasi/badge jumlah permintaan pending.
+- Admin mengangkat anggota jadi admin (role management).
+- Leaderboard ELO difilter per-liga.
