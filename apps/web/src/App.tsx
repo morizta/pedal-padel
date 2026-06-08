@@ -408,7 +408,9 @@ function HomeScreen({
 }) {
   const leagues = useAsync(() => listLeagues(), []);
   const standalone = useAsync(() => listEvents(null), []);
+  const me = useAsync(() => globalStats(), []);
   const [newLeague, setNewLeague] = useState("");
+  const [tab, setTab] = useState<"all" | "active" | "past">("all");
 
   if (!user) {
     return (
@@ -430,6 +432,30 @@ function HomeScreen({
   }
 
   const lgList = leagues.data ?? [];
+
+  // Rank pemilik akun (self-player) di leaderboard ELO miliknya.
+  const myRank = (() => {
+    if (!me.data) return null;
+    const played = computeRatings(me.data.names, me.data.results).filter(
+      (r) => r.matchesPlayed > 0
+    );
+    const idx = played.findIndex((r) => r.name === displayName(user));
+    if (idx < 0) return null;
+    return {
+      rank: idx + 1,
+      total: played.length,
+      rating: Math.round(played[idx]!.rating),
+    };
+  })();
+
+  const allEvents = standalone.data ?? [];
+  const events =
+    tab === "all"
+      ? allEvents
+      : allEvents.filter((e) =>
+          tab === "active" ? e.status === "live" : e.status === "finished"
+        );
+
   return (
     <div className="space-y-6">
       <button
@@ -439,7 +465,9 @@ function HomeScreen({
         <span className="min-w-0">
           <span className="block font-semibold">🏅 Pemain &amp; Ranking</span>
           <span className="block text-sm text-slate-400">
-            Daftar pemain + leaderboard ELO dari semua sesimu
+            {myRank
+              ? `Rank-mu #${myRank.rank} dari ${myRank.total} · ELO ${myRank.rating}`
+              : "Daftar pemain + leaderboard ELO dari semua sesimu"}
           </span>
         </span>
         <span className="shrink-0 text-xl text-slate-300">›</span>
@@ -512,14 +540,38 @@ function HomeScreen({
         >
           + Buat Turnamen Lepas
         </button>
+        {allEvents.length > 0 && (
+          <div className="mb-3 flex gap-1.5">
+            {(
+              [
+                ["all", "Semua"],
+                ["active", "Aktif"],
+                ["past", "Selesai"],
+              ] as const
+            ).map(([key, label]) => (
+              <Chip
+                key={key}
+                active={tab === key}
+                onClick={() => setTab(key)}
+                label={label}
+              />
+            ))}
+          </div>
+        )}
         <StateText
           loading={standalone.loading}
           error={standalone.error}
-          empty={(standalone.data ?? []).length === 0}
-          emptyText="Belum ada turnamen."
+          empty={events.length === 0}
+          emptyText={
+            allEvents.length === 0
+              ? "Belum ada turnamen."
+              : tab === "active"
+                ? "Tidak ada turnamen aktif."
+                : "Tidak ada turnamen selesai."
+          }
         />
         <EventList
-          events={standalone.data ?? []}
+          events={events}
           onOpen={(id) => onNavigate({ t: "session", id })}
           onDelete={async (id) => {
             await deleteEvent(id);
