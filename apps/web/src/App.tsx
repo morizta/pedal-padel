@@ -147,7 +147,7 @@ export function App() {
       )}
       {view.t === "leaderboard" && (
         <LeaderboardScreen
-          onBack={() => setView({ t: "home" })}
+          user={user}
           onOpenPlayer={(name) => setView({ t: "player", name })}
         />
       )}
@@ -1162,22 +1162,32 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
+type RankRow = {
+  id: string;
+  name: string;
+  isGuest: boolean;
+  rating: number | null;
+  played: number;
+  st: Standing | undefined;
+};
+
 /**
- * Pemain & Ranking — semua pemain terdaftar dengan rank/rating ELO (dari semua
- * sesi user), plus daftar/hapus pemain. Yang sudah main diperingkat; yang belum
- * tampil di bawah. Rating dihitung ulang dari hasil match (keyed by nama).
+ * Pemain & Ranking (revamp): header + podium top-3 + tabel + daftar/hapus pemain.
+ * Rating dihitung ulang dari hasil match (keyed by nama).
  */
 function LeaderboardScreen({
-  onBack,
+  user,
   onOpenPlayer,
 }: {
-  onBack: () => void;
+  user: User | null;
   onOpenPlayer: (name: string) => void;
 }) {
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
   const [newName, setNewName] = useState("");
+  const [q, setQ] = useState("");
   const [limit, setLimit] = useState(10);
+  const meName = user ? displayName(user) : "";
 
   async function register() {
     if (await createPlayer(newName)) {
@@ -1191,7 +1201,7 @@ function LeaderboardScreen({
     roster.reload();
   }
 
-  const rows = (() => {
+  const rows: RankRow[] = (() => {
     const players = roster.data ?? [];
     const data = stats.data;
     const byName = new Map(
@@ -1201,166 +1211,323 @@ function LeaderboardScreen({
       ])
     );
     const st = new Map(
-      (data
-        ? computeStandings(data.results, { compensate: false })
-        : []
-      ).map((s) => [s.playerId, s])
+      (data ? computeStandings(data.results, { compensate: false }) : []).map(
+        (s) => [s.playerId, s]
+      )
     );
     return players
-      .map((p) => {
-        const r = byName.get(p.name);
-        return {
-          id: p.id,
-          name: p.name,
-          isGuest: p.isGuest,
-          rating: r?.rating ?? null,
-          played: r?.matchesPlayed ?? 0,
-          st: st.get(p.name),
-        };
-      })
-      .sort((a, b) => {
-        if ((a.played > 0) !== (b.played > 0)) return a.played > 0 ? -1 : 1;
-        if (a.played > 0 && b.played > 0)
-          return b.rating! - a.rating! || a.name.localeCompare(b.name);
-        return a.name.localeCompare(b.name);
-      });
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        isGuest: p.isGuest,
+        rating: byName.get(p.name)?.rating ?? null,
+        played: byName.get(p.name)?.matchesPlayed ?? 0,
+        st: st.get(p.name),
+      }))
+      .sort((a, b) =>
+        a.played > 0 && b.played > 0
+          ? b.rating! - a.rating! || a.name.localeCompare(b.name)
+          : (b.played > 0 ? 1 : 0) - (a.played > 0 ? 1 : 0) ||
+            a.name.localeCompare(b.name)
+      );
   })();
 
-  const playedCount = rows.filter((r) => r.played > 0).length;
-  let rank = 0;
+  const played = rows.filter((r) => r.played > 0);
+  const unranked = rows.filter((r) => r.played === 0);
+  const top3 = played.slice(0, 3);
+  const rest = played.slice(3);
+  const term = q.trim().toLowerCase();
+  const restShown = (
+    term ? rest.filter((r) => r.name.toLowerCase().includes(term)) : rest
+  ).slice(0, limit);
 
   return (
-    <div className="space-y-4">
-      <button
-        onClick={onBack}
-        className="text-sm text-slate-500 hover:text-slate-900"
-      >
-        ← Kembali
-      </button>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-lg font-bold">🏅 Pemain &amp; Ranking</h2>
-          {stats.data && (
-            <span className="text-xs text-slate-400">
-              {stats.data.eventCount} sesi
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined fill text-[18px] text-elo-gold">
+              military_tech
             </span>
-          )}
+            <span className="font-label-caps text-label-caps text-on-surface-variant">
+              RANKING ELO GLOBAL
+            </span>
+          </div>
+          <h2 className="mt-1 font-display text-2xl font-bold">
+            Pemain &amp; Ranking
+          </h2>
+          <p className="mt-1 max-w-xl text-sm text-on-surface-variant">
+            Ranking gabungan dari semua sesimu (rating awal 1000).
+            {stats.data ? ` ${stats.data.eventCount} sesi.` : ""}
+          </p>
         </div>
-        <p className="mb-3 text-sm text-slate-400">
-          Ranking ELO gabungan dari semua sesimu (rating awal 1000). Pemain belum
-          main tampil di bawah.
-        </p>
-
-        {/* Daftarkan pemain */}
-        <div className="mb-4 flex gap-2">
+        <div className="relative md:w-72">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline">
+            search
+          </span>
           <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && register()}
-            placeholder="Daftarkan pemain baru…"
-            className="input flex-1"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari nama…"
+            className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
           />
-          <button
-            onClick={register}
-            className="rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Daftar
-          </button>
         </div>
+      </div>
 
-        <StateText
-          loading={stats.loading || roster.loading}
-          error={stats.error || roster.error}
-          empty={!stats.loading && !roster.loading && rows.length === 0}
-          emptyText="Belum ada pemain. Daftarkan di atas."
+      {/* Daftarkan pemain */}
+      <div className="flex gap-2">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && register()}
+          placeholder="Daftarkan pemain baru…"
+          className="h-12 flex-1 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 outline-none focus:ring-2 focus:ring-primary"
         />
+        <button
+          onClick={register}
+          className="flex h-12 items-center gap-2 rounded-xl bg-primary-container px-5 font-semibold text-on-primary-container transition hover:brightness-95 active:scale-95"
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            person_add
+          </span>
+          <span className="hidden sm:inline">Daftar</span>
+        </button>
+      </div>
 
-        <ol className="space-y-1.5">
-          {rows.slice(0, limit).map((r) => {
-            const played = r.played > 0;
-            if (played) rank += 1;
-            const rel = Math.round(reliability(r.played) * 100);
-            const wl = r.st
-              ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
-              : "0–0";
-            const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
-            return (
-              <li
-                key={r.id}
-                className={`flex items-center gap-3 rounded-xl border p-2.5 ${
-                  played ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50/60"
-                }`}
-              >
-                {played ? (
-                  <RankBadge rank={rank} />
-                ) : (
-                  <span className="grid h-7 w-7 shrink-0 place-items-center text-xs text-slate-300">
-                    –
-                  </span>
-                )}
-                <button
-                  onClick={() => onOpenPlayer(r.name)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      <StateText
+        loading={stats.loading || roster.loading}
+        error={stats.error || roster.error}
+        empty={!stats.loading && !roster.loading && rows.length === 0}
+        emptyText="Belum ada pemain. Daftarkan di atas."
+      />
+
+      {/* Podium */}
+      {top3.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {top3.map((r, i) => (
+            <PodiumCard
+              key={r.id}
+              r={r}
+              rank={i + 1}
+              me={r.name === meName}
+              onOpen={() => onOpenPlayer(r.name)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Tabel sisa peringkat */}
+      {rest.length > 0 && (
+        <section className="overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-sm">
+          <div className="flex items-center gap-3 border-b border-outline-variant/30 bg-surface-container-low px-4 py-2.5 font-label-caps text-label-caps text-on-surface-variant">
+            <span className="w-8">RANK</span>
+            <span className="flex-1">PEMAIN</span>
+            <span>ELO</span>
+            <span className="w-6" />
+          </div>
+          <ul className="divide-y divide-outline-variant/20">
+            {restShown.map((r) => {
+              const rk = played.indexOf(r) + 1;
+              const rel = Math.round(reliability(r.played) * 100);
+              const wl = r.st
+                ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
+                : "0–0";
+              const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
+              return (
+                <li
+                  key={r.id}
+                  className={`flex items-center gap-3 px-4 py-2.5 ${
+                    r.name === meName ? "bg-primary-container/25" : ""
+                  }`}
                 >
-                <TeamAvatar name={r.name} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate font-semibold text-slate-800">
-                      {r.name}
-                    </span>
-                    {r.isGuest && (
-                      <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-700">
-                        tamu
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {played ? `${r.played} match · ${wl} · ${wr}% menang` : "belum main"}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div
-                    className={`font-bold tabular-nums ${
-                      played ? "" : "text-slate-300"
-                    }`}
+                  <span className="w-8 font-data-mono text-sm font-bold text-on-surface-variant">
+                    {rk}
+                  </span>
+                  <button
+                    onClick={() => onOpenPlayer(r.name)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
-                    {Math.round(r.rating ?? 1000)}
-                  </div>
-                  {played && (
-                    <div className="text-[10px] text-slate-400">
+                    <TeamAvatar name={r.name} />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-semibold">{r.name}</span>
+                        {r.isGuest && (
+                          <span className="rounded bg-elo-bronze/15 px-1 text-[10px] font-semibold uppercase text-elo-bronze">
+                            tamu
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">
+                        {r.played} match · {wl} · {wr}% menang
+                      </span>
+                    </span>
+                  </button>
+                  <div className="text-right">
+                    <div className="font-data-mono text-sm font-bold">
+                      {Math.round(r.rating ?? 1000)}
+                    </div>
+                    <div className="text-[10px] text-reliability-dimmed">
                       {rel < 100 ? `andal ${rel}%` : "stabil"}
                     </div>
-                  )}
-                </div>
-                </button>
+                  </div>
+                  <button
+                    onClick={() => remove(r.id, r.name)}
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-outline hover:bg-error-container hover:text-error"
+                    aria-label={`Hapus ${r.name}`}
+                  >
+                    ×
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {rest.length > limit && !term && (
+            <button
+              onClick={() => setLimit((n) => n + 10)}
+              className="w-full border-t border-outline-variant/30 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
+            >
+              Muat lebih banyak ({rest.length - limit} lagi)
+            </button>
+          )}
+        </section>
+      )}
+
+      {/* Belum main */}
+      {unranked.length > 0 && (
+        <section>
+          <div className="mb-2 font-label-caps text-label-caps text-on-surface-variant">
+            BELUM MAIN ({unranked.length})
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {unranked.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-center gap-1.5 rounded-full bg-surface-container px-2 py-1 text-sm"
+              >
+                <TeamAvatar name={r.name} />
+                <span className="truncate">{r.name}</span>
                 <button
                   onClick={() => remove(r.id, r.name)}
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-slate-300 hover:bg-red-50 hover:text-red-600"
+                  className="text-outline hover:text-error"
                   aria-label={`Hapus ${r.name}`}
                 >
                   ×
                 </button>
               </li>
-            );
-          })}
-        </ol>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
 
-        {rows.length > limit && (
-          <button
-            onClick={() => setLimit((n) => n + 10)}
-            className="mt-2 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:border-lime-400 hover:text-slate-900"
+/** Kartu podium top-3 (juara navy elevated, perak/perunggu putih). */
+function PodiumCard({
+  r,
+  rank,
+  me,
+  onOpen,
+}: {
+  r: RankRow;
+  rank: number;
+  me: boolean;
+  onOpen: () => void;
+}) {
+  const champ = rank === 1;
+  const tier =
+    rank === 1
+      ? { label: "JUARA", num: "bg-elo-gold text-navy", ring: "ring-elo-gold/30" }
+      : rank === 2
+        ? {
+            label: "PERAK",
+            num: "bg-elo-silver text-white",
+            ring: "ring-elo-silver/30",
+          }
+        : {
+            label: "PERUNGGU",
+            num: "bg-elo-bronze text-white",
+            ring: "ring-elo-bronze/30",
+          };
+  const order =
+    rank === 1 ? "order-1 md:order-2" : rank === 2 ? "order-2 md:order-1" : "order-3";
+  const rel = Math.round(reliability(r.played) * 100);
+  const wl = r.st
+    ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
+    : "0–0";
+  const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl p-5 ${order} ${
+        champ
+          ? "bg-navy text-white shadow-xl ring-2 ring-elo-gold md:-translate-y-3"
+          : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm"
+      }`}
+    >
+      <div className="mb-4 flex items-start justify-between">
+        <span
+          className={`grid h-12 w-12 place-items-center rounded-full font-display text-xl font-extrabold shadow ${tier.num}`}
+        >
+          {rank}
+        </span>
+        <span
+          className={`font-label-caps text-label-caps rounded px-2 py-1 ${
+            champ
+              ? "bg-elo-gold/15 text-elo-gold"
+              : rank === 2
+                ? "bg-elo-silver/15 text-elo-silver"
+                : "bg-elo-bronze/15 text-elo-bronze"
+          }`}
+        >
+          {tier.label}
+        </span>
+      </div>
+      <button onClick={onOpen} className="flex w-full items-center gap-3 text-left">
+        <span
+          className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-lg font-bold ring-2 ${
+            tier.ring
+          } ${avatarColor(r.name)}`}
+        >
+          {initialsOf(r.name)}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate font-display text-lg font-bold">
+            {r.name}
+            {me && <span className="ml-1 text-xs opacity-60">(kamu)</span>}
+          </span>
+          <span
+            className={`text-sm ${champ ? "text-white/60" : "text-on-surface-variant"}`}
           >
-            Muat lebih banyak ({rows.length - limit} lagi)
-          </button>
-        )}
-
-        {playedCount > 0 && (
-          <p className="mt-3 text-center text-xs text-slate-400">
-            {playedCount} pemain sudah main · {rows.length} terdaftar
-          </p>
-        )}
-      </section>
+            {wl} · {wr}% menang
+          </span>
+        </span>
+      </button>
+      <div
+        className={`mt-5 flex items-end justify-between border-t pt-4 ${
+          champ ? "border-white/15" : "border-outline-variant/20"
+        }`}
+      >
+        <div>
+          <div className="font-label-caps text-label-caps text-reliability-dimmed">
+            KEANDALAN
+          </div>
+          <div className="font-data-mono text-data-mono">{rel}%</div>
+        </div>
+        <div className="text-right">
+          <div className="font-label-caps text-label-caps text-reliability-dimmed">
+            ELO
+          </div>
+          <div
+            className={`font-display text-2xl font-extrabold ${
+              champ ? "text-primary-fixed" : ""
+            }`}
+          >
+            {Math.round(r.rating ?? 1000)}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
