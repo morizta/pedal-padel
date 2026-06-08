@@ -65,6 +65,7 @@ import { useAsync } from "./useAsync";
 
 type View =
   | { t: "home" }
+  | { t: "leagues" }
   | { t: "league"; id: string }
   | { t: "create"; leagueId: string | null }
   | { t: "session"; id: string }
@@ -72,6 +73,35 @@ type View =
   | { t: "player"; name: string }
   | { t: "discover" }
   | { t: "profile" };
+
+type TabKey = "home" | "leagues" | "main" | "rank" | "profile";
+
+const NAV_TABS: { key: TabKey; label: string; icon: string; view: View }[] = [
+  { key: "home", label: "Beranda", icon: "dashboard", view: { t: "home" } },
+  { key: "leagues", label: "Liga", icon: "groups", view: { t: "leagues" } },
+  { key: "main", label: "Main", icon: "sports_tennis", view: { t: "create", leagueId: null } },
+  { key: "rank", label: "Ranking", icon: "leaderboard", view: { t: "leaderboard" } },
+  { key: "profile", label: "Profil", icon: "person", view: { t: "profile" } },
+];
+
+function activeTab(v: View): TabKey {
+  switch (v.t) {
+    case "leagues":
+    case "league":
+    case "discover":
+      return "leagues";
+    case "create":
+    case "session":
+      return "main";
+    case "leaderboard":
+    case "player":
+      return "rank";
+    case "profile":
+      return "profile";
+    default:
+      return "home";
+  }
+}
 
 export function App() {
   const [view, setView] = useState<View>({ t: "home" });
@@ -83,100 +113,482 @@ export function App() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-stone-50 text-slate-900">
-      <Brand
-        onHome={() => setView({ t: "home" })}
-        onProfile={() => setView({ t: "profile" })}
-        user={user}
-      />
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        {view.t === "home" && (
-          <HomeScreen user={user} onNavigate={setView} />
-        )}
-        {view.t === "league" && (
-          <LeagueScreen leagueId={view.id} onNavigate={setView} />
-        )}
-        {view.t === "create" && (
-          <CreateScreen
-            leagueId={view.leagueId}
-            onCreated={(id) => setView({ t: "session", id })}
-            onCancel={() =>
-              setView(
-                view.leagueId
-                  ? { t: "league", id: view.leagueId }
-                  : { t: "home" }
-              )
-            }
-          />
-        )}
-        {view.t === "session" && (
-          <SessionScreen
-            key={view.id}
-            eventId={view.id}
-            onExit={(ev) =>
-              setView(
-                ev?.leagueId ? { t: "league", id: ev.leagueId } : { t: "home" }
-              )
-            }
-          />
-        )}
-        {view.t === "leaderboard" && (
-          <LeaderboardScreen
-            onBack={() => setView({ t: "home" })}
-            onOpenPlayer={(name) => setView({ t: "player", name })}
-          />
-        )}
-        {view.t === "player" && (
-          <PlayerProfileScreen
-            key={view.name}
-            name={view.name}
-            onBack={() => setView({ t: "leaderboard" })}
-          />
-        )}
-        {view.t === "discover" && (
-          <DiscoverScreen
-            onBack={() => setView({ t: "home" })}
-            onOpenLeague={(id) => setView({ t: "league", id })}
-          />
-        )}
-        {view.t === "profile" && (
-          <ProfileScreen user={user} onBack={() => setView({ t: "home" })} />
-        )}
+    <AppShell view={view} user={user} onNavigate={setView}>
+      {view.t === "home" && (
+        <DashboardScreen user={user} onNavigate={setView} />
+      )}
+      {view.t === "leagues" && (
+        <HomeScreen user={user} onNavigate={setView} />
+      )}
+      {view.t === "league" && (
+        <LeagueScreen leagueId={view.id} onNavigate={setView} />
+      )}
+      {view.t === "create" && (
+        <CreateScreen
+          leagueId={view.leagueId}
+          onCreated={(id) => setView({ t: "session", id })}
+          onCancel={() =>
+            setView(
+              view.leagueId ? { t: "league", id: view.leagueId } : { t: "home" }
+            )
+          }
+        />
+      )}
+      {view.t === "session" && (
+        <SessionScreen
+          key={view.id}
+          eventId={view.id}
+          onExit={(ev) =>
+            setView(
+              ev?.leagueId ? { t: "league", id: ev.leagueId } : { t: "home" }
+            )
+          }
+        />
+      )}
+      {view.t === "leaderboard" && (
+        <LeaderboardScreen
+          onBack={() => setView({ t: "home" })}
+          onOpenPlayer={(name) => setView({ t: "player", name })}
+        />
+      )}
+      {view.t === "player" && (
+        <PlayerProfileScreen
+          key={view.name}
+          name={view.name}
+          onBack={() => setView({ t: "leaderboard" })}
+        />
+      )}
+      {view.t === "discover" && (
+        <DiscoverScreen
+          onBack={() => setView({ t: "home" })}
+          onOpenLeague={(id) => setView({ t: "league", id })}
+        />
+      )}
+      {view.t === "profile" && (
+        <ProfileScreen user={user} onBack={() => setView({ t: "home" })} />
+      )}
+    </AppShell>
+  );
+}
+
+/* ---------- App shell: header navy (desktop nav) + bottom nav (mobile) ---------- */
+
+function AppShell({
+  view,
+  user,
+  onNavigate,
+  children,
+}: {
+  view: View;
+  user: User | null;
+  onNavigate: (v: View) => void;
+  children: React.ReactNode;
+}) {
+  const active = activeTab(view);
+  return (
+    <div className="min-h-screen bg-surface text-on-surface">
+      <header className="sticky top-0 z-40 bg-navy text-white">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
+          <button
+            onClick={() => onNavigate({ t: "home" })}
+            className="flex items-center gap-2"
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary-fixed">
+              <span className="material-symbols-outlined fill text-on-primary-fixed">
+                sports_tennis
+              </span>
+            </span>
+            <span className="font-display text-xl font-extrabold tracking-tight text-primary-fixed">
+              PedalPadel
+            </span>
+          </button>
+
+          <nav className="hidden items-center gap-1 md:flex">
+            {NAV_TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => onNavigate(t.view)}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  active === t.key
+                    ? "text-primary-fixed"
+                    : "text-white/55 hover:text-white"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+
+          <AuthBar user={user} onProfile={() => onNavigate({ t: "profile" })} />
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-28 md:pb-10">
+        {children}
       </main>
+
+      <nav className="fixed bottom-0 left-0 z-40 flex w-full items-stretch justify-around border-t border-outline-variant bg-surface-container-lowest pb-safe shadow-lg md:hidden">
+        {NAV_TABS.map((t) => {
+          const on = active === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => onNavigate(t.view)}
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5"
+            >
+              <span
+                className={`grid h-8 w-14 place-items-center rounded-full transition ${
+                  on ? "bg-primary-container" : ""
+                }`}
+              >
+                <span
+                  className={`material-symbols-outlined text-[22px] ${
+                    on
+                      ? "fill text-on-primary-container"
+                      : "text-on-surface-variant"
+                  }`}
+                >
+                  {t.icon}
+                </span>
+              </span>
+              <span
+                className={`text-[11px] font-semibold ${
+                  on ? "text-on-surface" : "text-on-surface-variant"
+                }`}
+              >
+                {t.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
 
-/* ---------- Identitas merek (gaya sendiri) ---------- */
+/* ---------- Beranda (dashboard) ---------- */
 
-function Brand({
-  onHome,
-  onProfile,
+function DashboardScreen({
   user,
+  onNavigate,
 }: {
-  onHome: () => void;
-  onProfile: () => void;
   user: User | null;
+  onNavigate: (v: View) => void;
+}) {
+  const statsQ = useAsync(() => globalStats(), []);
+  const leaguesQ = useAsync(() => listLeagues(), []);
+  const eventsQ = useAsync(() => listEvents(), []);
+
+  if (!user) {
+    return (
+      <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
+        <span className="material-symbols-outlined mb-2 text-5xl text-primary-fixed-dim">
+          sports_tennis
+        </span>
+        <h2 className="font-display text-xl font-bold">
+          Selamat datang di PedalPadel
+        </h2>
+        <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
+          Klik <b>Masuk / Daftar</b> di kanan atas untuk membuat liga & turnamen,
+          input skor, dan lihat ranking ELO-mu.
+        </p>
+      </div>
+    );
+  }
+
+  const myName = displayName(user);
+  const ratings = statsQ.data
+    ? computeRatings(statsQ.data.names, statsQ.data.results)
+    : [];
+  const standings = statsQ.data
+    ? computeStandings(statsQ.data.results, { compensate: false })
+    : [];
+  const playedRanked = ratings.filter((r) => r.matchesPlayed > 0);
+  const myIdx = playedRanked.findIndex((r) => r.name === myName);
+  const myRating = ratings.find((r) => r.name === myName);
+  const mySt = standings.find((s) => s.playerId === myName);
+
+  const events = eventsQ.data ?? [];
+  const upcoming = events
+    .filter((e) => e.startAt && e.startAt > Date.now() && e.status !== "finished")
+    .sort((a, b) => (a.startAt ?? 0) - (b.startAt ?? 0));
+  const live = events.filter((e) => e.status !== "finished" && !e.startAt);
+  const nextMatch = upcoming[0] ?? live[0] ?? null;
+  const leagues = leaguesQ.data ?? [];
+
+  return (
+    <div className="space-y-5">
+      {/* Hero */}
+      <section className="overflow-hidden rounded-2xl bg-navy p-6 text-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-extrabold tracking-tight">
+              Halo, {myName.split(" ")[0]}! 👋
+            </h1>
+            <p className="mt-1 text-sm text-white/60">
+              Siap bertanding hari ini? Cek performamu di bawah.
+            </p>
+          </div>
+          <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+            <div className="font-label-caps text-label-caps text-primary-fixed">
+              {nextMatch ? "MATCH BERIKUTNYA" : "STATISTIK"}
+            </div>
+            {nextMatch ? (
+              <button
+                onClick={() => onNavigate({ t: "session", id: nextMatch.id })}
+                className="mt-1 block text-left"
+              >
+                <div className="truncate font-bold">{nextMatch.name}</div>
+                <div className="text-xs text-white/60">
+                  {nextMatch.startAt
+                    ? `🗓 ${fmtDate(nextMatch.startAt)}`
+                    : "Sedang berlangsung"}
+                </div>
+              </button>
+            ) : (
+              <div className="mt-1 flex items-end gap-3">
+                <span className="font-data-mono text-2xl font-bold text-primary-fixed">
+                  {myRating?.matchesPlayed ? Math.round(myRating.rating) : 1000}
+                </span>
+                <span className="pb-1 text-xs text-white/50">
+                  ELO{myIdx >= 0 ? ` · #${myIdx + 1}` : ""}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Aksi cepat */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <button
+          onClick={() => onNavigate({ t: "create", leagueId: null })}
+          className="flex items-center justify-center gap-2 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined">add_circle</span>
+          Main Sekarang
+        </button>
+        <button
+          onClick={() => onNavigate({ t: "discover" })}
+          className="flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-semibold transition hover:border-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined text-on-surface-variant">
+            travel_explore
+          </span>
+          Jelajah Liga
+        </button>
+        <button
+          onClick={() => onNavigate({ t: "leagues" })}
+          className="flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-semibold transition hover:border-primary-fixed-dim"
+        >
+          <span className="material-symbols-outlined text-on-surface-variant">
+            groups
+          </span>
+          Liga Saya
+        </button>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Kiri */}
+        <div className="space-y-5 lg:col-span-2">
+          <DashCard
+            title="Turnamen Terbaru"
+            action={
+              <button
+                onClick={() => onNavigate({ t: "leagues" })}
+                className="text-xs font-semibold text-primary"
+              >
+                Lihat semua
+              </button>
+            }
+          >
+            {events.length === 0 ? (
+              <DashEmpty text="Belum ada turnamen. Klik 'Main Sekarang'." />
+            ) : (
+              <ul className="space-y-1.5">
+                {events.slice(0, 4).map((e) => (
+                  <li key={e.id}>
+                    <button
+                      onClick={() => onNavigate({ t: "session", id: e.id })}
+                      className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/50 px-3 py-2.5 text-left hover:border-primary-fixed-dim"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container">
+                        <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                          sports_tennis
+                        </span>
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">
+                          {e.name}
+                        </span>
+                        <span className="text-xs text-on-surface-variant">
+                          {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                          {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
+                        </span>
+                      </span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          e.status === "finished"
+                            ? "bg-surface-container text-on-surface-variant"
+                            : "bg-primary-container text-on-primary-container"
+                        }`}
+                      >
+                        {e.status === "finished" ? "selesai" : "live"}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashCard>
+
+          <DashCard
+            title="Liga Saya"
+            action={
+              <button
+                onClick={() => onNavigate({ t: "leagues" })}
+                className="text-xs font-semibold text-primary"
+              >
+                Kelola
+              </button>
+            }
+          >
+            {leagues.length === 0 ? (
+              <DashEmpty text="Belum ikut liga. Buat atau jelajah liga." />
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {leagues.slice(0, 4).map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => onNavigate({ t: "league", id: l.id })}
+                    className="flex items-center gap-2.5 rounded-xl border border-outline-variant/50 px-3 py-2.5 text-left hover:border-primary-fixed-dim"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container">
+                      <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                        {l.visibility === "private" ? "lock" : "public"}
+                      </span>
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">
+                        {l.name}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">
+                        {l.memberIds.length} pemain
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </DashCard>
+        </div>
+
+        {/* Kanan */}
+        <div className="space-y-5">
+          <section className="rounded-2xl bg-navy p-5 text-white shadow-sm">
+            <div className="font-label-caps text-label-caps text-primary-fixed">
+              STATISTIK SAYA
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              {[
+                {
+                  k: "ELO",
+                  v: myRating?.matchesPlayed
+                    ? Math.round(myRating.rating)
+                    : 1000,
+                },
+                {
+                  k: "Win %",
+                  v: mySt ? `${Math.round(mySt.winRate * 100)}%` : "0%",
+                },
+                { k: "Rank", v: myIdx >= 0 ? `#${myIdx + 1}` : "–" },
+              ].map((s) => (
+                <div key={s.k} className="rounded-xl bg-white/5 py-3">
+                  <div className="font-data-mono text-xl font-bold text-primary-fixed">
+                    {s.v}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-white/50">
+                    {s.k}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => onNavigate({ t: "profile" })}
+              className="mt-3 w-full rounded-lg bg-white/10 py-2 text-sm font-semibold hover:bg-white/15"
+            >
+              Lihat profil
+            </button>
+          </section>
+
+          <DashCard
+            title="Ranking Global"
+            action={
+              <button
+                onClick={() => onNavigate({ t: "leaderboard" })}
+                className="text-xs font-semibold text-primary"
+              >
+                Lihat semua
+              </button>
+            }
+          >
+            {playedRanked.length === 0 ? (
+              <DashEmpty text="Belum ada match selesai." />
+            ) : (
+              <ul className="space-y-1">
+                {playedRanked.slice(0, 5).map((r, i) => (
+                  <li key={r.id}>
+                    <button
+                      onClick={() => onNavigate({ t: "player", name: r.name })}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-surface-container-low ${
+                        r.name === myName ? "bg-primary-container/30" : ""
+                      }`}
+                    >
+                      <RankBadge rank={i + 1} />
+                      <TeamAvatar name={r.name} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {r.name}
+                      </span>
+                      <span className="font-data-mono text-sm font-bold tabular-nums">
+                        {Math.round(r.rating)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashCard>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashCard({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <header className="border-b border-slate-800 bg-slate-900">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-        <button onClick={onHome} className="flex items-center gap-3 text-left">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-lime-400 text-lg font-black text-slate-900">
-            P
-          </span>
-          <div className="leading-tight">
-            <div className="font-bold tracking-tight text-white">
-              Pedal<span className="text-lime-400">Padel</span>
-            </div>
-            <div className="text-[11px] uppercase tracking-widest text-slate-400">
-              liga &amp; matchmaking
-            </div>
-          </div>
-        </button>
-        <AuthBar user={user} onProfile={onProfile} />
+    <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-display text-base font-bold">{title}</h3>
+        {action}
       </div>
-    </header>
+      {children}
+    </section>
+  );
+}
+
+function DashEmpty({ text }: { text: string }) {
+  return (
+    <p className="rounded-xl bg-surface-container-low px-3 py-5 text-center text-sm text-on-surface-variant">
+      {text}
+    </p>
   );
 }
 

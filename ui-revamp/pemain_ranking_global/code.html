@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>PedalPadel - Rankings</title>
+<!-- Material Symbols for Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Inter and Hanken Grotesk as per Style Guidance -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Hanken+Grotesk:wght@600;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-surface-variant": "#444933",
+            "outline": "#747a60",
+            "on-tertiary-container": "#0466d9",
+            "elo-silver": "#94A3B8",
+            "on-surface": "#191c1e",
+            "on-secondary-container": "#5c647a",
+            "on-tertiary": "#ffffff",
+            "tertiary-fixed-dim": "#adc6ff",
+            "elo-gold": "#F59E0B",
+            "tertiary-container": "#e7ecff",
+            "inverse-on-surface": "#eff1f3",
+            "on-secondary-fixed-variant": "#3f465c",
+            "on-secondary-fixed": "#131b2e",
+            "inverse-surface": "#2d3133",
+            "surface": "#f7f9fb",
+            "tertiary-fixed": "#d8e2ff",
+            "secondary-fixed": "#dae2fd",
+            "on-error-container": "#93000a",
+            "elo-bronze": "#B45309",
+            "primary-fixed": "#c3f400",
+            "surface-container-highest": "#e0e3e5",
+            "secondary-fixed-dim": "#bec6e0",
+            "on-primary-container": "#5b7300",
+            "surface-container": "#eceef0",
+            "primary-fixed-dim": "#abd600",
+            "on-primary-fixed-variant": "#3c4d00",
+            "secondary": "#565e74",
+            "on-background": "#191c1e",
+            "surface-container-low": "#f2f4f6",
+            "secondary-container": "#dae2fd",
+            "surface-container-lowest": "#ffffff",
+            "primary-container": "#ccff00",
+            "on-tertiary-fixed": "#001a42",
+            "surface-bright": "#f7f9fb",
+            "reliability-dimmed": "#64748B",
+            "outline-variant": "#c4c9ac",
+            "on-tertiary-fixed-variant": "#004395",
+            "surface-variant": "#e0e3e5",
+            "error": "#ba1a1a",
+            "primary": "#506600",
+            "on-error": "#ffffff",
+            "error-container": "#ffdad6",
+            "background": "#f7f9fb",
+            "loss-red": "#EF4444",
+            "on-secondary": "#ffffff",
+            "on-primary": "#ffffff",
+            "surface-tint": "#506600",
+            "tertiary": "#005ac2",
+            "surface-container-high": "#e6e8ea",
+            "win-green": "#22C55E",
+            "on-primary-fixed": "#161e00",
+            "surface-dim": "#d8dadc",
+            "inverse-primary": "#abd600"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "margin-mobile": "16px",
+            "margin-desktop": "40px",
+            "stack-lg": "24px",
+            "touch-target": "44px",
+            "inset-card": "20px",
+            "stack-sm": "8px",
+            "stack-md": "16px",
+            "gutter": "16px"
+          },
+          "fontFamily": {
+            "headline-lg-mobile": ["Hanken Grotesk"],
+            "body-sm": ["Inter"],
+            "data-mono": ["JetBrains Mono"],
+            "display-elo": ["Hanken Grotesk"],
+            "body-md": ["Inter"],
+            "headline-lg": ["Hanken Grotesk"],
+            "title-md": ["Hanken Grotesk"],
+            "label-caps": ["Inter"]
+          },
+          "fontSize": {
+            "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+            "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+            "data-mono": ["13px", {"lineHeight": "16px", "fontWeight": "500"}],
+            "display-elo": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+            "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+            "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+            "title-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+            "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    body {
+      background-color: #f7f9fb;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="bg-on-secondary-fixed shadow-sm docked full-width top-0 z-50 flex justify-between items-center w-full h-16 px-margin-mobile md:px-margin-desktop sticky top-0">
+<div class="flex items-center gap-4">
+<div class="bg-primary-fixed rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-fixed" style="font-variation-settings: 'FILL' 1;">sports_tennis</span>
+</div>
+<h1 class="font-display-elo text-headline-lg text-primary-fixed">PedalPadel</h1>
+</div>
+<div class="hidden md:flex items-center gap-8 h-full">
+<nav class="flex items-center gap-6 h-full">
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors h-full flex items-center px-2" href="#">Home</a>
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors h-full flex items-center px-2" href="#">Leagues</a>
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors h-full flex items-center px-2" href="#">Match</a>
+<a class="text-primary-fixed font-bold h-full flex items-center border-b-2 border-primary-fixed px-2" href="#">Rankings</a>
+<a class="text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant transition-colors h-full flex items-center px-2" href="#">Profile</a>
+</nav>
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-primary-fixed hover:bg-on-secondary-fixed-variant p-2 rounded-full transition-colors">notifications</button>
+<button class="material-symbols-outlined text-primary-fixed hover:bg-on-secondary-fixed-variant p-2 rounded-full transition-colors">settings</button>
+<div class="flex items-center gap-2 bg-on-secondary-fixed-variant/50 px-3 py-1.5 rounded-full border border-outline/20">
+<img alt="Rizky" class="w-7 h-7 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC7TJl71pHonBbJUUZOdrhugVvca6KomWWC9qw05pHiQhxEIQOfR3pHjxFvBZZ8JZJlsEnvdI5La43olNeznrVnqUyCN1bA5VCaGH_FqKOCRJ53d0U1eqmz3XNzILzMfAHB0i-0obyFHC6FhghOEwIrKX8DaKkUJVF-BsEVGUjjII5iJqOTVnVvtfjpRAiBE9qXRTXD4J2tZpml8SBLFE6lfdv8esmAV06dNH-7DnHvtURIiiSitRjyaBjxLnMJvoDUDpJAtcWNcl4M"/>
+<span class="text-primary-fixed font-title-md text-[14px]">Rizky</span>
+</div>
+</div>
+</div>
+<!-- Mobile Action Trigger -->
+<div class="md:hidden flex items-center gap-2">
+<button class="material-symbols-outlined text-primary-fixed">search</button>
+<img alt="Rizky" class="w-8 h-8 rounded-full border-2 border-primary-fixed" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA6y7NLjh-qaCr6RObGbWjxTC0HlX3B83qzISHZz9RdGXbsoCZokG6vxoN1s8yORRJmcAnbubakTItSZXgzh1rGra1s9HFKAeIRC6hDhHFf1Pswk_ESqRzWww5j_yYpWYcOGqsUFa0U4zyvaIuumszCX_YTT0EoetgDjWk-jtbsp9J6bofdjwg_BJEm7IrP71L148uLtiHbKD1BB3O9vm_7uv0kBHuKdwvaBZvtz0W_95rhk3cHmJdbPIY_SUrbUYLFDClJSfWRQdxS"/>
+</div>
+</header>
+<main class="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop py-stack-lg">
+<!-- Hero / Title Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-stack-lg">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-elo-gold" style="font-variation-settings: 'FILL' 1;">military_tech</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant">SEASON 02 • ACTIVE</span>
+</div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface">Global Player Rankings</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xl mt-1">
+          Unified ELO ranking calculated across all active sessions. Starting rating: 1000. Players must complete 3 matches to appear in active rankings.
+        </p>
+</div>
+<!-- Search & Filters (Asymmetric) -->
+<div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+<div class="relative flex-grow md:w-72">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full h-12 pl-10 pr-4 rounded-xl border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none font-body-md text-body-md" placeholder="Search by name..." type="text"/>
+</div>
+<button class="h-12 bg-primary-container text-on-primary-container px-6 rounded-xl font-title-md flex items-center justify-center gap-2 hover:brightness-95 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]">person_add</span>
+<span>Daftar</span>
+</button>
+</div>
+</div>
+<!-- Podium / Top 3 Bento Style -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-stack-md mb-stack-lg">
+<!-- Rank 2: Silver -->
+<div class="order-2 md:order-1 bg-surface-container-lowest rounded-xl p-inset-card border border-outline-variant/30 shadow-sm relative overflow-hidden group">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-elo-silver/10 rounded-full blur-2xl"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-full bg-elo-silver flex items-center justify-center text-white font-display-elo text-headline-lg-mobile shadow-md">2</div>
+<span class="font-label-caps text-label-caps text-elo-silver bg-elo-silver/10 px-2 py-1 rounded">SILVER TIER</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<img alt="Kala" class="w-16 h-16 rounded-full object-cover border-2 border-elo-silver" data-alt="A professional close-up portrait of a male padel player with an athletic build and focused expression. He is wearing a sleek navy blue moisture-wicking polo shirt. The background is a soft, blurred sports facility with high-key natural lighting and a minimalist, corporate aesthetic. The mood is confident and competitive, emphasizing a clean and modern sports lifestyle." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeeZ2pSUTeUDA-4AsbzSU0iMmkh1hVZ-No4DLMBpyoRUloUblKNLQN-HTyCCYhCj9YQB_ZzLw4ztSRrZOP2yOiM4Xw-YCh7YAtZzWV5wlcraknLLbDxV8XS_kQxu-jlaA7ZgkQ4ENW8k9v41Ameq1gtRRhHd4xZrsxQkgSdr-rB_6o8O-Zq0zRE_V7f_pJI1z5GBpu1a2oZrfSVd_VGf3AnswS1hzoLlx2a2uo58IWKAkyZTouVleOyDkmtJVsSEjMKh2-ucSdAiHa"/>
+<div class="absolute -bottom-1 -right-1 bg-win-green w-4 h-4 rounded-full border-2 border-white"></div>
+</div>
+<div>
+<h3 class="font-title-md text-title-md">Kala</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">history</span> 2-0-1 • 67% win
+            </p>
+</div>
+</div>
+<div class="mt-6 flex justify-between items-end border-t border-outline-variant/20 pt-4">
+<div>
+<span class="font-label-caps text-label-caps text-reliability-dimmed">RELIABILITY</span>
+<p class="font-data-mono text-data-mono text-on-surface-variant">92% Reliable</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-reliability-dimmed">ELO RATING</span>
+<p class="font-display-elo text-headline-lg-mobile text-on-surface">1018</p>
+</div>
+</div>
+</div>
+<!-- Rank 1: Gold (Elevated) -->
+<div class="order-1 md:order-2 bg-on-secondary-fixed rounded-xl p-inset-card border-2 border-elo-gold shadow-xl relative overflow-hidden group transform md:-translate-y-4">
+<div class="absolute -right-8 -top-8 w-40 h-40 bg-elo-gold/20 rounded-full blur-3xl animate-pulse"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-14 h-14 rounded-full bg-elo-gold flex items-center justify-center text-on-secondary-fixed font-display-elo text-headline-lg shadow-lg">1</div>
+<span class="font-label-caps text-label-caps text-elo-gold bg-elo-gold/20 px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">stars</span> CHAMPION
+          </span>
+</div>
+<div class="flex items-center gap-5">
+<div class="relative">
+<img alt="Arbi" class="w-20 h-20 rounded-full object-cover border-4 border-elo-gold shadow-md" data-alt="A portrait of a male professional athlete looking straight at the camera with a friendly yet determined look. He is dressed in high-performance tennis attire with a vibrant lime accent. The setting is a bright, modern indoor sports lounge with clean white surfaces and sophisticated blue-gray accents. The lighting is crisp and cinematic, evoking a sense of prestige and peak performance." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBcL1E0R2ZBDjppCn9vj5kpoEhe8phzLpI5xUCq3TOSo__WJlpe3KdJOW3NyXsOJkGmoHRhka1HVQwIGyl2fkC5-zt8jAGNxdFEKOtOI7AX7Uww1NTu1GVMjfuhOSf6Qn9LG21uhlEzB5znXDLDHSBwLVu8TETDnic5B4EmvHH5JL5YpZR0WkDAajDMNcoqsFQhBR2Eb3WuQV6PszU8yFdHp95gFYrghq-Av7U8KgME9-LmWxiG_lme4hUSGZMjjJnBM5SJI7ZZ9YG9"/>
+<div class="absolute -bottom-1 -right-1 bg-win-green w-5 h-5 rounded-full border-2 border-on-secondary-fixed"></div>
+</div>
+<div>
+<h3 class="font-headline-lg text-primary-fixed">Arbi</h3>
+<p class="font-body-md text-body-md text-primary-fixed-dim/80 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">history</span> 2-0-1 • 67% win
+            </p>
+</div>
+</div>
+<div class="mt-8 flex justify-between items-end border-t border-white/10 pt-4">
+<div>
+<span class="font-label-caps text-label-caps text-primary-fixed-dim/50">RELIABILITY</span>
+<p class="font-data-mono text-data-mono text-primary-fixed-dim">98% Reliable</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-primary-fixed-dim/50">ELO RATING</span>
+<p class="font-display-elo text-headline-lg text-primary-fixed">1018</p>
+</div>
+</div>
+</div>
+<!-- Rank 3: Bronze -->
+<div class="order-3 md:order-3 bg-surface-container-lowest rounded-xl p-inset-card border border-outline-variant/30 shadow-sm relative overflow-hidden group">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-elo-bronze/10 rounded-full blur-2xl"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-full bg-elo-bronze flex items-center justify-center text-white font-display-elo text-headline-lg-mobile shadow-md">3</div>
+<span class="font-label-caps text-label-caps text-elo-bronze bg-elo-bronze/10 px-2 py-1 rounded">BRONZE TIER</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<img alt="Lama" class="w-16 h-16 rounded-full object-cover border-2 border-elo-bronze" data-alt="A portrait of a young woman in sportswear, her hair tied back, exuding energy and focus. She is wearing a professional light gray athletic top. The lighting is bright and airy, typical of a high-end health club. The image style is sharp and corporate, using a palette of white, gray, and subtle bronze highlights to match the competitive ranking context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIYHzhfpqIzxvpfWI5ys-YlzY5HnRyRhWm5mgHtOQNL897CBYwZIlSqJ2MOz4RKMvj6E77XE7Bt2fTvsXyv-yySR04DzM6V-NKwtTx7UpEFztXFqDBIfmCCrub45WRuah7L_h-Ucn9E0uj6xH4HOCbyDy8xw8ufPIraOkbem4hFgxUHdHWYKW4hlp0rAL6XJnt5viroeYZqBi4sq4tP0zYRbmYkxwjkY1lun225WwtgMS0wIWQWQfj4beqyFlS7e3nFWPvagpi1-kX"/>
+<div class="absolute -bottom-1 -right-1 bg-win-green w-4 h-4 rounded-full border-2 border-white"></div>
+</div>
+<div>
+<h3 class="font-title-md text-title-md">Lama</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">history</span> 0-0-3 • 0% win
+            </p>
+</div>
+</div>
+<div class="mt-6 flex justify-between items-end border-t border-outline-variant/20 pt-4">
+<div>
+<span class="font-label-caps text-label-caps text-reliability-dimmed">RELIABILITY</span>
+<p class="font-data-mono text-data-mono text-on-surface-variant">88% Reliable</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-reliability-dimmed">ELO RATING</span>
+<p class="font-display-elo text-headline-lg-mobile text-on-surface">1001</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Detailed Rankings List -->
+<div class="bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-sm overflow-hidden">
+<div class="overflow-x-auto scrollbar-hide">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="py-4 px-6 font-label-caps text-label-caps text-on-surface-variant">RANK</th>
+<th class="py-4 px-6 font-label-caps text-label-caps text-on-surface-variant">PLAYER</th>
+<th class="py-4 px-6 font-label-caps text-label-caps text-on-surface-variant hidden md:table-cell">RECORD (W-L-T)</th>
+<th class="py-4 px-6 font-label-caps text-label-caps text-on-surface-variant text-right">ELO / RELIABILITY</th>
+<th class="py-4 px-6 font-label-caps text-label-caps text-on-surface-variant text-center">ACTION</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/40">
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="py-4 px-6">
+<span class="font-data-mono text-title-md text-on-surface-variant group-hover:text-primary transition-colors">04</span>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center font-bold text-on-secondary-container">SA</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-[16px] text-on-surface">Sala</span>
+<span class="text-[10px] bg-secondary-fixed text-on-secondary-fixed-variant px-1.5 py-0.5 rounded font-bold">TAMU</span>
+</div>
+<span class="md:hidden text-[12px] text-on-surface-variant">0-0-3 • 0% win</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 hidden md:table-cell">
+<div class="flex gap-1 items-center">
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="font-data-mono text-body-sm ml-2">0-0-3</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<div class="font-display-elo text-title-md leading-none mb-1">1001</div>
+<div class="font-data-mono text-body-sm text-reliability-dimmed">andal 15%</div>
+</td>
+<td class="py-4 px-6 text-center">
+<button class="material-symbols-outlined text-outline hover:text-error transition-colors">close</button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="py-4 px-6">
+<span class="font-data-mono text-title-md text-on-surface-variant group-hover:text-primary transition-colors">05</span>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-tertiary-container flex items-center justify-center font-bold text-on-tertiary-container">IQ</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-[16px] text-on-surface">iqbal</span>
+<span class="text-[10px] bg-secondary-fixed text-on-secondary-fixed-variant px-1.5 py-0.5 rounded font-bold">TAMU</span>
+</div>
+<span class="md:hidden text-[12px] text-on-surface-variant">0-1-2 • 0% win</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 hidden md:table-cell">
+<div class="flex gap-1 items-center">
+<span class="w-3 h-3 rounded-full bg-win-green/20 border border-win-green/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="font-data-mono text-body-sm ml-2">0-1-2</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<div class="font-display-elo text-title-md leading-none mb-1">991</div>
+<div class="font-data-mono text-body-sm text-reliability-dimmed">andal 15%</div>
+</td>
+<td class="py-4 px-6 text-center">
+<button class="material-symbols-outlined text-outline hover:text-error transition-colors">close</button>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="py-4 px-6">
+<span class="font-data-mono text-title-md text-on-surface-variant group-hover:text-primary transition-colors">06</span>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container/30 flex items-center justify-center font-bold text-on-primary-container">JU</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-[16px] text-on-surface">Julian</span>
+<span class="text-[10px] bg-secondary-fixed text-on-secondary-fixed-variant px-1.5 py-0.5 rounded font-bold">TAMU</span>
+</div>
+<span class="md:hidden text-[12px] text-on-surface-variant">0-1-2 • 0% win</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 hidden md:table-cell">
+<div class="flex gap-1 items-center">
+<span class="w-3 h-3 rounded-full bg-win-green/20 border border-win-green/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="font-data-mono text-body-sm ml-2">0-1-2</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<div class="font-display-elo text-title-md leading-none mb-1">991</div>
+<div class="font-data-mono text-body-sm text-reliability-dimmed">andal 15%</div>
+</td>
+<td class="py-4 px-6 text-center">
+<button class="material-symbols-outlined text-outline hover:text-error transition-colors">close</button>
+</td>
+</tr>
+<!-- Row 8 (Current User Highlight) -->
+<tr class="bg-primary-container/10 border-l-4 border-primary transition-colors group">
+<td class="py-4 px-6">
+<span class="font-data-mono text-title-md text-primary font-bold">08</span>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-full object-cover ring-2 ring-primary" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1vCq52e1cwgg2ihCpIVlmmpwwE2rvAeC9RzL7iTjvXaShZg2S-vozLyZxkUDKKGZNTSgngNCNaR_rQ4yoYZlkcwzohXlzcunBlLrLItJT9HaiuJo6u7d7dnHTQICum-HpW_Hn6Doa8qswyFLGQ-EcetXNsssQ7WokxuWP2m5C8HhctUJSKrLoGgjAIwb0_dzAqUoMNXvGnLqkO7o4N8fyMRdHg7lpog9CNH4hfEj1Zgm1oJdnU9kP_o8lcJJPKfn8uuf9e9FO6yZf"/>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-[16px] text-on-surface font-bold">Rizky (You)</span>
+</div>
+<span class="md:hidden text-[12px] text-on-surface-variant">0-1-2 • 0% win</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 hidden md:table-cell">
+<div class="flex gap-1 items-center">
+<span class="w-3 h-3 rounded-full bg-win-green/20 border border-win-green/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="w-3 h-3 rounded-full bg-loss-red/20 border border-loss-red/40"></span>
+<span class="font-data-mono text-body-sm ml-2">0-1-2</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<div class="font-display-elo text-title-md leading-none mb-1 text-primary">991</div>
+<div class="font-data-mono text-body-sm text-primary/70">andal 15%</div>
+</td>
+<td class="py-4 px-6 text-center">
+<button class="material-symbols-outlined text-outline cursor-not-allowed opacity-30">close</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- List Footer -->
+<div class="bg-surface-container-low p-6 text-center">
+<button class="w-full md:w-auto px-12 h-12 border border-outline-variant rounded-xl text-on-surface font-title-md hover:bg-surface-container-highest transition-all">
+          Muat lebih banyak (27 lagi)
+        </button>
+<p class="mt-4 font-body-sm text-body-sm text-on-surface-variant">
+          8 pemain sudah main • 37 terdaftar
+        </p>
+</div>
+</div>
+<!-- Secondary List (Inactive / Unranked) -->
+<div class="mt-stack-lg opacity-60">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4 px-2">BELUM MAIN / UNRANKED</h3>
+<div class="space-y-2">
+<div class="bg-surface-container-lowest rounded-xl p-4 flex items-center justify-between border border-outline-variant/30">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center font-data-mono text-[12px]">—</div>
+<div class="w-10 h-10 rounded-full bg-secondary-fixed-dim/30 flex items-center justify-center text-secondary text-sm font-bold">KM</div>
+<div>
+<p class="font-title-md text-[14px]">kam <span class="text-[10px] bg-outline-variant px-1.5 py-0.5 rounded ml-1">TAMU</span></p>
+<p class="text-[12px] text-on-surface-variant">belum main</p>
+</div>
+</div>
+<div class="text-right flex items-center gap-6">
+<div>
+<p class="font-data-mono text-sm">1000</p>
+</div>
+<button class="material-symbols-outlined text-outline text-sm">close</button>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-4 flex items-center justify-between border border-outline-variant/30">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center font-data-mono text-[12px]">—</div>
+<div class="w-10 h-10 rounded-full bg-secondary-fixed-dim/30 flex items-center justify-center text-secondary text-sm font-bold">KS</div>
+<div>
+<p class="font-title-md text-[14px]">kas <span class="text-[10px] bg-outline-variant px-1.5 py-0.5 rounded ml-1">TAMU</span></p>
+<p class="text-[12px] text-on-surface-variant">belum main</p>
+</div>
+</div>
+<div class="text-right flex items-center gap-6">
+<div>
+<p class="font-data-mono text-sm">1000</p>
+</div>
+<button class="material-symbols-outlined text-outline text-sm">close</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-2 bg-surface-container-lowest border-t border-outline-variant shadow-lg rounded-t-xl">
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-label-caps text-label-caps">Leagues</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full">
+<span class="material-symbols-outlined">sports_tennis</span>
+<span class="font-label-caps text-label-caps">Match</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-label-caps text-label-caps">Rankings</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-all px-4 py-1 rounded-full">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-caps text-label-caps">Profile</span>
+</button>
+</nav>
+<!-- Floating Action Button (Contextual for Home/Match, suppressed here but added for design completeness if needed) -->
+<button class="md:hidden fixed right-6 bottom-24 w-14 h-14 bg-primary text-on-primary rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-all z-40">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 700;">add</span>
+</button>
+<script>
+    // Micro-interactions
+    document.querySelectorAll('tr').forEach(row => {
+      row.addEventListener('mousedown', () => {
+        row.classList.add('scale-[0.99]');
+      });
+      row.addEventListener('mouseup', () => {
+        row.classList.remove('scale-[0.99]');
+      });
+      row.addEventListener('mouseleave', () => {
+        row.classList.remove('scale-[0.99]');
+      });
+    });
+
+    // Simple search filter simulation
+    const searchInput = document.querySelector('input[type="text"]');
+    searchInput.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase();
+      document.querySelectorAll('tbody tr').forEach(row => {
+        const name = row.querySelector('.font-title-md')?.innerText.toLowerCase() || "";
+        if (name.includes(term)) {
+          row.style.display = 'table-row';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    });
+  </script>
+</body></html>
