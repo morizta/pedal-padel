@@ -337,7 +337,7 @@ function AppShell({
               </span>
             </span>
             <span className="font-display text-xl font-extrabold tracking-tight text-primary-fixed">
-              PedalPadel
+              SICOPA
             </span>
           </button>
 
@@ -426,7 +426,7 @@ function DashboardScreen({
           sports_tennis
         </span>
         <h2 className="font-display text-xl font-bold">
-          Selamat datang di PedalPadel
+          Selamat datang di SICOPA
         </h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
           Klik <b>Masuk / Daftar</b> di kanan atas untuk membuat liga & turnamen,
@@ -4381,13 +4381,20 @@ function SessionInner({
       ? { rounds: event.rounds, scores: event.scores, teams: event.teams }
       : undefined;
 
+  const { user } = useAuth();
+  // Hanya organizer (pembuat turnamen) yang boleh acak, ubah jadwal & skor.
+  // Peserta/tamu hanya bisa melihat. (RLS Supabase juga menegakkan ini.)
+  const canEdit = !!user && user.id === event.ownerId;
+
   const session = useSession(
     { config, players: event.players, restore, initialTeams: event.teams },
     () => onExit(event)
   );
 
   // Persist perubahan ronde/skor/tim ke Supabase (debounce 600ms).
+  // Hanya organizer yang menulis — non-owner ditolak RLS, jadi tak perlu coba.
   useEffect(() => {
+    if (!canEdit) return;
     const t = setTimeout(() => {
       void updateEvent(event.id, {
         rounds: session.rounds,
@@ -4397,13 +4404,13 @@ function SessionInner({
     }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event.id, session.rounds, session.scores, session.teams]);
+  }, [event.id, session.rounds, session.scores, session.teams, canEdit]);
 
   return (
     <div className="space-y-5">
-      <MetaBar session={session} event={event} onExit={onExit} />
+      <MetaBar session={session} event={event} onExit={onExit} canEdit={canEdit} />
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <RoundsPanel session={session} />
+        <RoundsPanel session={session} canEdit={canEdit} />
         <div className="space-y-5">
           <Leaderboard session={session} />
           {/* Rating ELO disembunyikan sementara. */}
@@ -4417,10 +4424,12 @@ function MetaBar({
   session,
   event,
   onExit,
+  canEdit,
 }: {
   session: Session;
   event: DbEvent;
   onExit: (ev: DbEvent | undefined) => void;
+  canEdit: boolean;
 }) {
   const { config, rounds } = session;
   const items = [
@@ -4456,24 +4465,32 @@ function MetaBar({
             ))}
           </p>
         </div>
-        <button
-          onClick={async () => {
-            await updateEvent(event.id, { status: "finished" });
-            onExit(event);
-          }}
-          className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
-        >
-          <span className="material-symbols-outlined text-[20px]">
-            check_circle
-          </span>
-          Tandai selesai
-        </button>
+        {canEdit && (
+          <button
+            onClick={async () => {
+              await updateEvent(event.id, { status: "finished" });
+              onExit(event);
+            }}
+            className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[20px]">
+              check_circle
+            </span>
+            Tandai selesai
+          </button>
+        )}
       </div>
     </section>
   );
 }
 
-function RoundsPanel({ session }: { session: Session }) {
+function RoundsPanel({
+  session,
+  canEdit,
+}: {
+  session: Session;
+  canEdit: boolean;
+}) {
   const { rounds, scores, config } = session;
   const [active, setActive] = useState(rounds.length - 1);
   const [picking, setPicking] = useState<{
@@ -4535,7 +4552,8 @@ function RoundsPanel({ session }: { session: Session }) {
                   {/* Sisi kiri: klik → pilih skor tim A */}
                   <button
                     onClick={() => setPicking({ court: m.court, side: "a" })}
-                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition hover:bg-surface-container-high"
+                    disabled={!canEdit}
+                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition enabled:hover:bg-surface-container-high disabled:cursor-default"
                   >
                     <span className="text-sm font-semibold">
                       {m.teamA.join(" & ")}
@@ -4546,7 +4564,8 @@ function RoundsPanel({ session }: { session: Session }) {
                   {/* Sisi kanan: klik → pilih skor tim B */}
                   <button
                     onClick={() => setPicking({ court: m.court, side: "b" })}
-                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition hover:bg-surface-container-high"
+                    disabled={!canEdit}
+                    className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition enabled:hover:bg-surface-container-high disabled:cursor-default"
                   >
                     <ScoreChip value={s?.b} />
                     <span className="text-sm font-semibold">
@@ -4560,6 +4579,7 @@ function RoundsPanel({ session }: { session: Session }) {
         </div>
       )}
 
+      {canEdit && (
       <div className="mt-4 flex gap-2">
         {isScheduledFormat(config.format) ? (
           // Americano: semua ronde tampil. Saat jadwal habis → tambah 1 siklus
@@ -4604,6 +4624,7 @@ function RoundsPanel({ session }: { session: Session }) {
           </>
         )}
       </div>
+      )}
 
       {round && pickMatch && picking && (
         <ScorePicker

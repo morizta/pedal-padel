@@ -569,6 +569,7 @@ export async function searchAccounts(query: string): Promise<AccountUser[]> {
 
 export interface DbEvent {
   id: string;
+  ownerId: string;
   leagueId: string | null;
   name: string;
   format: Format;
@@ -595,6 +596,7 @@ const EVENT_COLS =
 function mapEvent(r: any): DbEvent {
   return {
     id: r.id,
+    ownerId: r.owner_id,
     leagueId: r.league_id,
     name: r.name,
     format: r.format,
