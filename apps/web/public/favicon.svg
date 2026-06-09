@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#c3f400"/>
+  <g fill="#161e00">
+    <!-- Kepala raket padel (oval) -->
+    <path d="M32 9c-10.2 0-18.5 8.7-18.5 19.4 0 9.1 6 16.8 14.1 18.8v2.3h-4.2a3 3 0 0 0 0 6h13.2a3 3 0 0 0 0-6h-4.2v-2.3c8.1-2 14.1-9.7 14.1-18.8C50.5 17.7 42.2 9 32 9z"/>
+  </g>
+  <!-- Lubang-lubang khas raket padel -->
+  <g fill="#c3f400">
+    <circle cx="32" cy="20" r="2.3"/>
+    <circle cx="24.5" cy="25" r="2.3"/>
+    <circle cx="39.5" cy="25" r="2.3"/>
+    <circle cx="32" cy="29" r="2.3"/>
+    <circle cx="24.5" cy="33.5" r="2.3"/>
+    <circle cx="39.5" cy="33.5" r="2.3"/>
+    <circle cx="32" cy="38" r="2.3"/>
+  </g>
+</svg>
