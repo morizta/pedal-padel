@@ -67,6 +67,7 @@ import {
   type PlayerMatch,
 } from "./db";
 import { useAsync } from "./useAsync";
+import { ShareButton, buildShareRows } from "./share";
 
 type View =
   | { t: "home" }
@@ -2894,7 +2895,18 @@ function LeagueScreen({
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <Card title="📊 Klasemen Liga (akumulasi pemain)">
+        <Card
+          title="📊 Klasemen Liga (akumulasi pemain)"
+          action={
+            standings.length > 0 ? (
+              <ShareButton
+                title={league.name}
+                rows={buildShareRows(standings)}
+                label="Bagikan"
+              />
+            ) : undefined
+          }
+        >
           {standings.length === 0 ? (
             <p className="rounded-xl bg-surface-container-low px-3 py-6 text-center text-sm text-on-surface-variant">
               Belum ada skor. Tambah sesi & input skor untuk mengisi klasemen.
@@ -4818,7 +4830,16 @@ function Leaderboard({ session }: { session: Session }) {
         a.playerId.localeCompare(b.playerId)
     );
   return (
-    <Card title="🏆 Klasemen">
+    <Card
+      title="🏆 Klasemen"
+      action={
+        <ShareButton
+          title={session.config.name}
+          rows={buildShareRows(standings)}
+          label="Bagikan"
+        />
+      }
+    >
       {(
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -4995,13 +5016,18 @@ function TeamLeaderboard({ session }: { session: Session }) {
 function Card({
   title,
   children,
+  action,
 }: {
   title: string;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
-      <h3 className="mb-4 font-display text-base font-bold">{title}</h3>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="font-display text-base font-bold">{title}</h3>
+        {action}
+      </div>
       {children}
     </section>
   );
