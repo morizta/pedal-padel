@@ -930,11 +930,13 @@ function MyEventsScreen({
 
   const row = (e: DbEvent) => {
     const r = myRankInEvent(e, myName);
+    // Hanya pembuat turnamen yang boleh menghapus (RLS juga menegakkan).
+    const canDelete = !!user && e.ownerId === user.id;
     return (
-    <li key={e.id}>
+    <li key={e.id} className="flex items-stretch gap-2">
       <button
         onClick={() => onNavigate({ t: "session", id: e.id })}
-        className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
       >
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-container">
           <span className="material-symbols-outlined text-on-surface-variant">
@@ -958,6 +960,21 @@ function MyEventsScreen({
           {e.status === "finished" ? "SELESAI" : "LIVE"}
         </span>
       </button>
+      {canDelete && (
+        <button
+          onClick={async () => {
+            if (confirm(`Hapus turnamen "${e.name}"? Tindakan ini permanen.`)) {
+              await deleteEvent(e.id);
+              q.reload();
+            }
+          }}
+          className="grid w-11 shrink-0 place-items-center rounded-2xl border border-outline-variant/40 text-outline transition hover:border-error hover:bg-error-container hover:text-error"
+          aria-label="Hapus turnamen"
+          title="Hapus turnamen"
+        >
+          <span className="material-symbols-outlined text-[20px]">delete</span>
+        </button>
+      )}
     </li>
     );
   };

@@ -535,17 +535,26 @@ export function ShareModal({
     [rows, start, count]
   );
 
-  // Skala preview agar kanvas 1080×1920 muat di lebar layar modal.
+  // Skala preview: muat di lebar modal DAN dibatasi tinggi viewport supaya
+  // kontrol (template/slider/aksi) tetap terlihat — penting di desktop yang
+  // tinggi, juga aman di mobile.
   const [scale, setScale] = useState(0.3);
   const frameRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = frameRef.current;
     if (!el) return;
-    const fit = () => setScale(Math.min(el.clientWidth / W, 1));
+    const fit = () => {
+      const maxH = window.innerHeight * 0.48;
+      setScale(Math.min(el.clientWidth / W, maxH / H));
+    };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+    };
   }, []);
 
   async function capture(): Promise<{ url: string; file: File } | null> {
@@ -639,22 +648,23 @@ export function ShareModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {/* Preview */}
-          <div
-            ref={frameRef}
-            className="mx-auto overflow-hidden rounded-2xl border border-outline-variant/30 bg-[conic-gradient(#0000_90deg,#e5e7eb_0_180deg,#0000_0_270deg,#e5e7eb_0)] bg-[length:24px_24px]"
-            style={{ width: "100%", height: H * scale }}
-          >
+          {/* Preview (frameRef = ukur lebar; box dalam = kanvas terskala) */}
+          <div ref={frameRef} className="w-full">
             <div
-              style={{
-                transform: `scale(${scale})`,
-                transformOrigin: "top left",
-                width: W,
-                height: H,
-              }}
+              className="mx-auto overflow-hidden rounded-2xl border border-outline-variant/30 bg-[conic-gradient(#0000_90deg,#e5e7eb_0_180deg,#0000_0_270deg,#e5e7eb_0)] bg-[length:24px_24px]"
+              style={{ width: W * scale, height: H * scale }}
             >
-              <div ref={captureRef}>
-                {template.render({ title, rows: visibleRows, bg })}
+              <div
+                style={{
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                  width: W,
+                  height: H,
+                }}
+              >
+                <div ref={captureRef}>
+                  {template.render({ title, rows: visibleRows, bg })}
+                </div>
               </div>
             </div>
           </div>
