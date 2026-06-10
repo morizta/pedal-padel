@@ -342,9 +342,10 @@ function BgImage({ bg }: { bg?: string | null }) {
   if (!bg) return null;
   return (
     <>
+      {/* bg = data URL lokal → JANGAN set crossOrigin (merusak load di mobile). */}
       <img
         src={bg}
-        crossOrigin="anonymous"
+        alt=""
         style={{
           position: "absolute",
           inset: 0,
@@ -527,7 +528,6 @@ export function ShareModal({
   const [bg, setBg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const captureRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const template = TEMPLATES[tpl] ?? TEMPLATES[0]!;
   const visibleRows = useMemo(
@@ -724,22 +724,18 @@ export function ShareModal({
             </div>
           )}
 
-          {/* Insert photo */}
+          {/* Insert photo — label membungkus input agar tap di mobile andal */}
           <div className="mt-4 flex gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={onPickPhoto}
-            />
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold hover:bg-surface-container-high"
-            >
+            <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold hover:bg-surface-container-high">
               <span className="material-symbols-outlined text-[20px]">image</span>
               {bg ? "Ganti foto" : "Sisipkan foto"}
-            </button>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={onPickPhoto}
+              />
+            </label>
             {bg && (
               <button
                 onClick={() => setBg(null)}
