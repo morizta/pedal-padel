@@ -11,6 +11,27 @@ Pedal Padel = SPA statis (web) + Supabase (data). Web bisa di-deploy lewat Docke
 
 > `anon key` aman ditaruh di frontend — akses dilindungi **RLS**. Jangan pernah pakai `service_role` di klien.
 
+## 1b. Google SSO (opsional)
+
+Kode tombol **"Lanjut dengan Google"** sudah ada di [`apps/web/src/auth.tsx`](../apps/web/src/auth.tsx) (`signInWithGoogle` → `supabase.auth.signInWithOAuth({ provider: "google" })`). Tombol baru berfungsi setelah provider diaktifkan di Google Cloud + Supabase. **Tanpa perubahan schema/build** — murni runtime OAuth.
+
+**A. Google Cloud Console** — buat OAuth Client:
+1. [console.cloud.google.com](https://console.cloud.google.com) → buat/pilih project.
+2. **APIs & Services → OAuth consent screen** → tipe **External** → isi nama app, email support → scope `email`, `profile`.
+3. **APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application**.
+4. **Authorized redirect URIs** → callback Supabase (dari `VITE_SUPABASE_URL`):
+   ```
+   https://<PROJECT_REF>.supabase.co/auth/v1/callback
+   ```
+5. **Authorized JavaScript origins** → origin app: `http://localhost:5173`, `http://IP-SERVER:8080`, domain produksi.
+6. Salin **Client ID** + **Client Secret**.
+
+**B. Supabase Dashboard**:
+1. **Authentication → Providers → Google** → **Enable** → tempel Client ID + Secret → Save.
+2. **Authentication → URL Configuration** → set **Site URL** (URL produksi) + tambahkan semua origin app ke **Redirect URLs** (localhost, server, produksi) agar redirect balik tidak ditolak.
+
+**Cara kerja:** klik tombol → redirect ke Google → balik ke `window.location.origin` → `onAuthStateChange` menangkap sesi. Trigger `handle_new_user` otomatis bikin profil + self-player untuk user Google baru (pakai `name` dari metadata Google).
+
 ## 2. Environment
 
 Vite meng-*inline* env saat **build**, jadi nilainya harus tersedia saat build (bukan runtime).

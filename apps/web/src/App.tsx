@@ -420,24 +420,7 @@ function DashboardScreen({
   const latestLeaguesQ = useAsync(() => latestLeagues(), []);
   const latestEventsQ = useAsync(() => listVisibleEvents(), []);
 
-  if (!user) {
-    return (
-      <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
-        <span className="material-symbols-outlined mb-2 text-5xl text-primary-fixed-dim">
-          sports_tennis
-        </span>
-        <h2 className="font-display text-xl font-bold">
-          Selamat datang di SICOPA
-        </h2>
-        <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
-          Klik <b>Masuk / Daftar</b> di kanan atas untuk membuat liga & turnamen,
-          input skor, dan lihat ranking ELO-mu.
-        </p>
-      </div>
-    );
-  }
-
-  const myName = displayName(user);
+  const myName = user ? displayName(user) : "";
   const ratings = statsQ.data
     ? computeRatings(statsQ.data.names, statsQ.data.results)
     : [];
@@ -459,6 +442,9 @@ function DashboardScreen({
   const latestLeaguesD = latestLeaguesQ.data ?? [];
   const latestEventsD = latestEventsQ.data ?? [];
 
+  const needLogin = () =>
+    alert("Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.");
+
   return (
     <div className="space-y-5">
       {/* Hero */}
@@ -466,46 +452,54 @@ function DashboardScreen({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
             <h1 className="font-display text-2xl font-extrabold tracking-tight">
-              Halo, {myName.split(" ")[0]}! 👋
+              {user
+                ? `Halo, ${myName.split(" ")[0]}! 👋`
+                : "Selamat datang di SICOPA 🎾"}
             </h1>
             <p className="mt-1 text-sm text-white/60">
-              Siap bertanding hari ini? Cek performamu di bawah.
+              {user
+                ? "Siap bertanding hari ini? Cek performamu di bawah."
+                : "Lihat ranking, liga & turnamen. Masuk / Daftar (kanan atas) untuk mulai main."}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-            <div className="font-label-caps text-label-caps text-primary-fixed">
-              {nextMatch ? "MATCH BERIKUTNYA" : "STATISTIK"}
-            </div>
-            {nextMatch ? (
-              <button
-                onClick={() => onNavigate({ t: "session", id: nextMatch.id })}
-                className="mt-1 block text-left"
-              >
-                <div className="truncate font-bold">{nextMatch.name}</div>
-                <div className="text-xs text-white/60">
-                  {nextMatch.startAt
-                    ? `🗓 ${fmtDate(nextMatch.startAt)}`
-                    : "Sedang berlangsung"}
-                </div>
-              </button>
-            ) : (
-              <div className="mt-1 flex items-end gap-3">
-                <span className="font-data-mono text-2xl font-bold text-primary-fixed">
-                  {myRating?.matchesPlayed ? Math.round(myRating.rating) : 1000}
-                </span>
-                <span className="pb-1 text-xs text-white/50">
-                  ELO{myIdx >= 0 ? ` · #${myIdx + 1}` : ""}
-                </span>
+          {user && (
+            <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+              <div className="font-label-caps text-label-caps text-primary-fixed">
+                {nextMatch ? "MATCH BERIKUTNYA" : "STATISTIK"}
               </div>
-            )}
-          </div>
+              {nextMatch ? (
+                <button
+                  onClick={() => onNavigate({ t: "session", id: nextMatch.id })}
+                  className="mt-1 block text-left"
+                >
+                  <div className="truncate font-bold">{nextMatch.name}</div>
+                  <div className="text-xs text-white/60">
+                    {nextMatch.startAt
+                      ? `🗓 ${fmtDate(nextMatch.startAt)}`
+                      : "Sedang berlangsung"}
+                  </div>
+                </button>
+              ) : (
+                <div className="mt-1 flex items-end gap-3">
+                  <span className="font-data-mono text-2xl font-bold text-primary-fixed">
+                    {myRating?.matchesPlayed ? Math.round(myRating.rating) : 1000}
+                  </span>
+                  <span className="pb-1 text-xs text-white/50">
+                    ELO{myIdx >= 0 ? ` · #${myIdx + 1}` : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
       {/* Aksi cepat */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
-          onClick={() => onNavigate({ t: "create", leagueId: null })}
+          onClick={() =>
+            user ? onNavigate({ t: "create", leagueId: null }) : needLogin()
+          }
           className="flex items-center justify-center gap-2 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
         >
           <span className="material-symbols-outlined">add_circle</span>
@@ -585,7 +579,8 @@ function DashboardScreen({
             ]}
           />
 
-          {/* Punyaku — Liga / Turnamen milikku */}
+          {/* Punyaku — Liga / Turnamen milikku (hanya saat login) */}
+          {user && (
           <DashTabCard
             title="Saya"
             tabs={[
@@ -645,10 +640,12 @@ function DashboardScreen({
               },
             ]}
           />
+          )}
         </div>
 
         {/* Kanan */}
         <div className="space-y-5">
+          {user && (
           <section className="rounded-2xl bg-navy p-5 text-white shadow-sm">
             <div className="font-label-caps text-label-caps text-primary-fixed">
               STATISTIK SAYA
@@ -684,6 +681,7 @@ function DashboardScreen({
               Lihat profil
             </button>
           </section>
+          )}
 
           <DashCard
             title="Ranking Global"
@@ -1733,8 +1731,12 @@ function ExploreScreen({
     ? rankedPlayers.filter((p) => p.name.toLowerCase().includes(term))
     : rankedPlayers;
 
+  const needLogin = () =>
+    alert("Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.");
+
   async function joinByCode() {
     if (!code.trim()) return;
+    if (!user) return needLogin();
     setBusy(true);
     try {
       const id = await joinWithCode(code);
@@ -1746,6 +1748,7 @@ function ExploreScreen({
     }
   }
   async function requestJoinLiga(id: string) {
+    if (!user) return needLogin();
     setBusy(true);
     try {
       await requestJoin(id);
@@ -1756,20 +1759,6 @@ function ExploreScreen({
     } finally {
       setBusy(false);
     }
-  }
-
-  if (!user) {
-    return (
-      <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
-        <span className="material-symbols-outlined mb-2 text-5xl text-primary-fixed-dim">
-          explore
-        </span>
-        <h2 className="font-display text-xl font-bold">Jelajah</h2>
-        <p className="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">
-          Masuk untuk menjelajah liga, turnamen, dan pemain.
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -1835,7 +1824,9 @@ function ExploreScreen({
       {tab === "liga" && (
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => onNavigate({ t: "createLeague" })}
+            onClick={() =>
+              user ? onNavigate({ t: "createLeague" }) : needLogin()
+            }
             className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
@@ -1846,7 +1837,9 @@ function ExploreScreen({
       {tab === "turnamen" && (
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => onNavigate({ t: "create", leagueId: null })}
+            onClick={() =>
+              user ? onNavigate({ t: "create", leagueId: null }) : needLogin()
+            }
             className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>

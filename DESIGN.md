@@ -684,3 +684,15 @@ Idempotent + backfill `created_by` dari pembuat yang diketahui.
 ### 19.6 Deploy produksi
 Image di-push ke Docker Hub **`akhaza/pedalpadel-client:latest`** (multi-arch
 amd64+arm64). Detail di [docs/deployment.md](docs/deployment.md).
+
+### 19.7 Auth: akses guest, redesign & Google SSO
+- **Browsing tanpa login** — dinding login di Beranda & Jelajah dihapus; guest
+  bisa lihat ranking, liga & turnamen global (RLS baca publik). Bagian personal
+  (statistik, kartu "Saya") & aksi tulis (buat/gabung/skor) baru muncul/aktif
+  setelah login.
+- **Redesign modal Masuk/Daftar** (`auth.tsx`) — pakai design-token app, header
+  berbrand SICOPA, input ber-ikon, cek username realtime.
+- **Google SSO** — tombol "Lanjut dengan Google" (`signInWithGoogle` →
+  `signInWithOAuth`). Perlu konfigurasi Google Cloud + Supabase (provider +
+  redirect URL), tanpa perubahan schema. Langkah lengkap di
+  [docs/deployment.md §1b](docs/deployment.md).
