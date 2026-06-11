@@ -54,6 +54,7 @@ import {
   listLeagueMembers,
   approveMember,
   removeMember,
+  setMemberRole,
   leaveLeague,
   getEvent,
   createEvent,
@@ -69,6 +70,7 @@ import {
   type League,
 } from "./db";
 import { useAsync } from "./useAsync";
+import { confirmDialog, alertDialog, DialogHost } from "./dialog";
 import { ShareButton, buildShareRows } from "./share";
 
 type View =
@@ -225,7 +227,8 @@ export function App() {
   }, [user]);
 
   return (
-    <AppShell view={view} user={user} onNavigate={setView}>
+    <>
+      <AppShell view={view} user={user} onNavigate={setView}>
       {view.t === "home" && (
         <DashboardScreen user={user} onNavigate={setView} />
       )}
@@ -308,7 +311,9 @@ export function App() {
           onBack={() => setView({ t: "home" })}
         />
       )}
-    </AppShell>
+      </AppShell>
+      <DialogHost />
+    </>
   );
 }
 
@@ -445,7 +450,10 @@ function DashboardScreen({
   const latestEventsD = latestEventsQ.data ?? [];
 
   const needLogin = () =>
-    alert("Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.");
+    void alertDialog(
+      "Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.",
+      { title: "Perlu login" }
+    );
 
   return (
     <div className="space-y-5">
@@ -963,7 +971,12 @@ function MyEventsScreen({
       {canDelete && (
         <button
           onClick={async () => {
-            if (confirm(`Hapus turnamen "${e.name}"? Tindakan ini permanen.`)) {
+            if (
+              await confirmDialog(
+                `Hapus turnamen "${e.name}"? Tindakan ini permanen.`,
+                { title: "Hapus turnamen", confirmText: "Hapus", tone: "danger" }
+              )
+            ) {
               await deleteEvent(e.id);
               q.reload();
             }
@@ -1734,7 +1747,10 @@ function ExploreScreen({
     : rankedPlayers;
 
   const needLogin = () =>
-    alert("Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.");
+    void alertDialog(
+      "Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.",
+      { title: "Perlu login" }
+    );
 
   async function joinByCode() {
     if (!code.trim()) return;
@@ -1744,7 +1760,7 @@ function ExploreScreen({
       const id = await joinWithCode(code);
       onNavigate({ t: "league", id });
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -1755,9 +1771,11 @@ function ExploreScreen({
     try {
       await requestJoin(id);
       leaguesQ.reload();
-      alert("Permintaan terkirim. Menunggu persetujuan owner.");
+      void alertDialog("Permintaan terkirim. Menunggu persetujuan owner.", {
+        title: "Terkirim",
+      });
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -2619,7 +2637,7 @@ function DiscoverScreen({
       const id = await joinWithCode(code);
       onOpenLeague(id);
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -2629,9 +2647,11 @@ function DiscoverScreen({
     try {
       await requestJoin(id);
       list.reload();
-      alert("Permintaan terkirim. Menunggu persetujuan owner liga.");
+      void alertDialog("Permintaan terkirim. Menunggu persetujuan owner liga.", {
+        title: "Terkirim",
+      });
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -2791,8 +2811,15 @@ function EventList({
             </button>
             {(canManage || (meId && e.ownerId === meId)) && (
               <button
-                onClick={() => {
-                  if (confirm(`Hapus turnamen "${e.name}"?`)) onDelete(e.id);
+                onClick={async () => {
+                  if (
+                    await confirmDialog(`Hapus turnamen "${e.name}"?`, {
+                      title: "Hapus turnamen",
+                      confirmText: "Hapus",
+                      tone: "danger",
+                    })
+                  )
+                    onDelete(e.id);
                 }}
                 className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
                 aria-label="Hapus"
@@ -2864,8 +2891,9 @@ function LeagueScreen({
                 <button
                   onClick={() => {
                     navigator.clipboard?.writeText(league.joinCode!);
-                    alert(
-                      `Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`
+                    void alertDialog(
+                      `Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`,
+                      { title: "Kode disalin" }
                     );
                   }}
                   className="flex items-center gap-1 rounded-full bg-primary-fixed/15 px-2.5 py-1 font-data-mono text-data-mono font-bold tracking-wider text-primary-fixed hover:bg-primary-fixed/25"
@@ -2904,8 +2932,9 @@ function LeagueScreen({
               <button
                 onClick={async () => {
                   if (
-                    confirm(
-                      `Hapus liga "${league.name}"? Sesi di dalamnya jadi turnamen lepas.`
+                    await confirmDialog(
+                      `Hapus liga "${league.name}"? Sesi di dalamnya jadi turnamen lepas.`,
+                      { title: "Hapus liga", confirmText: "Hapus", tone: "danger" }
                     )
                   ) {
                     await deleteLeague(league.id);
@@ -2919,7 +2948,13 @@ function LeagueScreen({
             ) : league.myRole ? (
               <button
                 onClick={async () => {
-                  if (confirm(`Keluar dari liga "${league.name}"?`)) {
+                  if (
+                    await confirmDialog(`Keluar dari liga "${league.name}"?`, {
+                      title: "Keluar liga",
+                      confirmText: "Keluar",
+                      tone: "danger",
+                    })
+                  ) {
                     await leaveLeague(league.id);
                     onNavigate({ t: "leagues" });
                   }
@@ -2932,6 +2967,12 @@ function LeagueScreen({
           </div>
         </div>
       </section>
+
+      {league.notes && (
+        <Card title="📝 Catatan liga">
+          <NotesHtml html={league.notes} />
+        </Card>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card
@@ -3073,6 +3114,7 @@ function EditLeagueModal({
 }) {
   const [name, setName] = useState(league.name);
   const [description, setDescription] = useState(league.description ?? "");
+  const [notes, setNotes] = useState(league.notes ?? "");
   const [photo, setPhoto] = useState<string | null>(league.photoUrl);
   const [visibility, setVisibility] = useState<"private" | "public">(
     league.visibility
@@ -3086,7 +3128,7 @@ function EditLeagueModal({
       try {
         setPhoto(await readImageDataUrl(f));
       } catch {
-        alert("Gagal membaca gambar.");
+        void alertDialog("Gagal membaca gambar.", { title: "Gagal", tone: "danger" });
       }
     }
   }
@@ -3098,12 +3140,16 @@ function EditLeagueModal({
       await updateLeague(league.id, {
         name,
         description,
+        notes,
         photoUrl: photo,
         visibility,
       });
       onSaved();
     } catch (e) {
-      alert("Gagal menyimpan: " + errMsg(e));
+      void alertDialog("Gagal menyimpan: " + errMsg(e), {
+        title: "Gagal",
+        tone: "danger",
+      });
       setBusy(false);
     }
   }
@@ -3171,10 +3217,21 @@ function EditLeagueModal({
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Deskripsi (opsional)"
+            placeholder="Deskripsi singkat (opsional)"
             rows={2}
             className="input w-full resize-none"
           />
+
+          <div>
+            <div className="mb-1 text-xs font-medium text-on-surface-variant">
+              Catatan (opsional)
+            </div>
+            <RichText
+              value={notes}
+              onChange={setNotes}
+              placeholder="Aturan, jadwal, info tambahan…"
+            />
+          </div>
 
           <div className="flex rounded-xl border border-outline-variant/40 bg-surface-container p-1 text-sm">
             {(
@@ -3270,6 +3327,22 @@ function LeaguePeople({
         badge: a.role,
         canRemove: isAdmin && a.role !== "owner",
         onRemove: () => removeMember(leagueId, a.userId),
+        isAdminRole: a.role === "admin",
+        canSetRole: isAdmin && a.role !== "owner",
+        onToggleRole: async () => {
+          const toAdmin = a.role !== "admin";
+          const ok = await confirmDialog(
+            toAdmin
+              ? `Jadikan ${a.name} admin liga? Admin bisa kelola anggota, turnamen & roster.`
+              : `Turunkan ${a.name} jadi member biasa?`,
+            {
+              title: toAdmin ? "Jadikan admin" : "Turunkan role",
+              confirmText: toAdmin ? "Jadikan admin" : "Turunkan",
+            }
+          );
+          if (!ok) return;
+          await setMemberRole(leagueId, a.userId, toAdmin ? "admin" : "member");
+        },
       })),
     ...extraPlayers
       .slice()
@@ -3281,6 +3354,9 @@ function LeaguePeople({
         badge: p.isGuest ? "tamu" : "akun",
         canRemove: isAdmin,
         onRemove: async () => setR(rosterIds.filter((x) => x !== p.id)),
+        isAdminRole: false,
+        canSetRole: false,
+        onToggleRole: undefined as (() => Promise<void>) | undefined,
       })),
   ];
 
@@ -3316,7 +3392,7 @@ function LeaguePeople({
       membersQ.reload();
       leagueQ.reload();
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     }
   }
   async function setR(next: string[]) {
@@ -3490,6 +3566,17 @@ function LeaguePeople({
             >
               {r.badge}
             </span>
+            {r.canSetRole && r.onToggleRole && (
+              <button
+                onClick={() => act(r.onToggleRole!)}
+                className="grid h-6 w-6 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-primary"
+                title={r.isAdminRole ? "Turunkan jadi member" : "Jadikan admin"}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {r.isAdminRole ? "remove_moderator" : "add_moderator"}
+                </span>
+              </button>
+            )}
             {r.canRemove && (
               <button
                 onClick={() => act(r.onRemove)}
@@ -3586,6 +3673,28 @@ function RichText({
   );
 }
 
+/** Render catatan HTML (read-only) dengan sanitasi ringan: hanya tag format,
+ * semua atribut dibuang (cegah XSS dari event-handler / javascript: / style). */
+function NotesHtml({ html }: { html: string }) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const ok = new Set([
+    "B", "I", "EM", "STRONG", "U", "UL", "OL", "LI", "P", "BR", "DIV", "SPAN",
+  ]);
+  doc.body.querySelectorAll("*").forEach((el) => {
+    if (!ok.has(el.tagName)) {
+      el.replaceWith(...Array.from(el.childNodes)); // unwrap tag tak diizinkan
+      return;
+    }
+    Array.from(el.attributes).forEach((a) => el.removeAttribute(a.name));
+  });
+  return (
+    <div
+      className="text-sm text-on-surface-variant [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+      dangerouslySetInnerHTML={{ __html: doc.body.innerHTML }}
+    />
+  );
+}
+
 /** Baca file gambar → data URL terkompres (maks sisi terpanjang `max` px). */
 function readImageDataUrl(file: File, max = 256): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -3657,7 +3766,7 @@ function CreateLeagueScreen({
       try {
         setPhoto(await readImageDataUrl(f));
       } catch {
-        alert("Gagal membaca gambar.");
+        void alertDialog("Gagal membaca gambar.", { title: "Gagal", tone: "danger" });
       }
     }
   }
@@ -3698,7 +3807,10 @@ function CreateLeagueScreen({
       }
       onCreated(lg.id);
     } catch (e) {
-      alert("Gagal membuat liga: " + errMsg(e));
+      void alertDialog("Gagal membuat liga: " + errMsg(e), {
+        title: "Gagal",
+        tone: "danger",
+      });
       setBusy(false);
     }
   }
@@ -3926,6 +4038,7 @@ function CreateScreen({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
   const [startMode, setStartMode] = useState<"now" | "schedule">("now");
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -4052,6 +4165,7 @@ function CreateScreen({
           : undefined,
         visibility,
         description,
+        notes,
         startAt:
           startMode === "schedule" && startDate
             ? new Date(`${startDate}T${startTime || "00:00"}`).getTime()
@@ -4059,7 +4173,10 @@ function CreateScreen({
       });
       onCreated(event.id);
     } catch (e) {
-      alert("Gagal membuat sesi: " + (e instanceof Error ? e.message : e));
+      void alertDialog(
+        "Gagal membuat sesi: " + (e instanceof Error ? e.message : e),
+        { title: "Gagal", tone: "danger" }
+      );
       setBusy(false);
     }
   }
@@ -4094,6 +4211,14 @@ function CreateScreen({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="mis. Arisan padel mingguan…"
             className="input"
+          />
+        </Field>
+
+        <Field label="Catatan (opsional)">
+          <RichText
+            value={notes}
+            onChange={setNotes}
+            placeholder="Aturan, jadwal, info tambahan…"
           />
         </Field>
 
@@ -4641,6 +4766,20 @@ function SessionInner({
   return (
     <div className="space-y-5">
       <MetaBar session={session} event={event} onExit={onExit} canEdit={canEdit} />
+      {(event.description || event.notes) && (
+        <Card title="ℹ️ Tentang turnamen">
+          {event.description && (
+            <p className="text-sm text-on-surface-variant">
+              {event.description}
+            </p>
+          )}
+          {event.notes && (
+            <div className={event.description ? "mt-2" : ""}>
+              <NotesHtml html={event.notes} />
+            </div>
+          )}
+        </Card>
+      )}
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <RoundsPanel session={session} canEdit={canEdit} />
         <div className="space-y-5">

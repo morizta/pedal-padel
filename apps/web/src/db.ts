@@ -578,6 +578,20 @@ export async function removeMember(
   if (error) throw error;
 }
 
+/** Angkat/turunkan role anggota (admin/owner; ditegakkan RLS lu_admin_update). */
+export async function setMemberRole(
+  leagueId: string,
+  userId: string,
+  role: "admin" | "member"
+): Promise<void> {
+  const { error } = await db()
+    .from("league_users")
+    .update({ role })
+    .eq("league_id", leagueId)
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
 export interface AccountUser {
   userId: string;
   name: string;
@@ -617,6 +631,8 @@ export interface DbEvent {
   status: "live" | "finished";
   visibility: "inherit" | "private" | "public";
   description: string | null;
+  /** Catatan (HTML dari editor WYSIWYG). */
+  notes: string | null;
   /** Jadwal mulai (ms). null = mulai sekarang/segera. */
   startAt: number | null;
   playerIds: string[];
@@ -629,7 +645,7 @@ export interface DbEvent {
 }
 
 const EVENT_COLS =
-  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,start_at,player_ids,player_names,teams,rounds,scores,created_at";
+  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,notes,start_at,player_ids,player_names,teams,rounds,scores,created_at";
 
 function mapEvent(r: any): DbEvent {
   return {
@@ -644,6 +660,7 @@ function mapEvent(r: any): DbEvent {
     status: r.status,
     visibility: r.visibility ?? "inherit",
     description: r.description ?? null,
+    notes: r.notes ?? null,
     startAt: r.start_at ? Date.parse(r.start_at) : null,
     playerIds: r.player_ids ?? [],
     players: r.player_names ?? [],
@@ -741,6 +758,8 @@ export interface NewEvent {
   /** Visibilitas: inherit (ikut liga) | private | public. Default inherit. */
   visibility?: "inherit" | "private" | "public";
   description?: string;
+  /** Catatan (HTML dari editor WYSIWYG). */
+  notes?: string;
   /** Jadwal mulai (ms). null/undefined = sekarang. */
   startAt?: number | null;
 }
@@ -761,6 +780,7 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
       status: "live",
       visibility: input.visibility ?? "inherit",
       description: input.description?.trim() || null,
+      notes: input.notes?.trim() || null,
       start_at: input.startAt ? new Date(input.startAt).toISOString() : null,
       player_ids: input.participants.map((p) => p.id),
       player_names: input.participants.map((p) => p.name),
