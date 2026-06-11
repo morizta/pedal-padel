@@ -312,6 +312,44 @@ export async function createLeague(input: NewLeague): Promise<League> {
   return mapLeague(data!);
 }
 
+export interface LeaguePatch {
+  name?: string;
+  description?: string | null;
+  notes?: string | null;
+  photoUrl?: string | null;
+  visibility?: "private" | "public";
+}
+
+/** Edit pengaturan liga (admin/owner; ditegakkan RLS leagues_update). */
+export async function updateLeague(
+  id: string,
+  patch: LeaguePatch
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined)
+    row.name = patch.name.trim() || "Liga Tanpa Nama";
+  if (patch.description !== undefined)
+    row.description = patch.description?.trim() || null;
+  if (patch.notes !== undefined) row.notes = patch.notes?.trim() || null;
+  if (patch.photoUrl !== undefined) row.photo_url = patch.photoUrl || null;
+  if (patch.visibility !== undefined) {
+    row.visibility = patch.visibility;
+    if (patch.visibility === "public") {
+      row.join_code = null; // publik tak pakai kode
+    } else {
+      // private: pertahankan kode lama, buat baru bila belum ada.
+      const { data } = await db()
+        .from("leagues")
+        .select("join_code")
+        .eq("id", id)
+        .maybeSingle();
+      if (!data?.join_code) row.join_code = genJoinCode();
+    }
+  }
+  const { error } = await db().from("leagues").update(row).eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteLeague(id: string): Promise<void> {
   const { error } = await db().from("leagues").delete().eq("id", id);
   if (error) throw error;
