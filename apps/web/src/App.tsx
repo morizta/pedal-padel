@@ -376,6 +376,36 @@ function AppShell({
       <nav className="fixed bottom-0 left-0 z-40 flex w-full items-stretch justify-around border-t border-outline-variant bg-surface-container-lowest pb-safe shadow-lg md:hidden">
         {NAV_TABS.map((t) => {
           const on = active === t.key;
+
+          // Tab "Main" = aksi utama → tombol bulat menonjol (FAB) di tengah.
+          if (t.key === "main") {
+            return (
+              <button
+                key={t.key}
+                onClick={() => onNavigate(t.view)}
+                className="flex flex-1 flex-col items-center justify-end gap-0.5 py-1.5"
+                aria-label={t.label}
+              >
+                <span
+                  className={`-mt-9 grid h-16 w-16 place-items-center rounded-full border-4 border-surface-container-lowest shadow-lg transition active:scale-95 ${
+                    on ? "bg-primary-fixed-dim" : "bg-primary-fixed"
+                  } text-on-primary-fixed`}
+                >
+                  <span className="material-symbols-outlined fill text-[30px]">
+                    {t.icon}
+                  </span>
+                </span>
+                <span
+                  className={`text-[11px] font-bold ${
+                    on ? "text-on-surface" : "text-on-surface-variant"
+                  }`}
+                >
+                  {t.label}
+                </span>
+              </button>
+            );
+          }
+
           return (
             <button
               key={t.key}
@@ -2225,9 +2255,9 @@ function LeaderboardScreen({
         emptyText="Belum ada pemain. Daftarkan di atas."
       />
 
-      {/* Podium */}
+      {/* Podium — 3 kolom (juara di tengah & lebih tinggi), ringkas di mobile */}
       {top3.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-3 items-end gap-2 sm:gap-4">
           {top3.map((r, i) => (
             <PodiumCard
               key={r.id ?? r.name}
@@ -2369,12 +2399,9 @@ function PodiumCard({
 }) {
   const champ = rank === 1;
   const tierLabel = rank === 1 ? "JUARA" : rank === 2 ? "PERAK" : "PERUNGGU";
+  // Susunan podium: perak (kiri) · juara (tengah) · perunggu (kanan).
   const order =
-    rank === 1 ? "order-1 md:order-2" : rank === 2 ? "order-2 md:order-1" : "order-3";
-  const rel = Math.round(reliability(r.played) * 100);
-  const wl = r.st
-    ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
-    : "0–0";
+    rank === 1 ? "order-2" : rank === 2 ? "order-1" : "order-3";
   const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
 
   const accent =
@@ -2405,72 +2432,58 @@ function PodiumCard({
             elo: "text-on-surface",
           };
   const cardCls = champ
-    ? "bg-gradient-to-b from-amber-50 to-surface-container-lowest ring-2 ring-amber-300 shadow-lg shadow-amber-500/10 md:-translate-y-4"
-    : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm";
+    ? "bg-gradient-to-b from-amber-50 to-surface-container-lowest ring-2 ring-amber-300 shadow-lg shadow-amber-500/10 pt-5 sm:pt-6"
+    : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm pt-4";
 
   return (
-    <div
-      className={`relative flex flex-col items-center overflow-hidden rounded-2xl px-5 pb-5 pt-7 text-center text-on-surface ${order} ${cardCls}`}
+    <button
+      onClick={onOpen}
+      className={`relative flex flex-col items-center overflow-hidden rounded-2xl px-2 pb-3 text-center text-on-surface sm:px-3 ${order} ${cardCls} ${
+        champ ? "-translate-y-1 sm:-translate-y-3" : ""
+      }`}
     >
       <div className={`absolute inset-x-0 top-0 h-1.5 ${accent.bar}`} />
       <div
-        className={`pointer-events-none absolute -top-12 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full blur-3xl ${accent.glow}`}
+        className={`pointer-events-none absolute -top-12 left-1/2 h-28 w-28 -translate-x-1/2 rounded-full blur-3xl ${accent.glow}`}
       />
       <span
-        className={`absolute right-3 top-4 font-label-caps text-label-caps rounded px-2 py-1 ${accent.badge}`}
+        className={`mb-1.5 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${accent.badge}`}
       >
         {tierLabel}
       </span>
 
-      {champ && (
-        <span className="material-symbols-outlined fill relative mb-1 text-[22px] text-amber-500">
-          emoji_events
+      <span className="relative">
+        <span
+          className={`grid place-items-center rounded-full font-bold ring-4 ${accent.ring} ${avatarColor(
+            r.name
+          )} ${champ ? "h-16 w-16 text-xl sm:h-20 sm:w-20 sm:text-2xl" : "h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl"}`}
+        >
+          {initialsOf(r.name)}
         </span>
-      )}
+        <span
+          className={`absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full font-data-mono text-[11px] font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
+        >
+          {rank}
+        </span>
+      </span>
 
-      <button onClick={onOpen} className="relative flex flex-col items-center">
-        <span className="relative">
-          <span
-            className={`grid h-20 w-20 place-items-center rounded-full text-2xl font-bold ring-4 ${accent.ring} ${avatarColor(
-              r.name
-            )}`}
-          >
-            {initialsOf(r.name)}
-          </span>
-          <span
-            className={`absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full font-data-mono text-xs font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
-          >
-            {rank}
-          </span>
-        </span>
-        <span className="mt-3 block max-w-full truncate font-display text-lg font-bold">
-          {r.name}
-          {me && <span className="ml-1 text-xs opacity-60">(kamu)</span>}
-        </span>
-        <span className="text-sm text-on-surface-variant">
-          {wl} · {wr}% menang
-        </span>
-      </button>
+      <span className="mt-2 block w-full truncate font-display text-sm font-bold leading-tight sm:text-base">
+        {r.name}
+      </span>
+      {me && <span className="text-[10px] text-on-surface-variant">(kamu)</span>}
 
-      <div className="relative mt-4 flex w-full items-end justify-between border-t border-outline-variant/20 pt-3">
-        <div className="text-left">
-          <div className="font-label-caps text-label-caps text-reliability-dimmed">
-            KEANDALAN
-          </div>
-          <div className="font-data-mono text-data-mono">{rel}%</div>
-        </div>
-        <div className="text-right">
-          <div className="font-label-caps text-label-caps text-reliability-dimmed">
-            ELO
-          </div>
-          <div
-            className={`font-display text-3xl font-extrabold leading-none ${accent.elo}`}
-          >
-            {Math.round(r.rating ?? 1000)}
-          </div>
-        </div>
-      </div>
-    </div>
+      <span
+        className={`mt-1 font-display text-2xl font-extrabold leading-none sm:text-3xl ${accent.elo}`}
+      >
+        {Math.round(r.rating ?? 1000)}
+      </span>
+      <span className="font-label-caps text-label-caps text-reliability-dimmed">
+        ELO
+      </span>
+      <span className="mt-1 text-[11px] text-on-surface-variant">
+        {wr}% menang
+      </span>
+    </button>
   );
 }
 
