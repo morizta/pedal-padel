@@ -4247,12 +4247,13 @@ function CreateScreen({
       <div className="flex items-center justify-between">
         <button
           onClick={onCancel}
-          className="text-sm text-slate-500 hover:text-slate-900"
+          className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
         >
-          ← Kembali
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          Kembali
         </button>
-        <span className="text-xs text-slate-400">
-          {inLeague ? `Sesi dalam liga: ${inLeague.name}` : "Turnamen lepas"}
+        <span className="rounded-full bg-surface-container px-2.5 py-1 font-label-caps text-label-caps text-on-surface-variant">
+          {inLeague ? `Liga: ${inLeague.name}` : "Turnamen lepas"}
         </span>
       </div>
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
@@ -4347,7 +4348,9 @@ function CreateScreen({
           {startMode === "schedule" && (
             <div className="mt-2 flex flex-wrap gap-2">
               <label className="flex-1">
-                <span className="mb-1 block text-xs text-slate-400">Tanggal</span>
+                <span className="mb-1 block text-xs text-on-surface-variant">
+                  Tanggal
+                </span>
                 <input
                   type="date"
                   value={startDate}
@@ -4356,7 +4359,9 @@ function CreateScreen({
                 />
               </label>
               <label className="flex-1">
-                <span className="mb-1 block text-xs text-slate-400">Jam</span>
+                <span className="mb-1 block text-xs text-on-surface-variant">
+                  Jam
+                </span>
                 <input
                   type="time"
                   value={startTime}
@@ -4366,7 +4371,7 @@ function CreateScreen({
               </label>
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-on-surface-variant">
             {startMode === "now"
               ? "Sesi dimulai sekarang."
               : startDate
@@ -4377,20 +4382,34 @@ function CreateScreen({
 
         <Field label="Format">
           <div className="grid gap-2 sm:grid-cols-2">
-            {FORMATS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setFormat(f.id)}
-                className={`rounded-xl border p-3 text-left transition ${
-                  format === f.id
-                    ? "border-lime-500 bg-lime-50 ring-1 ring-lime-500"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <div className="font-semibold">{f.name}</div>
-                <div className="text-xs text-slate-500">{f.desc}</div>
-              </button>
-            ))}
+            {FORMATS.map((f) => {
+              const on = format === f.id;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setFormat(f.id)}
+                  className={`flex items-start gap-2 rounded-xl border p-3 text-left transition ${
+                    on
+                      ? "border-primary bg-primary-container/30 ring-1 ring-primary"
+                      : "border-outline-variant hover:border-primary-fixed-dim hover:bg-surface-container-low"
+                  }`}
+                >
+                  <span
+                    className={`material-symbols-outlined mt-0.5 text-[18px] ${
+                      on ? "fill text-primary" : "text-on-surface-variant"
+                    }`}
+                  >
+                    {on ? "check_circle" : "radio_button_unchecked"}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{f.name}</span>
+                    <span className="block text-xs text-on-surface-variant">
+                      {f.desc}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </Field>
 
@@ -4401,7 +4420,9 @@ function CreateScreen({
             max={maxCourts}
             onChange={setCourts}
           />
-          <span className="ml-2 text-xs text-slate-400">maks {maxCourts}</span>
+          <span className="ml-2 text-xs text-on-surface-variant">
+            maks {maxCourts}
+          </span>
         </Field>
 
         <Field label="Sistem skor">
@@ -4446,7 +4467,7 @@ function CreateScreen({
                 />
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-on-surface-variant">
               {normalMode === "first"
                 ? `Tim pertama mencapai ${normalTarget} game menang.`
                 : `Main ${normalTarget} game, skor = game yang dimenangkan.`}
@@ -4462,7 +4483,7 @@ function CreateScreen({
               onLabel="Auto"
               offLabel="Manual"
             />
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-on-surface-variant">
               {pairing === "auto"
                 ? "Pasangan dibentuk otomatis."
                 : "Tentukan sendiri tiap tim di bawah."}
@@ -4518,7 +4539,7 @@ function CreateScreen({
               />
             ))}
           </div>
-          <p className="mt-1.5 text-xs text-slate-400">
+          <p className="mt-1.5 text-xs text-on-surface-variant">
             {visibility === "public"
               ? "Siapa pun bisa melihat turnamen ini."
               : visibility === "private"
@@ -4551,36 +4572,36 @@ function CreateScreen({
         />
 
         {names.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-on-surface-variant">
             Belum ada pemain. Cari nama lalu tambahkan, atau buat tamu.
           </p>
         ) : (
-          <ul className="mt-4 space-y-0.5 rounded-xl border border-slate-200 p-1">
+          <ul className="mt-4 space-y-1 rounded-xl border border-outline-variant/50 p-1.5">
             {selected.map((sel) => {
               const guest = sel.isGuest;
               return (
                 <li
                   key={sel.id}
-                  className="flex items-center gap-2.5 rounded-lg bg-lime-50 px-2 py-1.5 text-sm"
+                  className="flex items-center gap-2.5 rounded-lg bg-surface-container-low px-2 py-1.5 text-sm"
                 >
                   <span
                     className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
                       guest
-                        ? "bg-slate-200 text-slate-600"
-                        : "bg-sky-100 text-sky-700"
+                        ? "bg-surface-container text-on-surface-variant"
+                        : "bg-primary-container text-on-primary-container"
                     }`}
                   >
                     {sel.name.charAt(0).toUpperCase()}
                   </span>
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="truncate font-medium text-slate-800">
+                    <span className="truncate font-medium text-on-surface">
                       {sel.name}
                     </span>
                     <span
                       className={`rounded px-1 text-[10px] font-semibold uppercase ${
                         guest
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-sky-100 text-sky-700"
+                          ? "bg-elo-bronze/15 text-elo-bronze"
+                          : "bg-primary-container text-on-primary-container"
                       }`}
                     >
                       {guest ? "tamu" : "akun"}
@@ -4588,7 +4609,7 @@ function CreateScreen({
                   </span>
                   <button
                     onClick={() => togglePlayer(sel)}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-slate-400 hover:bg-black/10 hover:text-slate-700"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-on-surface-variant hover:bg-error-container hover:text-error"
                     aria-label={`Hapus ${sel.name}`}
                   >
                     ×
