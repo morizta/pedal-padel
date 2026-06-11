@@ -1228,6 +1228,7 @@ function ProfileScreen({
   const [avatarUrl, setAvatarUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   if (!user) {
     return (
@@ -1328,13 +1329,62 @@ function ProfileScreen({
               />
             </div>
             <label className="block font-label-caps text-label-caps text-white/60">
-              URL foto (opsional)
+              Foto profil (opsional)
             </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => avatarFileRef.current?.click()}
+                className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-dashed border-white/30 bg-white/5 hover:border-primary-fixed"
+              >
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="material-symbols-outlined text-white/60">
+                    add_a_photo
+                  </span>
+                )}
+              </button>
+              <div className="text-sm">
+                <button
+                  type="button"
+                  onClick={() => avatarFileRef.current?.click()}
+                  className="font-semibold text-primary-fixed hover:underline"
+                >
+                  {avatarUrl ? "Ganti foto" : "Unggah foto"}
+                </button>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setAvatarUrl("")}
+                    className="ml-3 text-white/50 hover:text-loss-red"
+                  >
+                    Hapus
+                  </button>
+                )}
+              </div>
+            </div>
             <input
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-on-surface"
-              placeholder="https://…/foto.jpg"
+              ref={avatarFileRef}
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  setAvatarUrl(await readImageDataUrl(f));
+                } catch {
+                  void alertDialog("Gagal membaca gambar.", {
+                    title: "Gagal",
+                    tone: "danger",
+                  });
+                }
+              }}
+              className="hidden"
             />
             {err && <p className="text-sm text-loss-red">{err}</p>}
             <div className="flex gap-2">
@@ -2772,11 +2822,19 @@ function EventList({
             key={e.id}
             className="group flex items-center gap-2 rounded-xl border border-outline-variant/50 p-2.5 transition hover:border-primary-fixed-dim hover:bg-surface-container-low"
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
-              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
-                {e.visibility === "private" ? "lock" : "sports_tennis"}
+            {e.photoUrl ? (
+              <img
+                src={e.photoUrl}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+              />
+            ) : (
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+                <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                  {e.visibility === "private" ? "lock" : "sports_tennis"}
+                </span>
               </span>
-            </span>
+            )}
             <button
               onClick={() => onOpen(e.id)}
               className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
@@ -4039,6 +4097,8 @@ function CreateScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
   const [startMode, setStartMode] = useState<"now" | "schedule">("now");
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -4166,6 +4226,7 @@ function CreateScreen({
         visibility,
         description,
         notes,
+        photoUrl: photo,
         startAt:
           startMode === "schedule" && startDate
             ? new Date(`${startDate}T${startTime || "00:00"}`).getTime()
@@ -4196,6 +4257,60 @@ function CreateScreen({
       </div>
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card title={inLeague ? "Tambah Sesi" : "Buat Turnamen"}>
+        <Field label="Foto turnamen (opsional)">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => photoRef.current?.click()}
+              className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-outline-variant bg-surface-container-low hover:border-primary-fixed-dim"
+            >
+              {photo ? (
+                <img src={photo} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-on-surface-variant">
+                  add_a_photo
+                </span>
+              )}
+            </button>
+            <div className="text-sm">
+              <button
+                type="button"
+                onClick={() => photoRef.current?.click()}
+                className="font-semibold text-primary hover:underline"
+              >
+                {photo ? "Ganti foto" : "Unggah foto"}
+              </button>
+              {photo && (
+                <button
+                  type="button"
+                  onClick={() => setPhoto(null)}
+                  className="ml-3 text-on-surface-variant hover:text-loss-red"
+                >
+                  Hapus
+                </button>
+              )}
+            </div>
+          </div>
+          <input
+            ref={photoRef}
+            type="file"
+            accept="image/*"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              try {
+                setPhoto(await readImageDataUrl(f));
+              } catch {
+                void alertDialog("Gagal membaca gambar.", {
+                  title: "Gagal",
+                  tone: "danger",
+                });
+              }
+            }}
+            className="hidden"
+          />
+        </Field>
+
         <Field label="Nama sesi">
           <input
             value={name}
@@ -4766,8 +4881,15 @@ function SessionInner({
   return (
     <div className="space-y-5">
       <MetaBar session={session} event={event} onExit={onExit} canEdit={canEdit} />
-      {(event.description || event.notes) && (
+      {(event.description || event.notes || event.photoUrl) && (
         <Card title="ℹ️ Tentang turnamen">
+          {event.photoUrl && (
+            <img
+              src={event.photoUrl}
+              alt=""
+              className="mb-3 h-40 w-full rounded-xl object-cover"
+            />
+          )}
           {event.description && (
             <p className="text-sm text-on-surface-variant">
               {event.description}

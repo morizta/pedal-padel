@@ -64,6 +64,7 @@ alter table public.events
 -- Deskripsi + jadwal mulai turnamen (start_at null = mulai sekarang).
 alter table public.events  add column if not exists description text;
 alter table public.events  add column if not exists notes text;       -- catatan (HTML editor)
+alter table public.events  add column if not exists photo_url text;    -- foto turnamen (data URL/link)
 alter table public.events  add column if not exists start_at timestamptz;
 alter table public.leagues add column if not exists description text;
 -- Notes (HTML dari editor) + foto (data URL / link) liga.
