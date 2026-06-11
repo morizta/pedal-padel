@@ -63,6 +63,8 @@ alter table public.events
 
 -- Deskripsi + jadwal mulai turnamen (start_at null = mulai sekarang).
 alter table public.events  add column if not exists description text;
+alter table public.events  add column if not exists notes text;       -- catatan (HTML editor)
+alter table public.events  add column if not exists photo_url text;    -- foto turnamen (data URL/link)
 alter table public.events  add column if not exists start_at timestamptz;
 alter table public.leagues add column if not exists description text;
 -- Notes (HTML dari editor) + foto (data URL / link) liga.
@@ -242,18 +244,25 @@ create policy players_write on public.players for all
 drop policy if exists leagues_read on public.leagues;
 create policy leagues_read on public.leagues for select using (true);
 drop policy if exists leagues_write on public.leagues;
-create policy leagues_write on public.leagues for all
-  using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
+drop policy if exists leagues_insert on public.leagues;
+drop policy if exists leagues_update on public.leagues;
+drop policy if exists leagues_delete on public.leagues;
+create policy leagues_insert on public.leagues for insert
+  with check (auth.uid() = owner_id);
+-- Edit pengaturan liga: admin/owner. Hapus liga: owner saja.
+create policy leagues_update on public.leagues for update
+  using (public.is_league_admin(id, auth.uid()))
+  with check (public.is_league_admin(id, auth.uid()));
+create policy leagues_delete on public.leagues for delete
+  using (auth.uid() = owner_id);
 
 -- league_members (ikut izin owner liga)
 drop policy if exists members_read on public.league_members;
 create policy members_read on public.league_members for select using (true);
 drop policy if exists members_write on public.league_members;
 create policy members_write on public.league_members for all
-  using (exists (select 1 from public.leagues l
-                 where l.id = league_id and l.owner_id = auth.uid()))
-  with check (exists (select 1 from public.leagues l
-                      where l.id = league_id and l.owner_id = auth.uid()));
+  using (public.is_league_admin(league_id, auth.uid()))
+  with check (public.is_league_admin(league_id, auth.uid()));
 
 -- league_users (keanggotaan user; insert sensitif lewat RPC SECURITY DEFINER)
 drop policy if exists lu_read on public.league_users;
@@ -274,8 +283,30 @@ create policy lu_admin_update on public.league_users for update
 drop policy if exists events_read on public.events;
 create policy events_read on public.events for select using (true);
 drop policy if exists events_write on public.events;
-create policy events_write on public.events for all
-  using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
+drop policy if exists events_insert on public.events;
+drop policy if exists events_update on public.events;
+drop policy if exists events_delete on public.events;
+-- Buat turnamen: untuk diri sendiri; jika di dalam liga, harus admin/owner liga.
+create policy events_insert on public.events for insert
+  with check (
+    auth.uid() = owner_id
+    and (league_id is null or public.is_league_admin(league_id, auth.uid()))
+  );
+-- Edit/hapus turnamen: pembuatnya, ATAU admin/owner liga (kelola semua sesi liga).
+create policy events_update on public.events for update
+  using (
+    auth.uid() = owner_id
+    or (league_id is not null and public.is_league_admin(league_id, auth.uid()))
+  )
+  with check (
+    auth.uid() = owner_id
+    or (league_id is not null and public.is_league_admin(league_id, auth.uid()))
+  );
+create policy events_delete on public.events for delete
+  using (
+    auth.uid() = owner_id
+    or (league_id is not null and public.is_league_admin(league_id, auth.uid()))
+  );
 
 -- ────────────────────────────────────────────────────────────────────
 -- 4. RPC sosial (dipanggil client lewat supabase.rpc). Inserts keanggotaan

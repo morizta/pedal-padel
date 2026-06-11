@@ -40,6 +40,7 @@ import {
   getLeague,
   createLeague,
   setLeagueMembers,
+  updateLeague,
   deleteLeague,
   discoverLeagues,
   latestLeagues,
@@ -53,6 +54,7 @@ import {
   listLeagueMembers,
   approveMember,
   removeMember,
+  setMemberRole,
   leaveLeague,
   getEvent,
   createEvent,
@@ -65,8 +67,10 @@ import {
   type DbEvent,
   type AccountUser,
   type PlayerMatch,
+  type League,
 } from "./db";
 import { useAsync } from "./useAsync";
+import { confirmDialog, alertDialog, DialogHost } from "./dialog";
 import { ShareButton, buildShareRows } from "./share";
 
 type View =
@@ -223,7 +227,8 @@ export function App() {
   }, [user]);
 
   return (
-    <AppShell view={view} user={user} onNavigate={setView}>
+    <>
+      <AppShell view={view} user={user} onNavigate={setView}>
       {view.t === "home" && (
         <DashboardScreen user={user} onNavigate={setView} />
       )}
@@ -306,7 +311,9 @@ export function App() {
           onBack={() => setView({ t: "home" })}
         />
       )}
-    </AppShell>
+      </AppShell>
+      <DialogHost />
+    </>
   );
 }
 
@@ -369,6 +376,36 @@ function AppShell({
       <nav className="fixed bottom-0 left-0 z-40 flex w-full items-stretch justify-around border-t border-outline-variant bg-surface-container-lowest pb-safe shadow-lg md:hidden">
         {NAV_TABS.map((t) => {
           const on = active === t.key;
+
+          // Tab "Main" = aksi utama → tombol bulat menonjol (FAB) di tengah.
+          if (t.key === "main") {
+            return (
+              <button
+                key={t.key}
+                onClick={() => onNavigate(t.view)}
+                className="flex flex-1 flex-col items-center justify-end gap-0.5 py-1.5"
+                aria-label={t.label}
+              >
+                <span
+                  className={`-mt-9 grid h-16 w-16 place-items-center rounded-full border-4 border-surface-container-lowest shadow-lg transition active:scale-95 ${
+                    on ? "bg-primary-fixed-dim" : "bg-primary-fixed"
+                  } text-on-primary-fixed`}
+                >
+                  <span className="material-symbols-outlined fill text-[30px]">
+                    {t.icon}
+                  </span>
+                </span>
+                <span
+                  className={`text-[11px] font-bold ${
+                    on ? "text-on-surface" : "text-on-surface-variant"
+                  }`}
+                >
+                  {t.label}
+                </span>
+              </button>
+            );
+          }
+
           return (
             <button
               key={t.key}
@@ -443,7 +480,10 @@ function DashboardScreen({
   const latestEventsD = latestEventsQ.data ?? [];
 
   const needLogin = () =>
-    alert("Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.");
+    void alertDialog(
+      "Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.",
+      { title: "Perlu login" }
+    );
 
   return (
     <div className="space-y-5">
@@ -961,7 +1001,12 @@ function MyEventsScreen({
       {canDelete && (
         <button
           onClick={async () => {
-            if (confirm(`Hapus turnamen "${e.name}"? Tindakan ini permanen.`)) {
+            if (
+              await confirmDialog(
+                `Hapus turnamen "${e.name}"? Tindakan ini permanen.`,
+                { title: "Hapus turnamen", confirmText: "Hapus", tone: "danger" }
+              )
+            ) {
               await deleteEvent(e.id);
               q.reload();
             }
@@ -1213,6 +1258,7 @@ function ProfileScreen({
   const [avatarUrl, setAvatarUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   if (!user) {
     return (
@@ -1313,13 +1359,62 @@ function ProfileScreen({
               />
             </div>
             <label className="block font-label-caps text-label-caps text-white/60">
-              URL foto (opsional)
+              Foto profil (opsional)
             </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => avatarFileRef.current?.click()}
+                className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-dashed border-white/30 bg-white/5 hover:border-primary-fixed"
+              >
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="material-symbols-outlined text-white/60">
+                    add_a_photo
+                  </span>
+                )}
+              </button>
+              <div className="text-sm">
+                <button
+                  type="button"
+                  onClick={() => avatarFileRef.current?.click()}
+                  className="font-semibold text-primary-fixed hover:underline"
+                >
+                  {avatarUrl ? "Ganti foto" : "Unggah foto"}
+                </button>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setAvatarUrl("")}
+                    className="ml-3 text-white/50 hover:text-loss-red"
+                  >
+                    Hapus
+                  </button>
+                )}
+              </div>
+            </div>
             <input
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-on-surface"
-              placeholder="https://…/foto.jpg"
+              ref={avatarFileRef}
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  setAvatarUrl(await readImageDataUrl(f));
+                } catch {
+                  void alertDialog("Gagal membaca gambar.", {
+                    title: "Gagal",
+                    tone: "danger",
+                  });
+                }
+              }}
+              className="hidden"
             />
             {err && <p className="text-sm text-loss-red">{err}</p>}
             <div className="flex gap-2">
@@ -1732,7 +1827,10 @@ function ExploreScreen({
     : rankedPlayers;
 
   const needLogin = () =>
-    alert("Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.");
+    void alertDialog(
+      "Masuk / Daftar dulu (tombol di kanan atas) untuk fitur ini.",
+      { title: "Perlu login" }
+    );
 
   async function joinByCode() {
     if (!code.trim()) return;
@@ -1742,7 +1840,7 @@ function ExploreScreen({
       const id = await joinWithCode(code);
       onNavigate({ t: "league", id });
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -1753,9 +1851,11 @@ function ExploreScreen({
     try {
       await requestJoin(id);
       leaguesQ.reload();
-      alert("Permintaan terkirim. Menunggu persetujuan owner.");
+      void alertDialog("Permintaan terkirim. Menunggu persetujuan owner.", {
+        title: "Terkirim",
+      });
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -2155,9 +2255,9 @@ function LeaderboardScreen({
         emptyText="Belum ada pemain. Daftarkan di atas."
       />
 
-      {/* Podium */}
+      {/* Podium — 3 kolom (juara di tengah & lebih tinggi), ringkas di mobile */}
       {top3.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-3 items-end gap-2 sm:gap-4">
           {top3.map((r, i) => (
             <PodiumCard
               key={r.id ?? r.name}
@@ -2299,12 +2399,9 @@ function PodiumCard({
 }) {
   const champ = rank === 1;
   const tierLabel = rank === 1 ? "JUARA" : rank === 2 ? "PERAK" : "PERUNGGU";
+  // Susunan podium: perak (kiri) · juara (tengah) · perunggu (kanan).
   const order =
-    rank === 1 ? "order-1 md:order-2" : rank === 2 ? "order-2 md:order-1" : "order-3";
-  const rel = Math.round(reliability(r.played) * 100);
-  const wl = r.st
-    ? `${r.st.wins}–${r.st.losses}${r.st.ties ? "–" + r.st.ties : ""}`
-    : "0–0";
+    rank === 1 ? "order-2" : rank === 2 ? "order-1" : "order-3";
   const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
 
   const accent =
@@ -2335,72 +2432,58 @@ function PodiumCard({
             elo: "text-on-surface",
           };
   const cardCls = champ
-    ? "bg-gradient-to-b from-amber-50 to-surface-container-lowest ring-2 ring-amber-300 shadow-lg shadow-amber-500/10 md:-translate-y-4"
-    : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm";
+    ? "bg-gradient-to-b from-amber-50 to-surface-container-lowest ring-2 ring-amber-300 shadow-lg shadow-amber-500/10 pt-5 sm:pt-6"
+    : "border border-outline-variant/40 bg-surface-container-lowest shadow-sm pt-4";
 
   return (
-    <div
-      className={`relative flex flex-col items-center overflow-hidden rounded-2xl px-5 pb-5 pt-7 text-center text-on-surface ${order} ${cardCls}`}
+    <button
+      onClick={onOpen}
+      className={`relative flex flex-col items-center overflow-hidden rounded-2xl px-2 pb-3 text-center text-on-surface sm:px-3 ${order} ${cardCls} ${
+        champ ? "-translate-y-1 sm:-translate-y-3" : ""
+      }`}
     >
       <div className={`absolute inset-x-0 top-0 h-1.5 ${accent.bar}`} />
       <div
-        className={`pointer-events-none absolute -top-12 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full blur-3xl ${accent.glow}`}
+        className={`pointer-events-none absolute -top-12 left-1/2 h-28 w-28 -translate-x-1/2 rounded-full blur-3xl ${accent.glow}`}
       />
       <span
-        className={`absolute right-3 top-4 font-label-caps text-label-caps rounded px-2 py-1 ${accent.badge}`}
+        className={`mb-1.5 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${accent.badge}`}
       >
         {tierLabel}
       </span>
 
-      {champ && (
-        <span className="material-symbols-outlined fill relative mb-1 text-[22px] text-amber-500">
-          emoji_events
+      <span className="relative">
+        <span
+          className={`grid place-items-center rounded-full font-bold ring-4 ${accent.ring} ${avatarColor(
+            r.name
+          )} ${champ ? "h-16 w-16 text-xl sm:h-20 sm:w-20 sm:text-2xl" : "h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl"}`}
+        >
+          {initialsOf(r.name)}
         </span>
-      )}
+        <span
+          className={`absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full font-data-mono text-[11px] font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
+        >
+          {rank}
+        </span>
+      </span>
 
-      <button onClick={onOpen} className="relative flex flex-col items-center">
-        <span className="relative">
-          <span
-            className={`grid h-20 w-20 place-items-center rounded-full text-2xl font-bold ring-4 ${accent.ring} ${avatarColor(
-              r.name
-            )}`}
-          >
-            {initialsOf(r.name)}
-          </span>
-          <span
-            className={`absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full font-data-mono text-xs font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
-          >
-            {rank}
-          </span>
-        </span>
-        <span className="mt-3 block max-w-full truncate font-display text-lg font-bold">
-          {r.name}
-          {me && <span className="ml-1 text-xs opacity-60">(kamu)</span>}
-        </span>
-        <span className="text-sm text-on-surface-variant">
-          {wl} · {wr}% menang
-        </span>
-      </button>
+      <span className="mt-2 block w-full truncate font-display text-sm font-bold leading-tight sm:text-base">
+        {r.name}
+      </span>
+      {me && <span className="text-[10px] text-on-surface-variant">(kamu)</span>}
 
-      <div className="relative mt-4 flex w-full items-end justify-between border-t border-outline-variant/20 pt-3">
-        <div className="text-left">
-          <div className="font-label-caps text-label-caps text-reliability-dimmed">
-            KEANDALAN
-          </div>
-          <div className="font-data-mono text-data-mono">{rel}%</div>
-        </div>
-        <div className="text-right">
-          <div className="font-label-caps text-label-caps text-reliability-dimmed">
-            ELO
-          </div>
-          <div
-            className={`font-display text-3xl font-extrabold leading-none ${accent.elo}`}
-          >
-            {Math.round(r.rating ?? 1000)}
-          </div>
-        </div>
-      </div>
-    </div>
+      <span
+        className={`mt-1 font-display text-2xl font-extrabold leading-none sm:text-3xl ${accent.elo}`}
+      >
+        {Math.round(r.rating ?? 1000)}
+      </span>
+      <span className="font-label-caps text-label-caps text-reliability-dimmed">
+        ELO
+      </span>
+      <span className="mt-1 text-[11px] text-on-surface-variant">
+        {wr}% menang
+      </span>
+    </button>
   );
 }
 
@@ -2617,7 +2700,7 @@ function DiscoverScreen({
       const id = await joinWithCode(code);
       onOpenLeague(id);
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -2627,9 +2710,11 @@ function DiscoverScreen({
     try {
       await requestJoin(id);
       list.reload();
-      alert("Permintaan terkirim. Menunggu persetujuan owner liga.");
+      void alertDialog("Permintaan terkirim. Menunggu persetujuan owner liga.", {
+        title: "Terkirim",
+      });
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -2725,10 +2810,16 @@ function EventList({
   events,
   onOpen,
   onDelete,
+  meId,
+  canManage = false,
 }: {
   events: DbEvent[];
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
+  /** id user saat ini — tombol hapus untuk pemilik turnamen. */
+  meId?: string | null;
+  /** admin/owner liga — boleh hapus semua turnamen di liga ini. */
+  canManage?: boolean;
 }) {
   if (events.length === 0)
     return (
@@ -2744,11 +2835,19 @@ function EventList({
             key={e.id}
             className="group flex items-center gap-2 rounded-xl border border-outline-variant/50 p-2.5 transition hover:border-primary-fixed-dim hover:bg-surface-container-low"
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
-              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
-                {e.visibility === "private" ? "lock" : "sports_tennis"}
+            {e.photoUrl ? (
+              <img
+                src={e.photoUrl}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+              />
+            ) : (
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+                <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                  {e.visibility === "private" ? "lock" : "sports_tennis"}
+                </span>
               </span>
-            </span>
+            )}
             <button
               onClick={() => onOpen(e.id)}
               className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
@@ -2781,18 +2880,27 @@ function EventList({
                     : "LIVE"}
               </span>
             </button>
-            <button
-              onClick={() => {
-                if (confirm(`Hapus turnamen "${e.name}"?`)) onDelete(e.id);
-              }}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
-              aria-label="Hapus"
-              title="Hapus"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                delete
-              </span>
-            </button>
+            {(canManage || (meId && e.ownerId === meId)) && (
+              <button
+                onClick={async () => {
+                  if (
+                    await confirmDialog(`Hapus turnamen "${e.name}"?`, {
+                      title: "Hapus turnamen",
+                      confirmText: "Hapus",
+                      tone: "danger",
+                    })
+                  )
+                    onDelete(e.id);
+                }}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
+                aria-label="Hapus"
+                title="Hapus"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  delete
+                </span>
+              </button>
+            )}
           </li>
         );
       })}
@@ -2809,6 +2917,8 @@ function LeagueScreen({
   leagueId: string;
   onNavigate: (v: View) => void;
 }) {
+  const { user } = useAuth();
+  const [editing, setEditing] = useState(false);
   const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
   const eventsQ = useAsync(() => listEvents(leagueId), [leagueId]);
   const standingsQ = useAsync(() => leagueStandings(leagueId), [leagueId]);
@@ -2819,6 +2929,10 @@ function LeagueScreen({
 
   if (leagueQ.loading) return <p className="text-slate-400">Memuat…</p>;
   if (!league) return <p>Liga tidak ditemukan.</p>;
+
+  // Admin/owner liga: boleh kelola semua sesi, roster, & buat sesi di liga.
+  const isAdmin =
+    league.myRole === "owner" || league.myRole === "admin";
 
   return (
     <div className="space-y-5">
@@ -2848,8 +2962,9 @@ function LeagueScreen({
                 <button
                   onClick={() => {
                     navigator.clipboard?.writeText(league.joinCode!);
-                    alert(
-                      `Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`
+                    void alertDialog(
+                      `Kode "${league.joinCode}" disalin. Bagikan untuk mengundang.`,
+                      { title: "Kode disalin" }
                     );
                   }}
                   className="flex items-center gap-1 rounded-full bg-primary-fixed/15 px-2.5 py-1 font-data-mono text-data-mono font-bold tracking-wider text-primary-fixed hover:bg-primary-fixed/25"
@@ -2864,19 +2979,33 @@ function LeagueScreen({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <button
-              onClick={() => onNavigate({ t: "create", leagueId })}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
-            >
-              <span className="material-symbols-outlined text-[20px]">add</span>
-              Tambah Sesi
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => onNavigate({ t: "create", leagueId })}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[20px]">add</span>
+                Tambah Sesi
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1 font-label-caps text-label-caps text-white/50 transition hover:text-primary-fixed"
+              >
+                <span className="material-symbols-outlined text-[14px]">
+                  edit
+                </span>
+                Edit liga
+              </button>
+            )}
             {league.myRole === "owner" ? (
               <button
                 onClick={async () => {
                   if (
-                    confirm(
-                      `Hapus liga "${league.name}"? Sesi di dalamnya jadi turnamen lepas.`
+                    await confirmDialog(
+                      `Hapus liga "${league.name}"? Sesi di dalamnya jadi turnamen lepas.`,
+                      { title: "Hapus liga", confirmText: "Hapus", tone: "danger" }
                     )
                   ) {
                     await deleteLeague(league.id);
@@ -2890,7 +3019,13 @@ function LeagueScreen({
             ) : league.myRole ? (
               <button
                 onClick={async () => {
-                  if (confirm(`Keluar dari liga "${league.name}"?`)) {
+                  if (
+                    await confirmDialog(`Keluar dari liga "${league.name}"?`, {
+                      title: "Keluar liga",
+                      confirmText: "Keluar",
+                      tone: "danger",
+                    })
+                  ) {
                     await leaveLeague(league.id);
                     onNavigate({ t: "leagues" });
                   }
@@ -2903,6 +3038,12 @@ function LeagueScreen({
           </div>
         </div>
       </section>
+
+      {league.notes && (
+        <Card title="📝 Catatan liga">
+          <NotesHtml html={league.notes} />
+        </Card>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card
@@ -2998,6 +3139,8 @@ function LeagueScreen({
             />
             <EventList
               events={events}
+              meId={user?.id ?? null}
+              canManage={isAdmin}
               onOpen={(id) => onNavigate({ t: "session", id })}
               onDelete={async (id) => {
                 await deleteEvent(id);
@@ -3006,12 +3149,19 @@ function LeagueScreen({
               }}
             />
           </Card>
-          <LeaguePeople
-            leagueId={leagueId}
-            isAdmin={league.myRole === "owner" || league.myRole === "admin"}
-          />
+          <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
         </div>
       </div>
+      {editing && (
+        <EditLeagueModal
+          league={league}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            leagueQ.reload();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -3023,6 +3173,187 @@ function LeagueScreen({
  * saat tambah sesi). Dua sumber data (league_users + league_members) disatukan
  * di tampilan, dedup berdasarkan nama agar tak dobel.
  */
+/** Modal edit pengaturan liga (admin/owner). */
+function EditLeagueModal({
+  league,
+  onClose,
+  onSaved,
+}: {
+  league: League;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(league.name);
+  const [description, setDescription] = useState(league.description ?? "");
+  const [notes, setNotes] = useState(league.notes ?? "");
+  const [photo, setPhoto] = useState<string | null>(league.photoUrl);
+  const [visibility, setVisibility] = useState<"private" | "public">(
+    league.visibility
+  );
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) {
+      try {
+        setPhoto(await readImageDataUrl(f));
+      } catch {
+        void alertDialog("Gagal membaca gambar.", { title: "Gagal", tone: "danger" });
+      }
+    }
+  }
+
+  async function save() {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      await updateLeague(league.id, {
+        name,
+        description,
+        notes,
+        photoUrl: photo,
+        visibility,
+      });
+      onSaved();
+    } catch (e) {
+      void alertDialog("Gagal menyimpan: " + errMsg(e), {
+        title: "Gagal",
+        tone: "danger",
+      });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-3xl bg-surface-container-lowest text-on-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative bg-navy px-6 pb-4 pt-5 text-white">
+          <button
+            onClick={onClose}
+            aria-label="Tutup"
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-white/55 transition hover:bg-white/10 hover:text-white"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+          <h3 className="font-display text-lg font-bold">Edit Liga</h3>
+          <p className="text-xs text-white/55">Ubah pengaturan liga.</p>
+        </div>
+
+        <div className="space-y-4 p-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-outline-variant bg-surface-container-low hover:border-primary-fixed-dim"
+            >
+              {photo ? (
+                <img src={photo} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-on-surface-variant">
+                  add_a_photo
+                </span>
+              )}
+            </button>
+            <div className="min-w-0 flex-1">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nama liga"
+                className="input w-full"
+              />
+              {photo && (
+                <button
+                  onClick={() => setPhoto(null)}
+                  className="mt-1 text-xs font-medium text-loss-red hover:underline"
+                >
+                  Hapus foto
+                </button>
+              )}
+            </div>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={pickPhoto}
+            className="hidden"
+          />
+
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Deskripsi singkat (opsional)"
+            rows={2}
+            className="input w-full resize-none"
+          />
+
+          <div>
+            <div className="mb-1 text-xs font-medium text-on-surface-variant">
+              Catatan (opsional)
+            </div>
+            <RichText
+              value={notes}
+              onChange={setNotes}
+              placeholder="Aturan, jadwal, info tambahan…"
+            />
+          </div>
+
+          <div className="flex rounded-xl border border-outline-variant/40 bg-surface-container p-1 text-sm">
+            {(
+              [
+                ["private", "Privat", "lock"],
+                ["public", "Publik", "public"],
+              ] as const
+            ).map(([v, l, icon]) => (
+              <button
+                key={v}
+                onClick={() => setVisibility(v)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 font-semibold transition ${
+                  visibility === v
+                    ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                    : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {icon}
+                </span>
+                {l}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-on-surface-variant">
+            {visibility === "private"
+              ? "Privat — hanya bisa gabung lewat kode/undangan."
+              : "Publik — bisa ditemukan & diminta gabung (approval)."}
+          </p>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
+            >
+              Batal
+            </button>
+            <button
+              onClick={save}
+              disabled={busy || !name.trim()}
+              className="flex-1 rounded-xl bg-primary-fixed px-4 py-2.5 text-sm font-semibold text-on-primary-fixed hover:bg-primary-fixed-dim disabled:bg-surface-container disabled:text-outline"
+            >
+              {busy ? "Menyimpan…" : "Simpan"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeaguePeople({
   leagueId,
   isAdmin,
@@ -3067,6 +3398,22 @@ function LeaguePeople({
         badge: a.role,
         canRemove: isAdmin && a.role !== "owner",
         onRemove: () => removeMember(leagueId, a.userId),
+        isAdminRole: a.role === "admin",
+        canSetRole: isAdmin && a.role !== "owner",
+        onToggleRole: async () => {
+          const toAdmin = a.role !== "admin";
+          const ok = await confirmDialog(
+            toAdmin
+              ? `Jadikan ${a.name} admin liga? Admin bisa kelola anggota, turnamen & roster.`
+              : `Turunkan ${a.name} jadi member biasa?`,
+            {
+              title: toAdmin ? "Jadikan admin" : "Turunkan role",
+              confirmText: toAdmin ? "Jadikan admin" : "Turunkan",
+            }
+          );
+          if (!ok) return;
+          await setMemberRole(leagueId, a.userId, toAdmin ? "admin" : "member");
+        },
       })),
     ...extraPlayers
       .slice()
@@ -3078,6 +3425,9 @@ function LeaguePeople({
         badge: p.isGuest ? "tamu" : "akun",
         canRemove: isAdmin,
         onRemove: async () => setR(rosterIds.filter((x) => x !== p.id)),
+        isAdminRole: false,
+        canSetRole: false,
+        onToggleRole: undefined as (() => Promise<void>) | undefined,
       })),
   ];
 
@@ -3113,7 +3463,7 @@ function LeaguePeople({
       membersQ.reload();
       leagueQ.reload();
     } catch (e) {
-      alert("Gagal: " + errMsg(e));
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
     }
   }
   async function setR(next: string[]) {
@@ -3287,6 +3637,17 @@ function LeaguePeople({
             >
               {r.badge}
             </span>
+            {r.canSetRole && r.onToggleRole && (
+              <button
+                onClick={() => act(r.onToggleRole!)}
+                className="grid h-6 w-6 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-primary"
+                title={r.isAdminRole ? "Turunkan jadi member" : "Jadikan admin"}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {r.isAdminRole ? "remove_moderator" : "add_moderator"}
+                </span>
+              </button>
+            )}
             {r.canRemove && (
               <button
                 onClick={() => act(r.onRemove)}
@@ -3383,6 +3744,28 @@ function RichText({
   );
 }
 
+/** Render catatan HTML (read-only) dengan sanitasi ringan: hanya tag format,
+ * semua atribut dibuang (cegah XSS dari event-handler / javascript: / style). */
+function NotesHtml({ html }: { html: string }) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const ok = new Set([
+    "B", "I", "EM", "STRONG", "U", "UL", "OL", "LI", "P", "BR", "DIV", "SPAN",
+  ]);
+  doc.body.querySelectorAll("*").forEach((el) => {
+    if (!ok.has(el.tagName)) {
+      el.replaceWith(...Array.from(el.childNodes)); // unwrap tag tak diizinkan
+      return;
+    }
+    Array.from(el.attributes).forEach((a) => el.removeAttribute(a.name));
+  });
+  return (
+    <div
+      className="text-sm text-on-surface-variant [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+      dangerouslySetInnerHTML={{ __html: doc.body.innerHTML }}
+    />
+  );
+}
+
 /** Baca file gambar → data URL terkompres (maks sisi terpanjang `max` px). */
 function readImageDataUrl(file: File, max = 256): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -3454,7 +3837,7 @@ function CreateLeagueScreen({
       try {
         setPhoto(await readImageDataUrl(f));
       } catch {
-        alert("Gagal membaca gambar.");
+        void alertDialog("Gagal membaca gambar.", { title: "Gagal", tone: "danger" });
       }
     }
   }
@@ -3495,7 +3878,10 @@ function CreateLeagueScreen({
       }
       onCreated(lg.id);
     } catch (e) {
-      alert("Gagal membuat liga: " + errMsg(e));
+      void alertDialog("Gagal membuat liga: " + errMsg(e), {
+        title: "Gagal",
+        tone: "danger",
+      });
       setBusy(false);
     }
   }
@@ -3723,6 +4109,9 @@ function CreateScreen({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
   const [startMode, setStartMode] = useState<"now" | "schedule">("now");
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -3849,6 +4238,8 @@ function CreateScreen({
           : undefined,
         visibility,
         description,
+        notes,
+        photoUrl: photo,
         startAt:
           startMode === "schedule" && startDate
             ? new Date(`${startDate}T${startTime || "00:00"}`).getTime()
@@ -3856,7 +4247,10 @@ function CreateScreen({
       });
       onCreated(event.id);
     } catch (e) {
-      alert("Gagal membuat sesi: " + (e instanceof Error ? e.message : e));
+      void alertDialog(
+        "Gagal membuat sesi: " + (e instanceof Error ? e.message : e),
+        { title: "Gagal", tone: "danger" }
+      );
       setBusy(false);
     }
   }
@@ -3866,16 +4260,71 @@ function CreateScreen({
       <div className="flex items-center justify-between">
         <button
           onClick={onCancel}
-          className="text-sm text-slate-500 hover:text-slate-900"
+          className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
         >
-          ← Kembali
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          Kembali
         </button>
-        <span className="text-xs text-slate-400">
-          {inLeague ? `Sesi dalam liga: ${inLeague.name}` : "Turnamen lepas"}
+        <span className="rounded-full bg-surface-container px-2.5 py-1 font-label-caps text-label-caps text-on-surface-variant">
+          {inLeague ? `Liga: ${inLeague.name}` : "Turnamen lepas"}
         </span>
       </div>
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card title={inLeague ? "Tambah Sesi" : "Buat Turnamen"}>
+        <Field label="Foto turnamen (opsional)">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => photoRef.current?.click()}
+              className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-outline-variant bg-surface-container-low hover:border-primary-fixed-dim"
+            >
+              {photo ? (
+                <img src={photo} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-on-surface-variant">
+                  add_a_photo
+                </span>
+              )}
+            </button>
+            <div className="text-sm">
+              <button
+                type="button"
+                onClick={() => photoRef.current?.click()}
+                className="font-semibold text-primary hover:underline"
+              >
+                {photo ? "Ganti foto" : "Unggah foto"}
+              </button>
+              {photo && (
+                <button
+                  type="button"
+                  onClick={() => setPhoto(null)}
+                  className="ml-3 text-on-surface-variant hover:text-loss-red"
+                >
+                  Hapus
+                </button>
+              )}
+            </div>
+          </div>
+          <input
+            ref={photoRef}
+            type="file"
+            accept="image/*"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              try {
+                setPhoto(await readImageDataUrl(f));
+              } catch {
+                void alertDialog("Gagal membaca gambar.", {
+                  title: "Gagal",
+                  tone: "danger",
+                });
+              }
+            }}
+            className="hidden"
+          />
+        </Field>
+
         <Field label="Nama sesi">
           <input
             value={name}
@@ -3894,6 +4343,14 @@ function CreateScreen({
           />
         </Field>
 
+        <Field label="Catatan (opsional)">
+          <RichText
+            value={notes}
+            onChange={setNotes}
+            placeholder="Aturan, jadwal, info tambahan…"
+          />
+        </Field>
+
         <Field label="Mulai">
           <Toggle
             value={startMode === "now"}
@@ -3904,7 +4361,9 @@ function CreateScreen({
           {startMode === "schedule" && (
             <div className="mt-2 flex flex-wrap gap-2">
               <label className="flex-1">
-                <span className="mb-1 block text-xs text-slate-400">Tanggal</span>
+                <span className="mb-1 block text-xs text-on-surface-variant">
+                  Tanggal
+                </span>
                 <input
                   type="date"
                   value={startDate}
@@ -3913,7 +4372,9 @@ function CreateScreen({
                 />
               </label>
               <label className="flex-1">
-                <span className="mb-1 block text-xs text-slate-400">Jam</span>
+                <span className="mb-1 block text-xs text-on-surface-variant">
+                  Jam
+                </span>
                 <input
                   type="time"
                   value={startTime}
@@ -3923,7 +4384,7 @@ function CreateScreen({
               </label>
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-on-surface-variant">
             {startMode === "now"
               ? "Sesi dimulai sekarang."
               : startDate
@@ -3934,20 +4395,34 @@ function CreateScreen({
 
         <Field label="Format">
           <div className="grid gap-2 sm:grid-cols-2">
-            {FORMATS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setFormat(f.id)}
-                className={`rounded-xl border p-3 text-left transition ${
-                  format === f.id
-                    ? "border-lime-500 bg-lime-50 ring-1 ring-lime-500"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <div className="font-semibold">{f.name}</div>
-                <div className="text-xs text-slate-500">{f.desc}</div>
-              </button>
-            ))}
+            {FORMATS.map((f) => {
+              const on = format === f.id;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setFormat(f.id)}
+                  className={`flex items-start gap-2 rounded-xl border p-3 text-left transition ${
+                    on
+                      ? "border-primary bg-primary-container/30 ring-1 ring-primary"
+                      : "border-outline-variant hover:border-primary-fixed-dim hover:bg-surface-container-low"
+                  }`}
+                >
+                  <span
+                    className={`material-symbols-outlined mt-0.5 text-[18px] ${
+                      on ? "fill text-primary" : "text-on-surface-variant"
+                    }`}
+                  >
+                    {on ? "check_circle" : "radio_button_unchecked"}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{f.name}</span>
+                    <span className="block text-xs text-on-surface-variant">
+                      {f.desc}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </Field>
 
@@ -3958,7 +4433,9 @@ function CreateScreen({
             max={maxCourts}
             onChange={setCourts}
           />
-          <span className="ml-2 text-xs text-slate-400">maks {maxCourts}</span>
+          <span className="ml-2 text-xs text-on-surface-variant">
+            maks {maxCourts}
+          </span>
         </Field>
 
         <Field label="Sistem skor">
@@ -4003,7 +4480,7 @@ function CreateScreen({
                 />
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-on-surface-variant">
               {normalMode === "first"
                 ? `Tim pertama mencapai ${normalTarget} game menang.`
                 : `Main ${normalTarget} game, skor = game yang dimenangkan.`}
@@ -4019,7 +4496,7 @@ function CreateScreen({
               onLabel="Auto"
               offLabel="Manual"
             />
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-on-surface-variant">
               {pairing === "auto"
                 ? "Pasangan dibentuk otomatis."
                 : "Tentukan sendiri tiap tim di bawah."}
@@ -4075,7 +4552,7 @@ function CreateScreen({
               />
             ))}
           </div>
-          <p className="mt-1.5 text-xs text-slate-400">
+          <p className="mt-1.5 text-xs text-on-surface-variant">
             {visibility === "public"
               ? "Siapa pun bisa melihat turnamen ini."
               : visibility === "private"
@@ -4108,36 +4585,36 @@ function CreateScreen({
         />
 
         {names.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-on-surface-variant">
             Belum ada pemain. Cari nama lalu tambahkan, atau buat tamu.
           </p>
         ) : (
-          <ul className="mt-4 space-y-0.5 rounded-xl border border-slate-200 p-1">
+          <ul className="mt-4 space-y-1 rounded-xl border border-outline-variant/50 p-1.5">
             {selected.map((sel) => {
               const guest = sel.isGuest;
               return (
                 <li
                   key={sel.id}
-                  className="flex items-center gap-2.5 rounded-lg bg-lime-50 px-2 py-1.5 text-sm"
+                  className="flex items-center gap-2.5 rounded-lg bg-surface-container-low px-2 py-1.5 text-sm"
                 >
                   <span
                     className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
                       guest
-                        ? "bg-slate-200 text-slate-600"
-                        : "bg-sky-100 text-sky-700"
+                        ? "bg-surface-container text-on-surface-variant"
+                        : "bg-primary-container text-on-primary-container"
                     }`}
                   >
                     {sel.name.charAt(0).toUpperCase()}
                   </span>
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="truncate font-medium text-slate-800">
+                    <span className="truncate font-medium text-on-surface">
                       {sel.name}
                     </span>
                     <span
                       className={`rounded px-1 text-[10px] font-semibold uppercase ${
                         guest
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-sky-100 text-sky-700"
+                          ? "bg-elo-bronze/15 text-elo-bronze"
+                          : "bg-primary-container text-on-primary-container"
                       }`}
                     >
                       {guest ? "tamu" : "akun"}
@@ -4145,7 +4622,7 @@ function CreateScreen({
                   </span>
                   <button
                     onClick={() => togglePlayer(sel)}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-slate-400 hover:bg-black/10 hover:text-slate-700"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-on-surface-variant hover:bg-error-container hover:text-error"
                     aria-label={`Hapus ${sel.name}`}
                   >
                     ×
@@ -4404,9 +4881,16 @@ function SessionInner({
       : undefined;
 
   const { user } = useAuth();
-  // Hanya organizer (pembuat turnamen) yang boleh acak, ubah jadwal & skor.
+  // Pembuat turnamen ATAU admin/owner liga boleh acak, ubah jadwal & skor.
   // Peserta/tamu hanya bisa melihat. (RLS Supabase juga menegakkan ini.)
-  const canEdit = !!user && user.id === event.ownerId;
+  const leagueQ = useAsync(
+    () =>
+      event.leagueId ? getLeague(event.leagueId) : Promise.resolve(undefined),
+    [event.leagueId]
+  );
+  const isLeagueAdmin =
+    leagueQ.data?.myRole === "owner" || leagueQ.data?.myRole === "admin";
+  const canEdit = !!user && (user.id === event.ownerId || isLeagueAdmin);
 
   const session = useSession(
     { config, players: event.players, restore, initialTeams: event.teams },
@@ -4431,6 +4915,27 @@ function SessionInner({
   return (
     <div className="space-y-5">
       <MetaBar session={session} event={event} onExit={onExit} canEdit={canEdit} />
+      {(event.description || event.notes || event.photoUrl) && (
+        <Card title="ℹ️ Tentang turnamen">
+          {event.photoUrl && (
+            <img
+              src={event.photoUrl}
+              alt=""
+              className="mb-3 h-40 w-full rounded-xl object-cover"
+            />
+          )}
+          {event.description && (
+            <p className="text-sm text-on-surface-variant">
+              {event.description}
+            </p>
+          )}
+          {event.notes && (
+            <div className={event.description ? "mt-2" : ""}>
+              <NotesHtml html={event.notes} />
+            </div>
+          )}
+        </Card>
+      )}
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <RoundsPanel session={session} canEdit={canEdit} />
         <div className="space-y-5">

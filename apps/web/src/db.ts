@@ -312,6 +312,44 @@ export async function createLeague(input: NewLeague): Promise<League> {
   return mapLeague(data!);
 }
 
+export interface LeaguePatch {
+  name?: string;
+  description?: string | null;
+  notes?: string | null;
+  photoUrl?: string | null;
+  visibility?: "private" | "public";
+}
+
+/** Edit pengaturan liga (admin/owner; ditegakkan RLS leagues_update). */
+export async function updateLeague(
+  id: string,
+  patch: LeaguePatch
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.name !== undefined)
+    row.name = patch.name.trim() || "Liga Tanpa Nama";
+  if (patch.description !== undefined)
+    row.description = patch.description?.trim() || null;
+  if (patch.notes !== undefined) row.notes = patch.notes?.trim() || null;
+  if (patch.photoUrl !== undefined) row.photo_url = patch.photoUrl || null;
+  if (patch.visibility !== undefined) {
+    row.visibility = patch.visibility;
+    if (patch.visibility === "public") {
+      row.join_code = null; // publik tak pakai kode
+    } else {
+      // private: pertahankan kode lama, buat baru bila belum ada.
+      const { data } = await db()
+        .from("leagues")
+        .select("join_code")
+        .eq("id", id)
+        .maybeSingle();
+      if (!data?.join_code) row.join_code = genJoinCode();
+    }
+  }
+  const { error } = await db().from("leagues").update(row).eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteLeague(id: string): Promise<void> {
   const { error } = await db().from("leagues").delete().eq("id", id);
   if (error) throw error;
@@ -540,6 +578,20 @@ export async function removeMember(
   if (error) throw error;
 }
 
+/** Angkat/turunkan role anggota (admin/owner; ditegakkan RLS lu_admin_update). */
+export async function setMemberRole(
+  leagueId: string,
+  userId: string,
+  role: "admin" | "member"
+): Promise<void> {
+  const { error } = await db()
+    .from("league_users")
+    .update({ role })
+    .eq("league_id", leagueId)
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
 export interface AccountUser {
   userId: string;
   name: string;
@@ -579,6 +631,10 @@ export interface DbEvent {
   status: "live" | "finished";
   visibility: "inherit" | "private" | "public";
   description: string | null;
+  /** Catatan (HTML dari editor WYSIWYG). */
+  notes: string | null;
+  /** Foto turnamen (data URL / link). */
+  photoUrl: string | null;
   /** Jadwal mulai (ms). null = mulai sekarang/segera. */
   startAt: number | null;
   playerIds: string[];
@@ -591,7 +647,7 @@ export interface DbEvent {
 }
 
 const EVENT_COLS =
-  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,start_at,player_ids,player_names,teams,rounds,scores,created_at";
+  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,notes,photo_url,start_at,player_ids,player_names,teams,rounds,scores,created_at";
 
 function mapEvent(r: any): DbEvent {
   return {
@@ -606,6 +662,8 @@ function mapEvent(r: any): DbEvent {
     status: r.status,
     visibility: r.visibility ?? "inherit",
     description: r.description ?? null,
+    notes: r.notes ?? null,
+    photoUrl: r.photo_url ?? null,
     startAt: r.start_at ? Date.parse(r.start_at) : null,
     playerIds: r.player_ids ?? [],
     players: r.player_names ?? [],
@@ -703,6 +761,10 @@ export interface NewEvent {
   /** Visibilitas: inherit (ikut liga) | private | public. Default inherit. */
   visibility?: "inherit" | "private" | "public";
   description?: string;
+  /** Catatan (HTML dari editor WYSIWYG). */
+  notes?: string;
+  /** Foto turnamen (data URL / link). */
+  photoUrl?: string | null;
   /** Jadwal mulai (ms). null/undefined = sekarang. */
   startAt?: number | null;
 }
@@ -723,6 +785,8 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
       status: "live",
       visibility: input.visibility ?? "inherit",
       description: input.description?.trim() || null,
+      notes: input.notes?.trim() || null,
+      photo_url: input.photoUrl || null,
       start_at: input.startAt ? new Date(input.startAt).toISOString() : null,
       player_ids: input.participants.map((p) => p.id),
       player_names: input.participants.map((p) => p.name),

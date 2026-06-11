@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
+import { alertDialog } from "./dialog";
 
 /* ---------- Data ---------- */
 
@@ -591,11 +592,16 @@ export function ShareModal({
         });
       } else {
         download(out.url, out.file.name);
-        alert("Browser tidak mendukung share file — gambar diunduh.");
+        void alertDialog("Browser tidak mendukung share file — gambar diunduh.", {
+          title: "Diunduh",
+        });
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        alert("Gagal membuat gambar: " + (e as Error).message);
+        void alertDialog("Gagal membuat gambar: " + (e as Error).message, {
+          title: "Gagal",
+          tone: "danger",
+        });
       }
     } finally {
       setBusy(false);
@@ -608,7 +614,10 @@ export function ShareModal({
       const out = await capture();
       if (out) download(out.url, out.file.name);
     } catch (e) {
-      alert("Gagal membuat gambar: " + (e as Error).message);
+      void alertDialog("Gagal membuat gambar: " + (e as Error).message, {
+        title: "Gagal",
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }
