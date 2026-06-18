@@ -33,6 +33,7 @@ import {
   listEvents,
   listPlayers,
   adminListPlayers,
+  mergeGuestIntoAccount,
   createPlayer,
   deletePlayer,
   searchUsers,
@@ -1258,6 +1259,10 @@ function AdminPanel({
   const playersQ = useAsync(() => adminListPlayers(), []);
   const userCountQ = useAsync(() => countProfiles(), []);
   const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("liga");
+  const [mergeGuest, setMergeGuest] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const back = (
     <button
@@ -1503,6 +1508,17 @@ function AdminPanel({
                   )}
                 </span>
               </button>
+              {p.isGuest && (
+                <button
+                  onClick={() => setMergeGuest({ id: p.id, name: p.name })}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-outline hover:bg-primary-container hover:text-on-primary-container"
+                  title="Gabungkan ke akun"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    call_merge
+                  </span>
+                </button>
+              )}
               <button
                 onClick={() => delPlayer(p.id, p.name)}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
@@ -1516,6 +1532,215 @@ function AdminPanel({
           ))}
         </ul>
       )}
+
+      {mergeGuest && (
+        <MergePlayerModal
+          guest={mergeGuest}
+          onClose={() => setMergeGuest(null)}
+          onDone={() => {
+            setMergeGuest(null);
+            playersQ.reload();
+            eventsQ.reload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Modal gabungkan tamu → akun (superadmin): pilih akun → preview → konfirmasi. */
+function MergePlayerModal({
+  guest,
+  onClose,
+  onDone,
+}: {
+  guest: { id: string; name: string };
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const playersQ = useAsync(() => adminListPlayers(), []);
+  const eventsQ = useAsync(() => listVisibleEvents(), []);
+  const [q, setQ] = useState("");
+  const [target, setTarget] = useState<{ id: string; name: string } | null>(
+    null
+  );
+  const [busy, setBusy] = useState(false);
+
+  const accounts = (playersQ.data ?? []).filter(
+    (p) => !p.isGuest && p.id !== guest.id
+  );
+  const term = q.trim().toLowerCase();
+  const accShown = (
+    term ? accounts.filter((a) => a.name.toLowerCase().includes(term)) : accounts
+  ).slice(0, 8);
+
+  const events = eventsQ.data ?? [];
+  const affected = events
+    .filter(
+      (e) => e.players.includes(guest.name) || e.playerIds.includes(guest.id)
+    )
+    .map((e) => {
+      let matches = 0;
+      for (const r of e.rounds)
+        for (const m of r.matches)
+          if (m.teamA.includes(guest.name) || m.teamB.includes(guest.name))
+            matches++;
+      return {
+        id: e.id,
+        name: e.name,
+        date: e.startAt ?? e.createdAt,
+        matches,
+      };
+    });
+  const totalMatches = affected.reduce((s, a) => s + a.matches, 0);
+  const conflicts = target
+    ? events.filter(
+        (e) => e.players.includes(guest.name) && e.players.includes(target.name)
+      )
+    : [];
+
+  async function submit() {
+    if (!target || conflicts.length) return;
+    const ok = await confirmDialog(
+      `Gabungkan tamu "${guest.name}" → akun "${target.name}"?\n\n${affected.length} turnamen · ${totalMatches} match akan menjadi milik akun, lalu baris tamu dihapus. Tindakan ini TIDAK bisa di-undo.`,
+      { title: "Gabungkan pemain", confirmText: "Gabungkan", tone: "danger" }
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const res = await mergeGuestIntoAccount(
+        guest.id,
+        guest.name,
+        target.id,
+        target.name
+      );
+      await alertDialog(`Selesai — ${res.events} turnamen diperbarui.`, {
+        title: "Tergabung",
+      });
+      onDone();
+    } catch (e) {
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-surface-container-lowest text-on-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative bg-navy px-6 pb-4 pt-5 text-white">
+          <button
+            onClick={onClose}
+            aria-label="Tutup"
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-white/55 hover:bg-white/10 hover:text-white"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+          <h3 className="font-display text-lg font-bold">Gabungkan ke Akun</h3>
+          <p className="text-xs text-white/55">
+            Tamu <b>{guest.name}</b> → pilih akun tujuan.
+          </p>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+          {/* Pilih akun tujuan */}
+          <div>
+            <div className="mb-1.5 font-label-caps text-label-caps text-on-surface-variant">
+              Akun tujuan
+            </div>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cari akun…"
+              className="input w-full"
+            />
+            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+              {accShown.map((a) => (
+                <li key={a.id}>
+                  <button
+                    onClick={() => setTarget({ id: a.id, name: a.name })}
+                    className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm transition ${
+                      target?.id === a.id
+                        ? "border-primary bg-primary-container/30"
+                        : "border-outline-variant/50 hover:bg-surface-container-low"
+                    }`}
+                  >
+                    <TeamAvatar name={a.name} />
+                    <span className="flex-1 truncate font-medium">{a.name}</span>
+                    {target?.id === a.id && (
+                      <span className="material-symbols-outlined fill text-[18px] text-primary">
+                        check_circle
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+              {accShown.length === 0 && (
+                <li className="px-1 text-xs text-on-surface-variant">
+                  Tidak ada akun cocok.
+                </li>
+              )}
+            </ul>
+          </div>
+
+          {/* Preview */}
+          <div>
+            <div className="mb-1.5 font-label-caps text-label-caps text-on-surface-variant">
+              Preview — yang akan dipindah ({affected.length} turnamen ·{" "}
+              {totalMatches} match)
+            </div>
+            {affected.length === 0 ? (
+              <p className="rounded-lg bg-surface-container-low px-3 py-3 text-sm text-on-surface-variant">
+                Tamu ini belum punya riwayat turnamen.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {affected.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-outline-variant/40 px-3 py-2 text-sm"
+                  >
+                    <span className="min-w-0 truncate">{a.name}</span>
+                    <span className="shrink-0 text-xs text-on-surface-variant">
+                      {a.matches} match · {fmtDate(a.date)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {conflicts.length > 0 && (
+              <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-error-container/50 px-3 py-2 text-xs text-error">
+                <span className="material-symbols-outlined text-[16px]">
+                  warning
+                </span>
+                Tamu & akun ini sama-sama main di {conflicts.length} turnamen —
+                merge diblok agar tak bentrok.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-2 border-t border-outline-variant/40 p-4">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
+          >
+            Batal
+          </button>
+          <button
+            onClick={submit}
+            disabled={busy || !target || conflicts.length > 0}
+            className="flex-1 rounded-xl bg-primary-fixed px-4 py-2.5 text-sm font-semibold text-on-primary-fixed hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
+          >
+            {busy ? "Menggabungkan…" : "Gabungkan"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

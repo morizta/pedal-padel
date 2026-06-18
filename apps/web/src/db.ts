@@ -120,6 +120,67 @@ export async function deletePlayer(id: string): Promise<void> {
 }
 
 /**
+ * Gabungkan pemain TAMU ke sebuah AKUN: ganti nama tamu → nama akun di semua
+ * turnamen (player_names, player_ids, teams, rounds), lalu hapus baris tamu.
+ * Identitas ranking = NAMA, jadi setelah ini history tamu jadi milik akun.
+ * Superadmin-only (RLS sa_all_events/sa_all_players). Mengembalikan jumlah event.
+ */
+export async function mergeGuestIntoAccount(
+  guestId: string,
+  guestName: string,
+  accountId: string,
+  accountName: string
+): Promise<{ events: number }> {
+  // Nama sudah sama → history sudah otomatis gabung; cukup hapus baris tamu.
+  if (guestName === accountName) {
+    await deletePlayer(guestId);
+    return { events: 0 };
+  }
+
+  const all = await listVisibleEvents();
+  const affected = all.filter(
+    (e) => e.players.includes(guestName) || e.playerIds.includes(guestId)
+  );
+  // Cegah konflik: tamu & akun pernah main di turnamen yang sama.
+  const clash = affected.find((e) => e.players.includes(accountName));
+  if (clash)
+    throw new Error(
+      `Tamu & akun sama-sama ada di turnamen "${clash.name}". Merge dibatalkan agar tak bentrok.`
+    );
+
+  const rn = (n: string) => (n === guestName ? accountName : n);
+  const ri = (id: string) => (id === guestId ? accountId : id);
+
+  for (const e of affected) {
+    const rounds = e.rounds.map((r) => ({
+      ...r,
+      resting: (r.resting ?? []).map(rn),
+      matches: r.matches.map((m) => ({
+        ...m,
+        teamA: m.teamA.map(rn) as [string, string],
+        teamB: m.teamB.map(rn) as [string, string],
+      })),
+    }));
+    const teams = (e.teams ?? []).map(
+      (t) => [rn(t[0]), rn(t[1])] as [string, string]
+    );
+    const { error } = await db()
+      .from("events")
+      .update({
+        player_names: e.players.map(rn),
+        player_ids: e.playerIds.map(ri),
+        teams,
+        rounds,
+      })
+      .eq("id", e.id);
+    if (error) throw error;
+  }
+
+  await deletePlayer(guestId);
+  return { events: affected.length };
+}
+
+/**
  * Pastikan user yang login punya "self-player" (player tertaut akunnya).
  * Dipanggil saat login → user otomatis bisa dicari & ditambahkan sbg pemain.
  */
