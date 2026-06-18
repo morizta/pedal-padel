@@ -925,6 +925,63 @@ export function eventResults(event: DbEvent): MatchResult[] {
   return out;
 }
 
+// ── Identitas berbasis ID (terjemah saat baca; data tetap simpan nama) ──
+// Peta nama→id untuk satu event (player_names[i] ↔ player_ids[i]).
+function nameToId(e: DbEvent): Map<string, string> {
+  const m = new Map<string, string>();
+  e.players.forEach((nm, i) => {
+    const id = e.playerIds[i];
+    if (id && !m.has(nm)) m.set(nm, id);
+  });
+  return m;
+}
+
+/** Sama seperti eventResults tapi tim memakai ID pemain (fallback: nama). */
+export function eventResultsById(event: DbEvent): MatchResult[] {
+  const map = nameToId(event);
+  const toId = (nm: string) => map.get(nm) ?? nm; // fallback nama (event lama)
+  const out: MatchResult[] = [];
+  for (const r of event.rounds) {
+    for (const m of r.matches) {
+      const s = event.scores[`${r.index}-${m.court}`];
+      if (s && s.a + s.b > 0)
+        out.push({
+          match: {
+            court: m.court,
+            teamA: [toId(m.teamA[0]!), toId(m.teamA[1]!)] as [string, string],
+            teamB: [toId(m.teamB[0]!), toId(m.teamB[1]!)] as [string, string],
+          },
+          scoreA: s.a,
+          scoreB: s.b,
+        });
+    }
+  }
+  return out;
+}
+
+/** Peta id→nama tampilan (nama terbaru menang; events urut terbaru dulu). */
+function buildNameById(events: DbEvent[]): Record<string, string> {
+  const nameById: Record<string, string> = {};
+  for (const e of events)
+    e.playerIds.forEach((id, i) => {
+      if (id && !(id in nameById)) nameById[id] = e.players[i] ?? id;
+    });
+  return nameById;
+}
+
+/** ID self-player user saat ini (untuk deteksi "saya" di ranking). */
+export async function myPlayerId(): Promise<string | null> {
+  const uid = await currentUserId();
+  if (!uid) return null;
+  const { data } = await db()
+    .from("players")
+    .select("id")
+    .eq("user_id", uid)
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function leagueStandings(
   leagueId: string
 ): Promise<{ standings: Standing[]; eventCount: number }> {
@@ -938,14 +995,24 @@ export async function leagueStandings(
  * Mengembalikan hasil match mentah + daftar nama unik; rating dihitung di UI.
  */
 export async function globalStats(): Promise<{
-  results: MatchResult[];
-  names: string[];
+  results: MatchResult[]; // tim memakai ID pemain
+  ids: string[]; // semua id peserta (unik)
+  nameById: Record<string, string>; // id → nama tampilan
   eventCount: number;
 }> {
   const events = await listVisibleEvents();
-  const results = events.flatMap(eventResults);
-  const names = Array.from(new Set(events.flatMap((e) => e.players)));
-  return { results, names, eventCount: events.length };
+  const nameById = buildNameById(events);
+  const results = events.flatMap(eventResultsById);
+  const idSet = new Set<string>();
+  for (const e of events) for (const id of e.playerIds) if (id) idSet.add(id);
+  // Sertakan id hasil fallback-nama (event lama tanpa player_ids sinkron).
+  for (const r of results)
+    for (const t of [r.match.teamA, r.match.teamB])
+      for (const x of t) {
+        idSet.add(x);
+        if (!(x in nameById)) nameById[x] = x;
+      }
+  return { results, ids: [...idSet], nameById, eventCount: events.length };
 }
 
 /** Satu pertandingan dari sudut pandang seorang pemain (untuk riwayat profil). */
@@ -961,14 +1028,16 @@ export interface PlayerMatch {
   result: "win" | "loss" | "tie";
 }
 
-/** Riwayat match seorang pemain (by nama) lintas semua sesi, terbaru dulu. */
-export async function playerHistory(name: string): Promise<PlayerMatch[]> {
+/** Riwayat match seorang pemain (by ID) lintas semua sesi, terbaru dulu. */
+export async function playerHistory(playerId: string): Promise<PlayerMatch[]> {
   const events = await listVisibleEvents();
+  const nameById = buildNameById(events);
+  const nm = (id: string) => nameById[id] ?? id;
   const out: PlayerMatch[] = [];
   for (const e of events) {
-    for (const { match, scoreA, scoreB } of eventResults(e)) {
-      const onA = match.teamA.includes(name);
-      const onB = match.teamB.includes(name);
+    for (const { match, scoreA, scoreB } of eventResultsById(e)) {
+      const onA = match.teamA.includes(playerId);
+      const onB = match.teamB.includes(playerId);
       if (!onA && !onB) continue;
       const mine = onA ? match.teamA : match.teamB;
       const opp = onA ? match.teamB : match.teamA;
@@ -979,8 +1048,8 @@ export async function playerHistory(name: string): Promise<PlayerMatch[]> {
         eventName: e.name,
         date: e.createdAt,
         format: e.format,
-        partner: mine.find((x) => x !== name) ?? name,
-        opponents: [...opp],
+        partner: nm(mine.find((x) => x !== playerId) ?? playerId),
+        opponents: opp.map(nm),
         scoreFor: sf,
         scoreAgainst: sa,
         result: sf > sa ? "win" : sf < sa ? "loss" : "tie",

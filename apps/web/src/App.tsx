@@ -51,6 +51,7 @@ import {
   myInvolvedEvents,
   amISuperadmin,
   countProfiles,
+  myPlayerId,
   discoverEvents,
   requestJoin,
   joinWithCode,
@@ -68,7 +69,7 @@ import {
   leagueStandings,
   globalStats,
   playerHistory,
-  eventResults,
+  eventResultsById,
   type DbEvent,
   type AccountUser,
   type PlayerMatch,
@@ -90,7 +91,7 @@ type View =
   | { t: "admin" }
   | { t: "session"; id: string }
   | { t: "leaderboard" }
-  | { t: "player"; name: string }
+  | { t: "player"; id: string }
   | { t: "discover" }
   | { t: "profile" };
 
@@ -121,7 +122,7 @@ function viewToPath(v: View): string {
     case "leaderboard":
       return "/ranking";
     case "player":
-      return `/pemain/${encodeURIComponent(v.name)}`;
+      return `/pemain/${encodeURIComponent(v.id)}`;
     case "discover":
       return "/temukan";
     case "profile":
@@ -155,7 +156,7 @@ function pathToView(pathname: string, search: string): View {
     case "ranking":
       return { t: "leaderboard" };
     case "pemain":
-      return b ? { t: "player", name: decodeURIComponent(b) } : { t: "leaderboard" };
+      return b ? { t: "player", id: decodeURIComponent(b) } : { t: "leaderboard" };
     case "temukan":
       return { t: "discover" };
     case "profil":
@@ -299,13 +300,13 @@ export function App() {
       {view.t === "leaderboard" && (
         <LeaderboardScreen
           user={user}
-          onOpenPlayer={(name) => setView({ t: "player", name })}
+          onOpenPlayer={(id) => setView({ t: "player", id })}
         />
       )}
       {view.t === "player" && (
         <PlayerProfileScreen
-          key={view.name}
-          name={view.name}
+          key={view.id}
+          id={view.id}
           onBack={() => setView({ t: "leaderboard" })}
         />
       )}
@@ -470,18 +471,21 @@ function DashboardScreen({
   const myEventsQ = useAsync(() => listEvents(), []);
   const latestLeaguesQ = useAsync(() => latestLeagues(), []);
   const latestEventsQ = useAsync(() => listVisibleEvents(), []);
+  const myIdQ = useAsync(() => myPlayerId(), []);
 
   const myName = user ? displayName(user) : "";
+  const myId = myIdQ.data ?? null;
+  const nameById = statsQ.data?.nameById ?? {};
   const ratings = statsQ.data
-    ? computeRatings(statsQ.data.names, statsQ.data.results)
+    ? computeRatings(statsQ.data.ids, statsQ.data.results)
     : [];
   const standings = statsQ.data
     ? computeStandings(statsQ.data.results, { compensate: false })
     : [];
   const playedRanked = ratings.filter((r) => r.matchesPlayed > 0);
-  const myIdx = playedRanked.findIndex((r) => r.name === myName);
-  const myRating = ratings.find((r) => r.name === myName);
-  const mySt = standings.find((s) => s.playerId === myName);
+  const myIdx = myId ? playedRanked.findIndex((r) => r.id === myId) : -1;
+  const myRating = myId ? ratings.find((r) => r.id === myId) : undefined;
+  const mySt = myId ? standings.find((s) => s.playerId === myId) : undefined;
 
   const myEvents = myEventsQ.data ?? [];
   const upcoming = myEvents
@@ -755,15 +759,15 @@ function DashboardScreen({
                 {playedRanked.slice(0, 5).map((r, i) => (
                   <li key={r.id}>
                     <button
-                      onClick={() => onNavigate({ t: "player", name: r.name })}
+                      onClick={() => onNavigate({ t: "player", id: r.id })}
                       className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-surface-container-low ${
-                        r.name === myName ? "bg-primary-container/30" : ""
+                        r.id === myId ? "bg-primary-container/30" : ""
                       }`}
                     >
                       <RankBadge rank={i + 1} />
-                      <TeamAvatar name={r.name} />
+                      <TeamAvatar name={nameById[r.id] ?? r.name} />
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                        {r.name}
+                        {nameById[r.id] ?? r.name}
                       </span>
                       <span className="font-data-mono text-sm font-bold tabular-nums">
                         {Math.round(r.rating)}
@@ -976,12 +980,13 @@ function MyEventsScreen({
 }) {
   const q = useAsync(() => myInvolvedEvents(), []);
   const all = q.data ?? [];
-  const myName = user ? displayName(user) : "";
+  const myIdQ = useAsync(() => (user ? myPlayerId() : Promise.resolve(null)), [user]);
+  const myId = myIdQ.data ?? null;
   const ongoing = all.filter((e) => e.status !== "finished");
   const finished = all.filter((e) => e.status === "finished");
 
   const row = (e: DbEvent) => {
-    const r = myRankInEvent(e, myName);
+    const r = myRankInEvent(e, myId);
     // Hanya pembuat turnamen yang boleh menghapus (RLS juga menegakkan).
     const canDelete = !!user && e.ownerId === user.id;
     return (
@@ -1196,9 +1201,11 @@ function MyMatchesScreen({
   user: User | null;
   onBack: () => void;
 }) {
+  const myIdQ = useAsync(() => (user ? myPlayerId() : Promise.resolve(null)), [user]);
+  const myId = myIdQ.data ?? null;
   const q = useAsync(
-    () => (user ? playerHistory(displayName(user)) : Promise.resolve([])),
-    [user]
+    () => (myId ? playerHistory(myId) : Promise.resolve([])),
+    [myId]
   );
   const history = q.data ?? [];
 
@@ -1496,7 +1503,7 @@ function AdminPanel({
             >
               <TeamAvatar name={p.name} />
               <button
-                onClick={() => onNavigate({ t: "player", name: p.name })}
+                onClick={() => onNavigate({ t: "player", id: p.id })}
                 className="min-w-0 flex-1 text-left"
               >
                 <span className="flex items-center gap-1.5">
@@ -1759,9 +1766,11 @@ function ProfileScreen({
   const profileQ = useAsync(() => getMyProfile(), []);
   const profile = profileQ.data;
   const statsQ = useAsync(() => globalStats(), []);
+  const myIdQ = useAsync(() => (user ? myPlayerId() : Promise.resolve(null)), [user]);
+  const myId = myIdQ.data ?? null;
   const histQ = useAsync(
-    () => (user ? playerHistory(displayName(user)) : Promise.resolve([])),
-    [user]
+    () => (myId ? playerHistory(myId) : Promise.resolve([])),
+    [myId]
   );
   const eventsQ = useAsync(
     () => (user ? myInvolvedEvents() : Promise.resolve([])),
@@ -1794,16 +1803,15 @@ function ProfileScreen({
   const shownUser = profile?.username || handle(u);
   const shownAvatar = profile?.avatarUrl || null;
 
-  // Statistik & riwayat akun (by nama, dari semua sesi).
-  const myName = displayName(u);
+  // Statistik & riwayat akun (by ID pemain, dari semua sesi).
   const me = (() => {
-    if (!statsQ.data) return null;
-    const ratings = computeRatings(statsQ.data.names, statsQ.data.results);
+    if (!statsQ.data || !myId) return null;
+    const ratings = computeRatings(statsQ.data.ids, statsQ.data.results);
     const played = ratings.filter((r) => r.matchesPlayed > 0); // sudah urut by ELO
-    const idx = played.findIndex((x) => x.name === myName);
-    const r = ratings.find((x) => x.name === myName);
+    const idx = played.findIndex((x) => x.id === myId);
+    const r = ratings.find((x) => x.id === myId);
     const s = computeStandings(statsQ.data.results, { compensate: false }).find(
-      (x) => x.playerId === myName
+      (x) => x.playerId === myId
     );
     return {
       rating: r?.rating ?? null,
@@ -2097,7 +2105,7 @@ function ProfileScreen({
         />
         <ul className="space-y-2">
           {myTournaments.slice(0, 5).map((e) => {
-            const r = myRankInEvent(e, myName);
+            const r = myRankInEvent(e, myId);
             const ongoing = e.status !== "finished";
             return (
               <li key={e.id}>
@@ -2211,15 +2219,16 @@ function fmtDate(ts: number): string {
   });
 }
 
-/** Peringkat seorang pemain (by nama) di dalam SATU turnamen. null = belum ada hasil. */
+/** Peringkat seorang pemain (by ID) di dalam SATU turnamen. null = belum ada hasil. */
 function myRankInEvent(
   e: DbEvent,
-  myName: string
+  playerId: string | null
 ): { rank: number; total: number } | null {
-  const results = eventResults(e);
+  if (!playerId) return null;
+  const results = eventResultsById(e);
   if (results.length === 0) return null;
   const st = computeStandings(results, { compensate: false });
-  const idx = st.findIndex((s) => s.playerId === myName);
+  const idx = st.findIndex((s) => s.playerId === playerId);
   if (idx < 0) return null;
   return { rank: idx + 1, total: st.length };
 }
@@ -2309,13 +2318,15 @@ function ExploreScreen({
     (e) => !term || e.name.toLowerCase().includes(term)
   );
 
-  // Pemain GLOBAL: semua nama yang muncul di event (identitas per nama).
+  // Pemain GLOBAL: semua ID pemain yang muncul di event (identitas per ID).
   // Roster-ku dipakai untuk flag "tamu" + pemainku yang belum main.
   const rankedPlayers = (() => {
     const players = rosterQ.data ?? [];
     const data = statsQ.data;
-    const ratings = data ? computeRatings(data.names, data.results) : [];
-    const mine = new Map(players.map((p) => [p.name, p]));
+    const ratings = data ? computeRatings(data.ids, data.results) : [];
+    const nameById = data?.nameById ?? {};
+    const mine = new Map(players.map((p) => [p.id, p]));
+    const nameOf = (id: string) => nameById[id] ?? mine.get(id)?.name ?? id;
     const out: {
       id: string;
       name: string;
@@ -2326,18 +2337,18 @@ function ExploreScreen({
     const seen = new Set<string>();
     for (const r of ratings) {
       if (r.matchesPlayed === 0) continue;
-      const p = mine.get(r.name);
-      seen.add(r.name);
+      const p = mine.get(r.id);
+      seen.add(r.id);
       out.push({
-        id: p?.id ?? r.name,
-        name: r.name,
+        id: r.id,
+        name: nameOf(r.id),
         isGuest: p?.isGuest ?? false,
         rating: r.rating,
         played: r.matchesPlayed,
       });
     }
     for (const p of players) {
-      if (seen.has(p.name)) continue;
+      if (seen.has(p.id)) continue;
       out.push({
         id: p.id,
         name: p.name,
@@ -2606,7 +2617,7 @@ function ExploreScreen({
               return (
                 <li key={p.id}>
                   <button
-                    onClick={() => onNavigate({ t: "player", name: p.name })}
+                    onClick={() => onNavigate({ t: "player", id: p.id })}
                     className="flex w-full items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-left shadow-sm transition hover:border-primary-fixed-dim"
                   >
                     {played ? (
@@ -2663,8 +2674,9 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 type RankRow = {
+  pid: string; // ID pemain (identitas global → navigasi & deteksi "saya")
   id: string | null; // null = pemain global (bukan roster-ku) → tak bisa dihapus
-  name: string;
+  name: string; // nama tampilan
   isGuest: boolean;
   rating: number | null;
   played: number;
@@ -2680,52 +2692,57 @@ function LeaderboardScreen({
   onOpenPlayer,
 }: {
   user: User | null;
-  onOpenPlayer: (name: string) => void;
+  onOpenPlayer: (id: string) => void;
 }) {
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
+  const meIdQ = useAsync(() => (user ? myPlayerId() : Promise.resolve(null)), [user]);
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(10);
   const [unrankedLimit, setUnrankedLimit] = useState(4);
-  const meName = user ? displayName(user) : "";
+  const meId = meIdQ.data ?? null;
 
   const rows: RankRow[] = (() => {
     const players = roster.data ?? [];
     const data = stats.data;
-    const ratings = data ? computeRatings(data.names, data.results) : [];
+    const ratings = data ? computeRatings(data.ids, data.results) : [];
+    const nameById = data?.nameById ?? {};
     const st = new Map(
       (data ? computeStandings(data.results, { compensate: false }) : []).map(
         (s) => [s.playerId, s]
       )
     );
-    // Roster milikku → untuk id (tombol hapus) + flag tamu, dicocokkan per nama.
-    const mine = new Map(players.map((p) => [p.name, p]));
+    // Roster milikku → untuk id (tombol hapus) + flag tamu, dicocokkan per ID.
+    const mine = new Map(players.map((p) => [p.id, p]));
+    const nameOf = (id: string) => nameById[id] ?? mine.get(id)?.name ?? id;
     const out: RankRow[] = [];
     const seen = new Set<string>();
-    // Peringkat: SEMUA pemain yang pernah main (global, identitas per nama).
+    // Peringkat: SEMUA pemain yang pernah main (global, identitas per ID).
     for (const r of ratings) {
       if (r.matchesPlayed === 0) continue;
-      const p = mine.get(r.name);
-      seen.add(r.name);
+      const p = mine.get(r.id);
+      seen.add(r.id);
       out.push({
+        pid: r.id,
         id: p?.id ?? null,
-        name: r.name,
+        name: nameOf(r.id),
         isGuest: p?.isGuest ?? false,
         rating: r.rating,
         played: r.matchesPlayed,
-        st: st.get(r.name),
+        st: st.get(r.id),
       });
     }
     // Unranked: pemain di roster-ku yang belum pernah main.
     for (const p of players) {
-      if (seen.has(p.name)) continue;
+      if (seen.has(p.id)) continue;
       out.push({
+        pid: p.id,
         id: p.id,
         name: p.name,
         isGuest: p.isGuest,
         rating: null,
         played: 0,
-        st: st.get(p.name),
+        st: st.get(p.id),
       });
     }
     return out.sort((a, b) =>
@@ -2791,11 +2808,11 @@ function LeaderboardScreen({
         <div className="grid grid-cols-3 items-end gap-2 sm:gap-4">
           {top3.map((r, i) => (
             <PodiumCard
-              key={r.id ?? r.name}
+              key={r.pid}
               r={r}
               rank={i + 1}
-              me={r.name === meName}
-              onOpen={() => onOpenPlayer(r.name)}
+              me={r.pid === meId}
+              onOpen={() => onOpenPlayer(r.pid)}
             />
           ))}
         </div>
@@ -2819,16 +2836,16 @@ function LeaderboardScreen({
               const wr = r.st ? Math.round(r.st.winRate * 100) : 0;
               return (
                 <li
-                  key={r.id ?? r.name}
+                  key={r.pid}
                   className={`flex items-center gap-3 px-4 py-2.5 ${
-                    r.name === meName ? "bg-primary-container/25" : ""
+                    r.pid === meId ? "bg-primary-container/25" : ""
                   }`}
                 >
                   <span className="w-8 font-data-mono text-sm font-bold text-on-surface-variant">
                     {rk}
                   </span>
                   <button
-                    onClick={() => onOpenPlayer(r.name)}
+                    onClick={() => onOpenPlayer(r.pid)}
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
                     <TeamAvatar name={r.name} />
@@ -2878,7 +2895,7 @@ function LeaderboardScreen({
           <ul className="space-y-2">
             {unranked.slice(0, unrankedLimit).map((r) => (
               <li
-                key={r.id ?? r.name}
+                key={r.pid}
                 className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 shadow-sm"
               >
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-container text-sm text-on-surface-variant">
@@ -3042,25 +3059,26 @@ function ProfileStat({
   );
 }
 
-/** Profil pemain (by nama): rating ELO, statistik, dan riwayat pertandingan. */
+/** Profil pemain (by ID): rating ELO, statistik, dan riwayat pertandingan. */
 function PlayerProfileScreen({
-  name,
+  id,
   onBack,
 }: {
-  name: string;
+  id: string;
   onBack: () => void;
 }) {
   const stats = useAsync(() => globalStats(), []);
-  const hist = useAsync(() => playerHistory(name), [name]);
+  const hist = useAsync(() => playerHistory(id), [id]);
+  const name = stats.data?.nameById[id] ?? id;
 
   const me = (() => {
     if (!stats.data) return null;
-    const ratings = computeRatings(stats.data.names, stats.data.results);
+    const ratings = computeRatings(stats.data.ids, stats.data.results);
     const played = ratings.filter((r) => r.matchesPlayed > 0);
-    const idx = played.findIndex((x) => x.name === name);
-    const r = ratings.find((x) => x.name === name);
+    const idx = played.findIndex((x) => x.id === id);
+    const r = ratings.find((x) => x.id === id);
     const s = computeStandings(stats.data.results, { compensate: false }).find(
-      (x) => x.playerId === name
+      (x) => x.playerId === id
     );
     return {
       rating: r?.rating ?? null,
