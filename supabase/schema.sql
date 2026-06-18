@@ -413,3 +413,43 @@ update public.events        set created_by = owner_id where created_by is null;
 update public.league_users  set created_by = user_id  where created_by is null;
 update public.league_members lm set created_by = l.owner_id
   from public.leagues l where l.id = lm.league_id and lm.created_by is null;
+
+-- ────────────────────────────────────────────────────────────────────
+-- 6. Superadmin platform (moderasi terpusat lewat /admin).
+--    Diisi MANUAL di sini (tak ada write-policy → user tak bisa angkat diri).
+--    Contoh: insert into public.superadmins (user_id) values ('UUID-USER');
+-- ────────────────────────────────────────────────────────────────────
+create table if not exists public.superadmins (
+  user_id    uuid primary key references auth.users on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.superadmins enable row level security;
+-- Baca: user hanya bisa tahu status DIRINYA (untuk UI). Tanpa policy
+-- insert/update/delete → tak ada yang bisa menulis kecuali via SQL Editor.
+drop policy if exists sa_read_self on public.superadmins;
+create policy sa_read_self on public.superadmins for select
+  using (user_id = auth.uid());
+
+create or replace function public.is_superadmin(uid uuid)
+returns boolean language sql security definer set search_path = public as $$
+  select exists (select 1 from public.superadmins where user_id = uid);
+$$;
+grant execute on function public.is_superadmin(uuid) to authenticated;
+
+-- Policy permissive tambahan: superadmin = akses penuh (moderasi). Karena
+-- permissive, di-OR dengan policy lain — tak perlu mengubah policy yang ada.
+drop policy if exists sa_all_leagues on public.leagues;
+create policy sa_all_leagues on public.leagues for all
+  using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));
+drop policy if exists sa_all_events on public.events;
+create policy sa_all_events on public.events for all
+  using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));
+drop policy if exists sa_all_members on public.league_members;
+create policy sa_all_members on public.league_members for all
+  using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));
+drop policy if exists sa_all_lu on public.league_users;
+create policy sa_all_lu on public.league_users for all
+  using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));
+drop policy if exists sa_all_players on public.players;
+create policy sa_all_players on public.players for all
+  using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));

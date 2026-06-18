@@ -32,7 +32,9 @@ import {
   listLeagues,
   listEvents,
   listPlayers,
+  adminListPlayers,
   createPlayer,
+  deletePlayer,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -46,6 +48,8 @@ import {
   latestLeagues,
   listVisibleEvents,
   myInvolvedEvents,
+  amISuperadmin,
+  countProfiles,
   discoverEvents,
   requestJoin,
   joinWithCode,
@@ -82,6 +86,7 @@ type View =
   | { t: "myEvents" }
   | { t: "myLeagues" }
   | { t: "myMatches" }
+  | { t: "admin" }
   | { t: "session"; id: string }
   | { t: "leaderboard" }
   | { t: "player"; name: string }
@@ -108,6 +113,8 @@ function viewToPath(v: View): string {
       return "/liga-saya";
     case "myMatches":
       return "/pertandingan-saya";
+    case "admin":
+      return "/admin";
     case "session":
       return `/main/${v.id}`;
     case "leaderboard":
@@ -142,6 +149,8 @@ function pathToView(pathname: string, search: string): View {
       return { t: "myLeagues" };
     case "pertandingan-saya":
       return { t: "myMatches" };
+    case "admin":
+      return { t: "admin" };
     case "ranking":
       return { t: "leaderboard" };
     case "pemain":
@@ -211,6 +220,7 @@ function activeTab(v: View): TabKey {
       return "rank";
     case "profile":
     case "myMatches":
+    case "admin":
       return "profile";
     default:
       return "home";
@@ -310,6 +320,9 @@ export function App() {
           onNavigate={setView}
           onBack={() => setView({ t: "home" })}
         />
+      )}
+      {view.t === "admin" && (
+        <AdminPanel onNavigate={setView} onBack={() => setView({ t: "home" })} />
       )}
       </AppShell>
       <DialogHost />
@@ -1230,6 +1243,283 @@ function MyMatchesScreen({
   );
 }
 
+/* ---------- Panel Admin (superadmin: moderasi terpusat) ---------- */
+
+function AdminPanel({
+  onNavigate,
+  onBack,
+}: {
+  onNavigate: (v: View) => void;
+  onBack: () => void;
+}) {
+  const saQ = useAsync(() => amISuperadmin(), []);
+  const leaguesQ = useAsync(() => latestLeagues(500), []);
+  const eventsQ = useAsync(() => listVisibleEvents(), []);
+  const playersQ = useAsync(() => adminListPlayers(), []);
+  const userCountQ = useAsync(() => countProfiles(), []);
+  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("liga");
+
+  const back = (
+    <button
+      onClick={onBack}
+      className="flex items-center gap-1 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+    >
+      <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+      Kembali
+    </button>
+  );
+
+  if (saQ.loading)
+    return <p className="text-sm text-on-surface-variant">Memuat…</p>;
+  if (!saQ.data)
+    return (
+      <div className="mx-auto max-w-2xl space-y-4">
+        {back}
+        <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 text-center shadow-sm">
+          <span className="material-symbols-outlined mb-2 text-5xl text-error">
+            lock
+          </span>
+          <h2 className="font-display text-xl font-bold">Akses ditolak</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Halaman ini hanya untuk superadmin.
+          </p>
+        </div>
+      </div>
+    );
+
+  const leagues = leaguesQ.data ?? [];
+  const events = eventsQ.data ?? [];
+  const players = playersQ.data ?? [];
+
+  async function delPlayer(id: string, name: string) {
+    if (
+      !(await confirmDialog(
+        `Hapus pemain "${name}"? Riwayat match (snapshot nama) tetap ada.`,
+        { title: "Hapus pemain", confirmText: "Hapus", tone: "danger" }
+      ))
+    )
+      return;
+    try {
+      await deletePlayer(id);
+      playersQ.reload();
+    } catch (e) {
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
+    }
+  }
+
+  async function delLeague(id: string, name: string) {
+    if (
+      !(await confirmDialog(`Hapus liga "${name}"? Permanen.`, {
+        title: "Hapus liga",
+        confirmText: "Hapus",
+        tone: "danger",
+      }))
+    )
+      return;
+    try {
+      await deleteLeague(id);
+      leaguesQ.reload();
+    } catch (e) {
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
+    }
+  }
+  async function delEvent(id: string, name: string) {
+    if (
+      !(await confirmDialog(`Hapus turnamen "${name}"? Permanen.`, {
+        title: "Hapus turnamen",
+        confirmText: "Hapus",
+        tone: "danger",
+      }))
+    )
+      return;
+    try {
+      await deleteEvent(id);
+      eventsQ.reload();
+    } catch (e) {
+      void alertDialog("Gagal: " + errMsg(e), { title: "Gagal", tone: "danger" });
+    }
+  }
+
+  const stats = [
+    { k: "Liga", v: leagues.length },
+    { k: "Turnamen", v: events.length },
+    { k: "Akun", v: userCountQ.data ?? "—" },
+    { k: "Pemain", v: players.length },
+  ];
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      {back}
+      <div>
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined fill text-[18px] text-primary">
+            shield_person
+          </span>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">
+            SUPERADMIN
+          </span>
+        </div>
+        <h2 className="mt-1 font-display text-2xl font-bold">Panel Admin</h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Moderasi terpusat — semua liga & turnamen di platform.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {stats.map((s) => (
+          <div
+            key={s.k}
+            className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 text-center shadow-sm"
+          >
+            <div className="font-data-mono text-2xl font-bold">{s.v}</div>
+            <div className="font-label-caps text-label-caps text-on-surface-variant">
+              {s.k}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex w-fit rounded-xl border border-outline-variant/40 bg-surface-container p-1 text-sm">
+        {(
+          [
+            ["liga", "Liga", "emoji_events"],
+            ["turnamen", "Turnamen", "sports_tennis"],
+            ["pemain", "Pemain", "group"],
+          ] as const
+        ).map(([k, l, icon]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition ${
+              tab === k
+                ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab === "liga" && (
+        <ul className="space-y-2">
+          {leagues.map((l) => (
+            <li
+              key={l.id}
+              className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 shadow-sm"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+                <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                  {l.visibility === "private" ? "lock" : "public"}
+                </span>
+              </span>
+              <button
+                onClick={() => onNavigate({ t: "league", id: l.id })}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block truncate font-semibold">{l.name}</span>
+                <span className="text-xs text-on-surface-variant">
+                  {l.visibility === "private" ? "Privat" : "Publik"} ·{" "}
+                  {l.memberCount} anggota · {fmtDate(l.createdAt)}
+                </span>
+              </button>
+              <button
+                onClick={() => delLeague(l.id, l.name)}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
+                title="Hapus liga"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  delete
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {tab === "turnamen" && (
+        <ul className="space-y-2">
+          {events.map((e) => (
+            <li
+              key={e.id}
+              className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 shadow-sm"
+            >
+              {e.photoUrl ? (
+                <img
+                  src={e.photoUrl}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                />
+              ) : (
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-container">
+                  <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
+                    sports_tennis
+                  </span>
+                </span>
+              )}
+              <button
+                onClick={() => onNavigate({ t: "session", id: e.id })}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block truncate font-semibold">{e.name}</span>
+                <span className="text-xs text-on-surface-variant">
+                  {FORMAT_LABEL[e.format]} · {e.players.length} pemain ·{" "}
+                  {e.status === "finished" ? "selesai" : "live"}
+                </span>
+              </button>
+              <button
+                onClick={() => delEvent(e.id, e.name)}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
+                title="Hapus turnamen"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  delete
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {tab === "pemain" && (
+        <ul className="space-y-2">
+          {players.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-3 shadow-sm"
+            >
+              <TeamAvatar name={p.name} />
+              <button
+                onClick={() => onNavigate({ t: "player", name: p.name })}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate font-semibold">{p.name}</span>
+                  {p.isGuest && (
+                    <span className="rounded bg-elo-bronze/15 px-1 text-[10px] font-semibold uppercase text-elo-bronze">
+                      tamu
+                    </span>
+                  )}
+                </span>
+              </button>
+              <button
+                onClick={() => delPlayer(p.id, p.name)}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-outline hover:bg-error-container hover:text-error"
+                title="Hapus pemain"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  delete
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Profil ---------- */
 
 function ProfileScreen({
@@ -1250,6 +1540,10 @@ function ProfileScreen({
   );
   const eventsQ = useAsync(
     () => (user ? myInvolvedEvents() : Promise.resolve([])),
+    [user]
+  );
+  const isSA = useAsync(
+    () => (user ? amISuperadmin() : Promise.resolve(false)),
     [user]
   );
   const [editing, setEditing] = useState(false);
@@ -1646,6 +1940,18 @@ function ProfileScreen({
           ))}
         </ul>
       </section>
+
+      {isSA.data && (
+        <button
+          onClick={() => onNavigate({ t: "admin" })}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-navy py-3 font-semibold text-white hover:opacity-90"
+        >
+          <span className="material-symbols-outlined text-[20px] text-primary-fixed">
+            shield_person
+          </span>
+          Panel Admin
+        </button>
+      )}
 
       <button
         onClick={() => {

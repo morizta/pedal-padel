@@ -25,6 +25,28 @@ async function currentUserId(): Promise<string | null> {
   return data.session?.user.id ?? null;
 }
 
+/* ---------- Superadmin (moderasi platform) ---------- */
+
+/** Apakah user saat ini superadmin (baca baris sendiri di tabel superadmins). */
+export async function amISuperadmin(): Promise<boolean> {
+  const uid = await currentUserId();
+  if (!uid) return false;
+  const { data } = await db()
+    .from("superadmins")
+    .select("user_id")
+    .eq("user_id", uid)
+    .maybeSingle();
+  return !!data;
+}
+
+/** Jumlah total akun terdaftar (untuk statistik panel admin). */
+export async function countProfiles(): Promise<number> {
+  const { count } = await db()
+    .from("profiles")
+    .select("id", { count: "exact", head: true });
+  return count ?? 0;
+}
+
 /* ---------- Pemain ---------- */
 
 export interface Player {
@@ -49,6 +71,17 @@ export async function listPlayers(): Promise<Player[]> {
     .select("id,display_name,user_id")
     .eq("owner_id", owner)
     .order("display_name");
+  if (error) throw error;
+  return (data ?? []).map(mapPlayer);
+}
+
+/** Semua pemain (untuk panel superadmin). players_read = baca publik. */
+export async function adminListPlayers(limit = 1000): Promise<Player[]> {
+  const { data, error } = await db()
+    .from("players")
+    .select("id,display_name,user_id")
+    .order("display_name")
+    .limit(limit);
   if (error) throw error;
   return (data ?? []).map(mapPlayer);
 }
