@@ -4659,6 +4659,165 @@ function CreateLeagueScreen({
   );
 }
 
+/* Date+time picker custom (kalender ber-design-token; nol dependency). */
+function DateTimePicker({
+  value,
+  onChange,
+}: {
+  value: string; // "YYYY-MM-DDTHH:MM" | ""
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = value ? new Date(value) : null;
+  const [view, setView] = useState(() => {
+    const d = selected ?? new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const year = view.getFullYear();
+  const month = view.getMonth();
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array<null>(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  const pickDay = (day: number) => {
+    const d = new Date(
+      year,
+      month,
+      day,
+      selected?.getHours() ?? 18,
+      selected?.getMinutes() ?? 0
+    );
+    onChange(fmt(d));
+  };
+  const setTime = (h: number, m: number) => {
+    const b = selected ?? new Date(year, month, 1);
+    onChange(fmt(new Date(b.getFullYear(), b.getMonth(), b.getDate(), h, m)));
+  };
+
+  const isSel = (d: number) =>
+    selected != null &&
+    selected.getFullYear() === year &&
+    selected.getMonth() === month &&
+    selected.getDate() === d;
+
+  const label = selected
+    ? selected.toLocaleString("en-US", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Pick date & time";
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="input flex items-center justify-between text-left"
+      >
+        <span className={selected ? "" : "text-on-surface-variant"}>{label}</span>
+        <span className="material-symbols-outlined text-[18px] text-on-surface-variant">
+          calendar_month
+        </span>
+      </button>
+      {open && (
+        <div className="absolute left-0 z-50 mt-2 w-72 rounded-2xl border border-outline-variant bg-surface-container-lowest p-3 shadow-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setView(new Date(year, month - 1, 1))}
+              className="grid h-8 w-8 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container"
+            >
+              <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+            </button>
+            <span className="text-sm font-semibold">
+              {view.toLocaleString("en-US", { month: "long", year: "numeric" })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setView(new Date(year, month + 1, 1))}
+              className="grid h-8 w-8 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container"
+            >
+              <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+            </button>
+          </div>
+          <div className="grid grid-cols-7 text-center font-label-caps text-[10px] text-on-surface-variant">
+            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+              <span key={d} className="py-1">
+                {d}
+              </span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {cells.map((d, i) =>
+              d === null ? (
+                <span key={i} />
+              ) : (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => pickDay(d)}
+                  className={`h-8 rounded-lg text-sm transition ${
+                    isSel(d)
+                      ? "bg-primary-fixed font-bold text-on-primary-fixed"
+                      : "hover:bg-surface-container"
+                  }`}
+                >
+                  {d}
+                </button>
+              )
+            )}
+          </div>
+          <div className="mt-3 flex items-center gap-2 border-t border-outline-variant/40 pt-3">
+            <span className="material-symbols-outlined text-[18px] text-on-surface-variant">
+              schedule
+            </span>
+            <input
+              type="time"
+              value={selected ? `${pad(selected.getHours())}:${pad(selected.getMinutes())}` : "18:00"}
+              onChange={(e) => {
+                const [hs, ms] = e.target.value.split(":");
+                const h = Number(hs);
+                const m = Number(ms ?? "0");
+                if (!Number.isNaN(h)) setTime(h, Number.isNaN(m) ? 0 : m);
+              }}
+              className="input flex-1 py-1.5"
+            />
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg bg-primary-fixed px-3 py-1.5 text-sm font-semibold text-on-primary-fixed hover:bg-primary-fixed-dim"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* Simulasi/preview jadwal: distribusi main + keadilan + matriks partner (FR-EV-10). */
 function ScheduleSimulation({
   names,
@@ -5140,12 +5299,9 @@ function CreateScreen({
             offLabel="Pick date"
           />
           {startMode === "schedule" && (
-            <input
-              type="datetime-local"
-              value={startDateTime}
-              onChange={(e) => setStartDateTime(e.target.value)}
-              className="input mt-2"
-            />
+            <div className="mt-2">
+              <DateTimePicker value={startDateTime} onChange={setStartDateTime} />
+            </div>
           )}
           <p className="mt-1.5 text-xs text-on-surface-variant">
             {startMode === "now"
