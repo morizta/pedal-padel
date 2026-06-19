@@ -2856,7 +2856,6 @@ function LeaderboardScreen({
           </h2>
           <p className="mt-1 max-w-xl text-sm text-on-surface-variant">
             Combined rankings across all sessions (starting rating 1000).
-            {stats.data ? ` ${stats.data.eventCount} sessions.` : ""}
           </p>
         </div>
         <div className="relative md:w-72">
@@ -2867,10 +2866,38 @@ function LeaderboardScreen({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search names…"
-            className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
+            className="input h-12 pl-10"
           />
         </div>
       </div>
+
+      {/* Strip ringkasan */}
+      {played.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Ranked players", value: played.length },
+            { label: "Sessions", value: stats.data?.eventCount ?? 0 },
+            {
+              label: "Leader",
+              value: top3[0]
+                ? `${Math.round(top3[0].rating ?? 1000)}`
+                : "–",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 text-center shadow-sm"
+            >
+              <div className="font-data-mono text-2xl font-extrabold tabular-nums text-on-surface">
+                {s.value}
+              </div>
+              <div className="mt-0.5 font-label-caps text-label-caps text-on-surface-variant">
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <StateText
         loading={stats.loading || roster.loading}
