@@ -529,3 +529,110 @@ create policy storage_update on storage.objects for update to authenticated
   using (bucket_id in ('avatars','league-photos','event-photos'));
 create policy storage_delete on storage.objects for delete to authenticated
   using (bucket_id in ('avatars','league-photos','event-photos'));
+
+-- ────────────────────────────────────────────────────────────────────
+-- 11. JOIN & APPROVAL SERAGAM (komunitas + event) — FR-CM-7, FR-EV-8/9, BR-14
+--     Model sama untuk leagues & events: visibilitas + kode + undangan +
+--     toggle "butuh persetujuan". Undangan admin selalu pre-approved.
+-- ────────────────────────────────────────────────────────────────────
+
+-- Toggle approval per entitas.
+alter table public.leagues add column if not exists require_approval boolean not null default false;
+alter table public.events  add column if not exists require_approval boolean not null default false;
+-- Event kini bisa di-join → punya kode sendiri (seperti liga).
+alter table public.events  add column if not exists join_code text;
+create unique index if not exists events_join_code_key on public.events (join_code) where join_code is not null;
+
+-- Keanggotaan AKUN pada event (permintaan/peserta-akun) — mirror league_users.
+-- Saat status → member, app menambah self-player akun ke event_participants.
+create table if not exists public.event_users (
+  event_id   uuid not null references public.events on delete cascade,
+  user_id    uuid not null references auth.users on delete cascade,
+  status     text not null default 'pending' check (status in ('pending','member')),
+  created_at timestamptz not null default now(),
+  primary key (event_id, user_id)
+);
+create index if not exists event_users_user_idx on public.event_users (user_id);
+
+alter table public.event_users enable row level security;
+drop policy if exists eu_read on public.event_users;
+create policy eu_read on public.event_users for select using (true);
+drop policy if exists eu_delete on public.event_users;
+create policy eu_delete on public.event_users for delete
+  using (user_id = auth.uid() or public.can_edit_event(event_id, auth.uid()));
+drop policy if exists eu_update on public.event_users;
+create policy eu_update on public.event_users for update
+  using (public.can_edit_event(event_id, auth.uid()))
+  with check (public.can_edit_event(event_id, auth.uid()));
+
+-- ── RPC: join komunitas (memperhatikan require_approval) ──
+-- Publik minta-gabung: member langsung bila approval OFF, else pending.
+create or replace function public.request_join(lid uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v text; ra boolean;
+begin
+  select visibility, require_approval into v, ra from public.leagues where id = lid;
+  if v is null then raise exception 'Liga tidak ditemukan'; end if;
+  if v <> 'public' then raise exception 'Liga privat — butuh kode atau undangan'; end if;
+  insert into public.league_users (league_id, user_id, status, role)
+  values (lid, auth.uid(), case when ra then 'pending' else 'member' end, 'member')
+  on conflict (league_id, user_id) do nothing;
+end; $$;
+
+-- Privat via kode: member langsung bila approval OFF, else pending.
+create or replace function public.join_with_code(code text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare lid uuid; ra boolean;
+begin
+  select id, require_approval into lid, ra from public.leagues where join_code = code;
+  if lid is null then raise exception 'Kode tidak valid'; end if;
+  insert into public.league_users (league_id, user_id, status, role)
+  values (lid, auth.uid(), case when ra then 'pending' else 'member' end, 'member')
+  on conflict (league_id, user_id)
+    do update set status = case when ra then league_users.status else 'member' end;
+  return lid;
+end; $$;
+
+-- ── RPC: join event (mirror liga) ──
+create or replace function public.request_join_event(eid uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare vis text; lid uuid; ra boolean;
+begin
+  select visibility, league_id, require_approval into vis, lid, ra from public.events where id = eid;
+  if vis is null then raise exception 'Event tidak ditemukan'; end if;
+  if not public.event_is_public(vis, lid) then
+    raise exception 'Event tertutup — butuh kode atau undangan';
+  end if;
+  insert into public.event_users (event_id, user_id, status)
+  values (eid, auth.uid(), case when ra then 'pending' else 'member' end)
+  on conflict (event_id, user_id) do nothing;
+end; $$;
+
+create or replace function public.join_event_with_code(code text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare eid uuid; ra boolean;
+begin
+  select id, require_approval into eid, ra from public.events where join_code = code;
+  if eid is null then raise exception 'Kode event tidak valid'; end if;
+  insert into public.event_users (event_id, user_id, status)
+  values (eid, auth.uid(), case when ra then 'pending' else 'member' end)
+  on conflict (event_id, user_id)
+    do update set status = case when ra then event_users.status else 'member' end;
+  return eid;
+end; $$;
+
+-- Undang ke event (oleh penyelenggara/admin) → langsung member (pre-approved).
+create or replace function public.invite_to_event(eid uuid, uid uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.can_edit_event(eid, auth.uid()) then
+    raise exception 'Hanya penyelenggara/admin yang bisa mengundang';
+  end if;
+  insert into public.event_users (event_id, user_id, status)
+  values (eid, uid, 'member')
+  on conflict (event_id, user_id) do update set status = 'member';
+end; $$;
+
+grant execute on function public.request_join_event(uuid)      to authenticated;
+grant execute on function public.join_event_with_code(text)    to authenticated;
+grant execute on function public.invite_to_event(uuid, uuid)   to authenticated;
