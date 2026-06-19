@@ -170,7 +170,7 @@ function StandingsTable({
   rows: ShareRow[];
   dark: boolean;
 }) {
-  const head = dark ? "rgba(255,255,255,.55)" : "rgba(0,0,0,.5)";
+  const head = dark ? "rgba(255,255,255,.75)" : "rgba(0,0,0,.55)";
   const rowBg = dark ? "rgba(255,255,255,.06)" : "#fff";
   const rowText = dark ? "#fff" : "#1a1a1a";
   return (
@@ -401,16 +401,24 @@ const TEMPLATES: Template[] = [
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            justifyContent: justifyOf(align ?? "top"),
           }}
         >
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <Brand light />
           </div>
-          <h1 style={{ ...titleStyle, color: "#fff", margin: "30px 0 50px" }}>
-            {title}
-          </h1>
-          <StandingsTable rows={rows} dark />
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: justifyOf(align ?? "top"),
+            }}
+          >
+            <h1 style={{ ...titleStyle, color: "#fff", margin: "40px 0 50px" }}>
+              {title}
+            </h1>
+            <StandingsTable rows={rows} dark />
+          </div>
         </div>
       </div>
     ),
@@ -456,27 +464,31 @@ const TEMPLATES: Template[] = [
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            justifyContent: justifyOf(align ?? "bottom"),
             padding: 64,
           }}
         >
           <div
             style={{
-              position: "absolute",
-              top: 64,
-              left: 0,
-              right: 0,
               display: "flex",
               justifyContent: "center",
+              marginBottom: 24,
             }}
           >
             <Brand light />
           </div>
-          <h1 style={{ ...titleStyle, color: "#fff", marginBottom: 70 }}>
-            {title}
-          </h1>
-          <Podium rows={rows} dark />
-          <div style={{ height: 40 }} />
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: justifyOf(align ?? "bottom"),
+            }}
+          >
+            <h1 style={{ ...titleStyle, color: "#fff", marginBottom: 70 }}>
+              {title}
+            </h1>
+            <Podium rows={rows} dark />
+          </div>
         </div>
       </div>
     ),
@@ -494,17 +506,25 @@ const TEMPLATES: Template[] = [
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            justifyContent: justifyOf(align),
             padding: 64,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
             <Brand />
           </div>
-          <h1 style={{ ...titleStyle, color: NAVY, marginBottom: 90 }}>
-            {title}
-          </h1>
-          <Podium rows={rows} dark={false} />
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: justifyOf(align),
+            }}
+          >
+            <h1 style={{ ...titleStyle, color: NAVY, marginBottom: 90 }}>
+              {title}
+            </h1>
+            <Podium rows={rows} dark={false} />
+          </div>
         </div>
       </div>
     ),
