@@ -38,7 +38,7 @@ export function displayName(user: User): string {
   return (
     (user.user_metadata?.name as string | undefined) ??
     user.email?.split("@")[0] ??
-    "Pemain"
+    "Player"
   );
 }
 
@@ -48,7 +48,7 @@ async function signUp(
   name: string,
   username: string
 ) {
-  if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+  if (!supabase) throw new Error("Supabase is not configured.");
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -62,14 +62,14 @@ async function signUp(
 }
 
 async function signIn(email: string, password: string) {
-  if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+  if (!supabase) throw new Error("Supabase is not configured.");
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
 
 /** Login via Google (OAuth). Mengarahkan ke Google lalu balik ke origin. */
 export async function signInWithGoogle() {
-  if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+  if (!supabase) throw new Error("Supabase is not configured.");
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: { redirectTo: window.location.origin },
@@ -90,7 +90,7 @@ export async function updateName(name: string) {
 
 /** Handle @username sederhana dari email. */
 export function handle(user: User): string {
-  return (user.email?.split("@")[0] ?? "pemain").toLowerCase();
+  return (user.email?.split("@")[0] ?? "player").toLowerCase();
 }
 
 /* ---------- UI ---------- */
@@ -127,7 +127,7 @@ export function AuthBar({
         className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2 text-sm font-bold text-on-primary-fixed shadow-sm transition hover:bg-primary-fixed-dim"
       >
         <span className="material-symbols-outlined text-[18px]">login</span>
-        Masuk
+        Sign in
       </button>
       {open && <AuthModal onClose={() => setOpen(false)} />}
     </>
@@ -174,12 +174,12 @@ function AuthModal({ onClose }: { onClose: () => void }) {
     try {
       if (mode === "signup") {
         if (cleanUser.length < 3) {
-          throw new Error("Username minimal 3 huruf (a-z, 0-9, _).");
+          throw new Error("Username must be at least 3 characters (a-z, 0-9, _).");
         }
-        if (uOk === false) throw new Error("Username sudah dipakai.");
+        if (uOk === false) throw new Error("Username is already taken.");
         await signUp(email, password, name, cleanUser);
         setInfo(
-          "Pendaftaran berhasil. Cek email untuk verifikasi (jika diminta), lalu masuk."
+          "Sign up successful. Check your email to verify (if prompted), then sign in."
         );
         setMode("login");
       } else {
@@ -187,7 +187,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
         onClose();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Terjadi kesalahan.");
+      setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
@@ -199,7 +199,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
     try {
       await signInWithGoogle(); // redirect ke Google; balik lewat onAuthStateChange
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal masuk dengan Google.");
+      setError(e instanceof Error ? e.message : "Failed to sign in with Google.");
       setBusy(false);
     }
   }
@@ -223,7 +223,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
           <span className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-primary-fixed/15 blur-2xl" />
           <button
             onClick={onClose}
-            aria-label="Tutup"
+            aria-label="Close"
             className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-white/55 transition hover:bg-white/10 hover:text-white"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -238,8 +238,8 @@ function AuthModal({ onClose }: { onClose: () => void }) {
               </div>
               <div className="text-xs text-white/55">
                 {mode === "login"
-                  ? "Masuk untuk main & lihat rankingmu"
-                  : "Daftar gratis — langsung main"}
+                  ? "Sign in to play & see your ranking"
+                  : "Sign up free — start playing now"}
               </div>
             </div>
           </div>
@@ -258,7 +258,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                     : "text-on-surface-variant hover:text-on-surface"
                 }`}
               >
-                {m === "login" ? "Masuk" : "Daftar"}
+                {m === "login" ? "Sign in" : "Sign up"}
               </button>
             ))}
           </div>
@@ -290,12 +290,12 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38Z"
               />
             </svg>
-            Lanjut dengan Google
+            Continue with Google
           </button>
 
           <div className="mb-3 flex items-center gap-3 text-xs text-on-surface-variant">
             <span className="h-px flex-1 bg-outline-variant/50" />
-            atau email
+            or email
             <span className="h-px flex-1 bg-outline-variant/50" />
           </div>
 
@@ -309,7 +309,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Nama lengkap"
+                    placeholder="Full name"
                     className={inputCls}
                   />
                 </label>
@@ -321,7 +321,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                     <input
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="username (unik)"
+                      placeholder="username (unique)"
                       className={inputCls}
                     />
                     {cleanUser.length >= 3 && uOk === true && (
@@ -337,17 +337,17 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                   </label>
                   {cleanUser.length > 0 && cleanUser.length < 3 && (
                     <p className="mt-1 px-1 text-xs text-on-surface-variant">
-                      Minimal 3 huruf (a-z, 0-9, _).
+                      At least 3 characters (a-z, 0-9, _).
                     </p>
                   )}
                   {cleanUser.length >= 3 && uOk === true && (
                     <p className="mt-1 px-1 text-xs text-primary">
-                      @{cleanUser} tersedia ✓
+                      @{cleanUser} available ✓
                     </p>
                   )}
                   {cleanUser.length >= 3 && uOk === false && (
                     <p className="mt-1 px-1 text-xs text-error">
-                      @{cleanUser} sudah dipakai
+                      @{cleanUser} is already taken
                     </p>
                   )}
                 </div>
@@ -374,7 +374,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submit()}
-                placeholder="Password (min. 6 karakter)"
+                placeholder="Password (min. 6 characters)"
                 className={inputCls}
               />
             </label>
@@ -407,24 +407,24 @@ function AuthModal({ onClose }: { onClose: () => void }) {
               className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed shadow-sm transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline disabled:shadow-none"
             >
               {busy ? (
-                "Memproses…"
+                "Processing…"
               ) : (
                 <>
                   <span className="material-symbols-outlined text-[18px]">
                     {mode === "login" ? "login" : "person_add"}
                   </span>
-                  {mode === "login" ? "Masuk" : "Daftar"}
+                  {mode === "login" ? "Sign in" : "Sign up"}
                 </>
               )}
             </button>
 
             <p className="text-center text-xs text-on-surface-variant">
-              {mode === "login" ? "Belum punya akun? " : "Sudah punya akun? "}
+              {mode === "login" ? "Don't have an account? " : "Already have an account? "}
               <button
                 onClick={() => setMode(mode === "login" ? "signup" : "login")}
                 className="font-semibold text-primary hover:underline"
               >
-                {mode === "login" ? "Daftar gratis" : "Masuk"}
+                {mode === "login" ? "Sign up free" : "Sign in"}
               </button>
             </p>
           </div>

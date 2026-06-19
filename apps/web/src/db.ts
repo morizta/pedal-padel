@@ -16,7 +16,7 @@ import type { Format, ScoringConfig, Scores } from "./session";
 import { supabase } from "./supabase";
 
 function db() {
-  if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+  if (!supabase) throw new Error("Supabase is not configured.");
   return supabase;
 }
 
@@ -93,7 +93,7 @@ export async function createPlayer(
   const clean = name.trim();
   if (!clean) return undefined;
   const owner = await currentUserId();
-  if (!owner) throw new Error("Harus login untuk menambah pemain.");
+  if (!owner) throw new Error("You must be signed in to add a player.");
 
   // Dedupe by nama (case-insensitive) milik user ini.
   const { data: existing } = await db()
@@ -145,7 +145,7 @@ export async function mergeGuestIntoAccount(
   const clash = affected.find((e) => e.players.includes(accountName));
   if (clash)
     throw new Error(
-      `Tamu & akun sama-sama ada di turnamen "${clash.name}". Merge dibatalkan agar tak bentrok.`
+      `Guest and account are both in tournament "${clash.name}". Merge cancelled to avoid a conflict.`
     );
 
   const rn = (n: string) => (n === guestName ? accountName : n);
@@ -196,7 +196,7 @@ export async function ensureSelfPlayer(name: string): Promise<void> {
   if (data && data.length > 0) return; // sudah ada
   await db()
     .from("players")
-    .insert({ display_name: name.trim() || "Pemain", user_id: uid, owner_id: uid });
+    .insert({ display_name: name.trim() || "Player", user_id: uid, owner_id: uid });
 }
 
 export interface AccountHit {
@@ -229,7 +229,7 @@ export async function searchUsers(query: string): Promise<AccountHit[]> {
   return profs
     .map((pr) => ({
       id: byUser.get(pr.id) ?? "",
-      name: pr.name ?? pr.username ?? "Pemain",
+      name: pr.name ?? pr.username ?? "Player",
       username: pr.username,
       avatarUrl: pr.avatar_url,
     }))
@@ -278,7 +278,7 @@ export async function updateProfile(patch: {
   avatarUrl?: string | null;
 }): Promise<void> {
   const uid = await currentUserId();
-  if (!uid) throw new Error("Harus login.");
+  if (!uid) throw new Error("You must be signed in.");
   const row: Record<string, unknown> = {};
   if (patch.name !== undefined) row.name = patch.name.trim();
   if (patch.username !== undefined) row.username = patch.username.trim().toLowerCase();
@@ -287,7 +287,7 @@ export async function updateProfile(patch: {
   const { error } = await db().from("profiles").update(row).eq("id", uid);
   if (error) {
     if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
-      throw new Error("Username sudah dipakai. Coba yang lain.");
+      throw new Error("Username is already taken. Try another.");
     }
     throw error;
   }
@@ -387,12 +387,12 @@ export interface NewLeague {
 
 export async function createLeague(input: NewLeague): Promise<League> {
   const owner = await currentUserId();
-  if (!owner) throw new Error("Harus login untuk membuat liga.");
+  if (!owner) throw new Error("You must be signed in to create a league.");
   const visibility = input.visibility ?? "private";
   const { data, error } = await db()
     .from("leagues")
     .insert({
-      name: input.name.trim() || "Liga Tanpa Nama",
+      name: input.name.trim() || "Untitled League",
       owner_id: owner,
       description: input.description?.trim() || null,
       notes: input.notes?.trim() || null,
@@ -421,7 +421,7 @@ export async function updateLeague(
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.name !== undefined)
-    row.name = patch.name.trim() || "Liga Tanpa Nama";
+    row.name = patch.name.trim() || "Untitled League";
   if (patch.description !== undefined)
     row.description = patch.description?.trim() || null;
   if (patch.notes !== undefined) row.notes = patch.notes?.trim() || null;
@@ -566,7 +566,7 @@ export async function discoverPlayers(q?: string): Promise<AccountUser[]> {
   if (error) throw error;
   return (data ?? []).map((p: any) => ({
     userId: p.id,
-    name: p.name ?? p.username ?? "Pemain",
+    name: p.name ?? p.username ?? "Player",
     username: p.username,
     avatarUrl: p.avatar_url,
   }));
@@ -633,7 +633,7 @@ export async function listLeagueMembers(
       userId: m.user_id,
       status: m.status,
       role: m.role,
-      name: p?.name ?? p?.username ?? "Pemain",
+      name: p?.name ?? p?.username ?? "Player",
       username: p?.username ?? null,
       avatarUrl: p?.avatar_url ?? null,
     };
@@ -705,7 +705,7 @@ export async function searchAccounts(query: string): Promise<AccountUser[]> {
   if (error) throw error;
   return (data ?? []).map((p: any) => ({
     userId: p.id,
-    name: p.name ?? p.username ?? "Pemain",
+    name: p.name ?? p.username ?? "Player",
     username: p.username,
     avatarUrl: p.avatar_url,
   }));
@@ -865,13 +865,13 @@ export interface NewEvent {
 
 export async function createEvent(input: NewEvent): Promise<DbEvent> {
   const owner = await currentUserId();
-  if (!owner) throw new Error("Harus login untuk membuat sesi.");
+  if (!owner) throw new Error("You must be signed in to create a session.");
   const { data, error } = await db()
     .from("events")
     .insert({
       league_id: input.leagueId,
       owner_id: owner,
-      name: input.name.trim() || "Sesi Tanpa Nama",
+      name: input.name.trim() || "Untitled Session",
       format: input.format,
       courts: input.courts,
       scoring: input.scoring,

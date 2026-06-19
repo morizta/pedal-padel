@@ -49,13 +49,13 @@ export function generateAmericano(
   opts: AmericanoOptions = {}
 ): Round[] {
   const n = players.length;
-  if (n < 4) throw new Error("Americano butuh minimal 4 pemain.");
+  if (n < 4) throw new Error("Americano needs at least 4 players.");
 
   const courts = opts.courts ?? Math.floor(n / 4);
-  if (courts < 1) throw new Error("Butuh minimal 1 lapangan (≥4 pemain).");
+  if (courts < 1) throw new Error("Needs at least 1 court (≥4 players).");
   if (courts * 4 > n) {
     throw new Error(
-      `Lapangan terlalu banyak: butuh ${courts * 4} pemain untuk ${courts} lapangan, hanya ada ${n}.`
+      `Too many courts: need ${courts * 4} players for ${courts} courts, only ${n} available.`
     );
   }
 

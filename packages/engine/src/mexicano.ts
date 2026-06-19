@@ -25,7 +25,7 @@ export function nextMexicanoRound(
   opts: MexicanoOptions = {}
 ): Round {
   if (rankedPlayers.length < 4) {
-    throw new Error("Mexicano butuh minimal 4 pemain.");
+    throw new Error("Mexicano needs at least 4 players.");
   }
 
   const courts = opts.courts ?? Math.floor(rankedPlayers.length / 4);

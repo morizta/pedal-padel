@@ -174,7 +174,7 @@ function StandingsTable({
         }}
       >
         <span>#</span>
-        <span>Pemain</span>
+        <span>Player</span>
         <span style={{ textAlign: "center" }}>W-L-T</span>
         <span style={{ textAlign: "center" }}>Diff</span>
         <span style={{ textAlign: "center" }}>+M</span>
@@ -370,7 +370,7 @@ function BgImage({ bg }: { bg?: string | null }) {
 const TEMPLATES: Template[] = [
   {
     key: "list-dark",
-    label: "List Gelap",
+    label: "Dark List",
     transparent: false,
     render: ({ title, rows, bg }) => (
       <div style={frame(bg, `linear-gradient(180deg, ${NAVY} 0%, #0b1120 100%)`)}>
@@ -389,7 +389,7 @@ const TEMPLATES: Template[] = [
   },
   {
     key: "list-card",
-    label: "List Kartu",
+    label: "Card List",
     transparent: true,
     render: ({ title, rows, bg }) => (
       <div style={frame(bg, "transparent")}>
@@ -455,7 +455,7 @@ const TEMPLATES: Template[] = [
   },
   {
     key: "podium-light",
-    label: "Podium Terang",
+    label: "Light Podium",
     transparent: false,
     render: ({ title, rows, bg }) => (
       <div style={frame(bg, "linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%)")}>
@@ -483,7 +483,7 @@ const TEMPLATES: Template[] = [
   },
   {
     key: "compact",
-    label: "Ringkas Top-3",
+    label: "Compact Top-3",
     transparent: true,
     render: ({ title, rows, bg }) => (
       <div style={frame(bg, "transparent")}>
@@ -571,7 +571,7 @@ export function ShareModal({
       backgroundColor: template.transparent ? undefined : undefined,
     });
     const blob = await (await fetch(url)).blob();
-    const safe = title.replace(/[^\w-]+/g, "_").slice(0, 40) || "klasemen";
+    const safe = title.replace(/[^\w-]+/g, "_").slice(0, 40) || "standings";
     const file = new File([blob], `${safe}.png`, { type: "image/png" });
     return { url, file };
   }
@@ -588,18 +588,18 @@ export function ShareModal({
         await navigator.share({
           files: [out.file],
           title,
-          text: `Klasemen ${title} — via SICOPA`,
+          text: `${title} Standings — via SICOPA`,
         });
       } else {
         download(out.url, out.file.name);
-        void alertDialog("Browser tidak mendukung share file — gambar diunduh.", {
-          title: "Diunduh",
+        void alertDialog("Your browser doesn't support sharing files — the image was downloaded.", {
+          title: "Downloaded",
         });
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        void alertDialog("Gagal membuat gambar: " + (e as Error).message, {
-          title: "Gagal",
+        void alertDialog("Failed to create image: " + (e as Error).message, {
+          title: "Failed",
           tone: "danger",
         });
       }
@@ -614,8 +614,8 @@ export function ShareModal({
       const out = await capture();
       if (out) download(out.url, out.file.name);
     } catch (e) {
-      void alertDialog("Gagal membuat gambar: " + (e as Error).message, {
-        title: "Gagal",
+      void alertDialog("Failed to create image: " + (e as Error).message, {
+        title: "Failed",
         tone: "danger",
       });
     } finally {
@@ -643,9 +643,9 @@ export function ShareModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-outline-variant/30 px-5 py-4">
           <div>
-            <h3 className="font-display text-lg font-bold">Bagikan Klasemen</h3>
+            <h3 className="font-display text-lg font-bold">Share Standings</h3>
             <p className="text-xs text-on-surface-variant">
-              Pilih template lalu Share / Download
+              Pick a template, then Share / Download
             </p>
           </div>
           <button
@@ -700,7 +700,7 @@ export function ShareModal({
             <div className="mt-4 space-y-3">
               <label className="block">
                 <div className="flex justify-between text-xs font-semibold text-on-surface-variant">
-                  <span>Mulai dari peringkat</span>
+                  <span>Start from rank</span>
                   <span>{start}</span>
                 </div>
                 <input
@@ -718,7 +718,7 @@ export function ShareModal({
               </label>
               <label className="block">
                 <div className="flex justify-between text-xs font-semibold text-on-surface-variant">
-                  <span>Jumlah pemain ditampilkan</span>
+                  <span>Players shown</span>
                   <span>{count}</span>
                 </div>
                 <input
@@ -737,7 +737,7 @@ export function ShareModal({
           <div className="mt-4 flex gap-2">
             <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold hover:bg-surface-container-high">
               <span className="material-symbols-outlined text-[20px]">image</span>
-              {bg ? "Ganti foto" : "Sisipkan foto"}
+              {bg ? "Change photo" : "Insert photo"}
               <input
                 type="file"
                 accept="image/*"
@@ -750,7 +750,7 @@ export function ShareModal({
                 onClick={() => setBg(null)}
                 className="rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold hover:bg-surface-container-low"
               >
-                Hapus
+                Remove
               </button>
             )}
           </div>
@@ -764,7 +764,7 @@ export function ShareModal({
             className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95 disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-[20px]">ios_share</span>
-            {busy ? "Memproses…" : "Share"}
+            {busy ? "Processing…" : "Share"}
           </button>
           <button
             disabled={busy}
@@ -793,7 +793,7 @@ export function ShareButton({
   title,
   rows,
   className,
-  label = "Bagikan",
+  label = "Share",
 }: {
   title: string;
   rows: ShareRow[];

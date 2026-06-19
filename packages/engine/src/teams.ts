@@ -28,10 +28,10 @@ export function pairUp(players: readonly PlayerId[]): Pair[] {
 
 function resolveCourts(numTeams: number, opts: TeamFormatOptions): number {
   const courts = opts.courts ?? Math.floor(numTeams / 2);
-  if (courts < 1) throw new Error("Butuh minimal 2 tim (4 pemain).");
+  if (courts < 1) throw new Error("Needs at least 2 teams (4 players).");
   if (courts * 2 > numTeams) {
     throw new Error(
-      `Lapangan terlalu banyak: butuh ${courts * 2} tim untuk ${courts} lapangan, hanya ada ${numTeams}.`
+      `Too many courts: need ${courts * 2} teams for ${courts} courts, only ${numTeams} available.`
     );
   }
   return courts;
@@ -74,7 +74,7 @@ export function generateTeamAmericano(
   teams: readonly Pair[],
   opts: TeamFormatOptions = {}
 ): Round[] {
-  if (teams.length < 2) throw new Error("Team Americano butuh minimal 2 tim.");
+  if (teams.length < 2) throw new Error("Team Americano needs at least 2 teams.");
   const courts = resolveCourts(teams.length, opts);
   const pairs = roundRobinPairs(teams.length);
 
@@ -115,7 +115,7 @@ export function nextTeamMexicanoRound(
   roundIndex: number,
   opts: TeamFormatOptions = {}
 ): Round {
-  if (rankedTeams.length < 2) throw new Error("Team Mexicano butuh minimal 2 tim.");
+  if (rankedTeams.length < 2) throw new Error("Team Mexicano needs at least 2 teams.");
   const courts = resolveCourts(rankedTeams.length, opts);
   const perRound = courts * 2;
   const active = rankedTeams.slice(0, perRound);

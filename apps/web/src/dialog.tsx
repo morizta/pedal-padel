@@ -35,10 +35,10 @@ function show(
   return new Promise((resolve) => {
     const req: Req = {
       id: ++counter,
-      title: o.title ?? (o.isAlert ? "Info" : "Konfirmasi"),
+      title: o.title ?? (o.isAlert ? "Info" : "Confirm"),
       message,
-      confirmText: o.confirmText ?? (o.isAlert ? "OK" : "Ya"),
-      cancelText: o.isAlert ? null : (o.cancelText ?? "Batal"),
+      confirmText: o.confirmText ?? (o.isAlert ? "OK" : "Yes"),
+      cancelText: o.isAlert ? null : (o.cancelText ?? "Cancel"),
       tone: o.tone ?? "default",
       resolve,
     };

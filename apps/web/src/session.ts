@@ -56,11 +56,11 @@ export interface ScoreSpec {
 export function scoreSpec(c: ScoringConfig): ScoreSpec {
   if (c.type === "point") {
     return c.points > 0
-      ? { complement: true, max: c.points, label: `${c.points} poin` }
-      : { complement: false, max: 40, label: "poin bebas" };
+      ? { complement: true, max: c.points, label: `${c.points} points` }
+      : { complement: false, max: 40, label: "free points" };
   }
   return c.mode === "total"
-    ? { complement: true, max: c.target, label: `total ${c.target} game` }
+    ? { complement: true, max: c.target, label: `total ${c.target} games` }
     : { complement: false, max: c.target, label: `first to ${c.target}` };
 }
 
