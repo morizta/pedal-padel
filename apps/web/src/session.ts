@@ -17,6 +17,7 @@ import {
   nextTeamMexicanoRound,
   pairUp,
   rankTeams,
+  teamKey,
   computeStandings,
   type Pair,
   type PlayerId,
@@ -96,6 +97,31 @@ export function rankPlayers(
     const rb = rank.get(b) ?? Number.POSITIVE_INFINITY;
     return ra - rb || a.localeCompare(b);
   });
+}
+
+/** Berapa kali tiap pemain sudah istirahat (untuk rotasi bye adil — DEF-3). */
+function playerRestCount(rs: readonly Round[]): Record<string, number> {
+  const rc: Record<string, number> = {};
+  for (const r of rs)
+    for (const id of r.resting) rc[id] = (rc[id] ?? 0) + 1;
+  return rc;
+}
+
+/** Berapa kali tiap TIM (teamKey) sudah istirahat — kedua pemainnya beristirahat. */
+function teamRestCount(
+  rs: readonly Round[],
+  teams: readonly Pair[]
+): Record<string, number> {
+  const rc: Record<string, number> = {};
+  for (const r of rs) {
+    const set = new Set(r.resting);
+    for (const t of teams)
+      if (set.has(t[0]) && set.has(t[1])) {
+        const k = teamKey(t);
+        rc[k] = (rc[k] ?? 0) + 1;
+      }
+  }
+  return rc;
 }
 
 export interface Session {
@@ -259,13 +285,17 @@ export function useSession(
         case "mexicano":
           return [
             ...prev,
-            nextMexicanoRound(rankPlayers(players, results), idx, { courts }),
+            nextMexicanoRound(rankPlayers(players, results), idx, {
+              courts,
+              restCount: playerRestCount(prev),
+            }),
           ];
         case "team_mexicano":
           return [
             ...prev,
             nextTeamMexicanoRound(rankTeams(teamsRef.current, results), idx, {
               courts,
+              restCount: teamRestCount(prev, teamsRef.current),
             }),
           ];
       }
@@ -294,19 +324,20 @@ export function useSession(
     setRounds((prev) => {
       const idx = prev.length - 1;
       if (idx < 0) return prev;
+      const before = prev.slice(0, idx); // ronde sebelum yang diganti
       const replacement =
         config.format === "mexicano"
           ? nextMexicanoRound(
               idx === 0 ? shuffle(players) : rankPlayers(players, results),
               idx,
-              { courts }
+              { courts, restCount: playerRestCount(before) }
             )
           : nextTeamMexicanoRound(
               idx === 0
                 ? shuffle(teamsRef.current)
                 : rankTeams(teamsRef.current, results),
               idx,
-              { courts }
+              { courts, restCount: teamRestCount(before, teamsRef.current) }
             );
       setScores((s) => {
         const copy = { ...s };

@@ -15,6 +15,12 @@ import type { Pair, PlayerId, Round, Match, MatchResult } from "./types.js";
 export interface TeamFormatOptions {
   /** Jumlah lapangan. Default: floor(jumlahTim / 2). */
   courts?: number;
+  /**
+   * Rotasi bye adil untuk Team Mexicano: teamKey → berapa kali tim sudah
+   * istirahat. Bila ada tim yang harus istirahat, pilih yang paling sedikit
+   * istirahat (bukan peringkat terbawah). Mencegah tim mandek di-bench (DEF-3).
+   */
+  restCount?: Record<string, number>;
 }
 
 /** Bentuk tim (pasangan) dari daftar pemain berurutan: [p0,p1],[p2,p3],… */
@@ -118,8 +124,26 @@ export function nextTeamMexicanoRound(
   if (rankedTeams.length < 2) throw new Error("Team Mexicano needs at least 2 teams.");
   const courts = resolveCourts(rankedTeams.length, opts);
   const perRound = courts * 2;
-  const active = rankedTeams.slice(0, perRound);
-  const resting = rankedTeams.slice(perRound);
+  const restN = rankedTeams.length - perRound;
+
+  let active: readonly Pair[];
+  let resting: readonly Pair[];
+  if (restN <= 0) {
+    active = rankedTeams.slice(0, perRound);
+    resting = rankedTeams.slice(perRound);
+  } else {
+    // Rotasi bye adil: istirahatkan tim yang PALING SEDIKIT istirahat.
+    const rc = opts.restCount ?? {};
+    const restSet = new Set(
+      rankedTeams
+        .map((t, rank) => ({ k: teamKey(t), rank }))
+        .sort((a, b) => (rc[a.k] ?? 0) - (rc[b.k] ?? 0) || b.rank - a.rank)
+        .slice(0, restN)
+        .map((x) => x.k)
+    );
+    resting = rankedTeams.filter((t) => restSet.has(teamKey(t)));
+    active = rankedTeams.filter((t) => !restSet.has(teamKey(t))); // tetap urut peringkat
+  }
 
   const matches: Match[] = [];
   for (let c = 0; c < courts; c++) {
