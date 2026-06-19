@@ -326,7 +326,7 @@ masuk ranking global (BR-2). Komunitas **lintas-sport** (BR-12).
 | FR-LB-4 | ELO margin-aware (selisih skor memengaruhi pergeseran) & K-factor dinamis. | ✅ |
 | FR-LB-5 | Rating menampilkan indikator keandalan (reliability) untuk pemain <20 match. | ✅ |
 | FR-LB-6 | **Sort leaderboard** bisa dipilih: by **poin** atau by **menang** (win). | ✅ (klasemen sesi & komunitas; ranking global tetap by ELO) |
-| FR-LB-7 | **Aturan tie-break** dapat dikonfigurasi: *allow tied* (peringkat sama, lanjut normal 1,2,2,3) · *skip after tied* (1,2,2,4) · *no tied* (unik, dipecah by metode sort lalu head-to-head lalu alfabetis). | ⬜ |
+| FR-LB-7 | **Aturan tie-break** dapat dikonfigurasi: *allow tied* (1,2,2,3) · *skip after tied* (1,2,2,4) · *no tied* (unik). | ✅ (klasemen sesi & komunitas; "no tied" pakai urutan sort deterministik — head-to-head eksplisit nyusul) |
 
 #### Backlog — match type & format (inspirasi Padlup)
 
