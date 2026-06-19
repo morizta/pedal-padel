@@ -2533,7 +2533,7 @@ function ExploreScreen({
                 ? "Search tournaments…"
                 : "Search leagues…"
           }
-          className="h-12 w-full rounded-xl border border-outline-variant bg-surface-container-lowest pl-10 pr-4 outline-none focus:ring-2 focus:ring-primary"
+          className="input h-12 pl-10"
         />
       </div>
 
