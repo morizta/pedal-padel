@@ -4786,6 +4786,37 @@ function ScheduleSimulation({
           </div>
         </div>
       )}
+
+      <div className="mt-4">
+        <div className="mb-1 font-label-caps text-label-caps text-on-surface-variant">
+          Rounds ({rounds.length})
+        </div>
+        <ol className="space-y-1">
+          {rounds.map((r) => (
+            <li
+              key={r.index}
+              className="rounded-lg bg-surface-container-low px-2.5 py-1.5 text-xs"
+            >
+              <span className="mr-1 font-data-mono font-bold text-on-surface-variant">
+                R{r.index + 1}
+              </span>
+              {r.matches.map((m, ci) => (
+                <span key={ci}>
+                  {ci > 0 && <span className="text-outline"> · </span>}
+                  <span className="font-medium">
+                    {m.teamA.join(" & ")} vs {m.teamB.join(" & ")}
+                  </span>
+                </span>
+              ))}
+              {r.resting.length > 0 && (
+                <span className="ml-1 text-outline">
+                  (rest: {r.resting.join(", ")})
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
     </Card>
   );
 }

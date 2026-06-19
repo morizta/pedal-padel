@@ -239,7 +239,7 @@ masuk ranking global (BR-2). Komunitas **lintas-sport** (BR-12).
 | FR-EV-7 | Event punya detail: deskripsi, catatan, foto. | ✅ |
 | FR-EV-8 | Orang luar dapat **bergabung ke event** (minta-gabung / kode / undangan), mirip komunitas. | ⬜ |
 | FR-EV-9 | Toggle **"butuh persetujuan"** per event — berlaku untuk minta-gabung **maupun** kode. | ⬜ |
-| FR-EV-10 | **Simulasi/preview jadwal** sebelum sesi: distribusi main per pemain + matriks partner + indikator keadilan (gaya Padlup). | 🟡 (di layar Buat Sesi: games-per-player + fairness + partner matrix; daftar ronde & reshuffle in-place menyusul) |
+| FR-EV-10 | **Simulasi/preview jadwal** sebelum sesi: distribusi main per pemain + matriks partner + daftar ronde + indikator keadilan (gaya Padlup). | ✅ (di layar Buat Sesi: games-per-player + fairness + partner matrix + daftar ronde; reshuffle in-place opsional menyusul) |
 | FR-EV-11 | **Lebih banyak match type** (lihat rincian di bawah): Mix (gender campur), King of the Hill (KOTH), varian Club (2 klub), Knockout, Group Stage. | ⬜ |
 
 #### Rincian perilaku & aturan — Event / Turnamen
