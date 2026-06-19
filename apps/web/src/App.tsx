@@ -3585,12 +3585,18 @@ function LeagueScreen({
 }) {
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
   const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
   const eventsQ = useAsync(() => listEvents(leagueId), [leagueId]);
   const standingsQ = useAsync(() => leagueStandings(leagueId), [leagueId]);
 
   const league = leagueQ.data;
-  const events = eventsQ.data ?? [];
+  // Terbaru dulu, batasi tampilan (liga bisa punya banyak turnamen).
+  const events = [...(eventsQ.data ?? [])].sort(
+    (a, b) => (b.startAt ?? b.createdAt) - (a.startAt ?? a.createdAt)
+  );
+  const EVENT_PREVIEW = 6;
+  const shownEvents = showAllEvents ? events : events.slice(0, EVENT_PREVIEW);
   const standings = standingsQ.data?.standings ?? []; // sudah urut by poin
 
   if (leagueQ.loading) return <p className="text-slate-400">Loading…</p>;
@@ -3711,8 +3717,20 @@ function LeagueScreen({
         </Card>
       )}
 
-      {/* Turnamen di liga — menonjol & penuh (fokus pertandingan), bukan kartu kecil di kanan. */}
-      <Card title="🎾 Tournaments in this league">
+      {/* Turnamen di liga — menonjol (fokus match) tapi DIBATASI (bisa banyak). */}
+      <Card
+        title={`🎾 Tournaments${events.length ? ` (${events.length})` : ""}`}
+        action={
+          events.length > EVENT_PREVIEW ? (
+            <button
+              onClick={() => setShowAllEvents((v) => !v)}
+              className="text-xs font-semibold text-primary"
+            >
+              {showAllEvents ? "Show less" : `Show all ${events.length}`}
+            </button>
+          ) : undefined
+        }
+      >
         <StateText
           loading={eventsQ.loading}
           error={eventsQ.error}
@@ -3720,7 +3738,7 @@ function LeagueScreen({
           emptyText="No tournaments yet."
         />
         <EventList
-          events={events}
+          events={shownEvents}
           meId={user?.id ?? null}
           canManage={isAdmin}
           onOpen={(id) => onNavigate({ t: "session", id })}
@@ -3730,6 +3748,15 @@ function LeagueScreen({
             standingsQ.reload();
           }}
         />
+        {!showAllEvents && events.length > EVENT_PREVIEW && (
+          <button
+            onClick={() => setShowAllEvents(true)}
+            className="mt-2 w-full rounded-xl border border-outline-variant/50 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
+          >
+            Show {events.length - EVENT_PREVIEW} more tournament
+            {events.length - EVENT_PREVIEW > 1 ? "s" : ""}
+          </button>
+        )}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
