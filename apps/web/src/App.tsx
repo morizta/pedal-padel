@@ -15,6 +15,7 @@ import {
   reliability,
   generateAmericano,
   generateTeamAmericano,
+  generateMixAmericano,
   pairUp,
   type Standing,
   type TeamStanding,
@@ -4675,21 +4676,32 @@ function ScheduleSimulation({
   names,
   format,
   courts,
+  genders = {},
 }: {
   names: string[];
   format: Format;
   courts: number;
+  genders?: Record<string, "male" | "female">;
 }) {
   if (names.length < 4) return null;
-  const isStatic = format === "americano" || format === "team_americano";
+  const isStatic =
+    format === "americano" ||
+    format === "team_americano" ||
+    format === "mix_americano";
 
   let rounds: Round[] | null = null;
   if (isStatic) {
     try {
-      rounds =
-        format === "americano"
-          ? generateAmericano(names, { courts })
-          : generateTeamAmericano(pairUp(names), { courts });
+      if (format === "americano") {
+        rounds = generateAmericano(names, { courts });
+      } else if (format === "team_americano") {
+        rounds = generateTeamAmericano(pairUp(names), { courts });
+      } else {
+        // mix_americano: pisah by gender lalu jadwal campur penuh.
+        const males = names.filter((n) => genders[n] === "male");
+        const females = names.filter((n) => genders[n] === "female");
+        rounds = generateMixAmericano(males, females, { courts });
+      }
     } catch {
       rounds = null;
     }
@@ -4721,7 +4733,9 @@ function ScheduleSimulation({
   const fairnessColor =
     gap === 0 ? "text-win-green" : gap === 1 ? "text-primary" : "text-error";
 
-  const showPartners = format === "americano" && names.length <= 12;
+  const showPartners =
+    (format === "americano" || format === "mix_americano") &&
+    names.length <= 12;
   const pkey = (a: string, b: string) => [a, b].sort().join(" ");
   const partnerCount: Record<string, number> = {};
   if (showPartners)
@@ -4862,6 +4876,7 @@ function CreateScreen({
   const [genderOverride, setGenderOverride] = useState<
     Record<string, "male" | "female">
   >({});
+  const [showSim, setShowSim] = useState(false); // popup simulasi jadwal
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -4926,6 +4941,12 @@ function CreateScreen({
   const maleCount = selected.filter((s) => genderOf(s.id) === "male").length;
   const femaleCount = selected.filter((s) => genderOf(s.id) === "female").length;
   const mixOk = !isMix || (maleCount >= 2 && femaleCount >= 2);
+  // Peta nama→gender untuk preview simulasi (typed, buang null).
+  const simGenders: Record<string, "male" | "female"> = {};
+  for (const s of selected) {
+    const g = genderOf(s.id);
+    if (g) simGenders[s.name] = g;
+  }
 
   // Pasangan manual (format tim): bersihkan tim yang anggotanya tak lagi dipilih.
   const isManual = isTeamFormat(format) && pairing === "manual";
@@ -5332,16 +5353,51 @@ function CreateScreen({
           </p>
         </Field>
 
-        <button
-          onClick={start}
-          disabled={!canStart}
-          className="mt-2 w-full rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
-        >
-          {startLabel}
-        </button>
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => setShowSim(true)}
+            disabled={names.length < 4}
+            className="flex items-center gap-1.5 rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface transition hover:bg-surface-container-low disabled:cursor-not-allowed disabled:text-outline"
+          >
+            <span className="material-symbols-outlined text-[18px]">insights</span>
+            Simulate
+          </button>
+          <button
+            onClick={start}
+            disabled={!canStart}
+            className="flex-1 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-outline"
+          >
+            {startLabel}
+          </button>
+        </div>
       </Card>
 
-      <ScheduleSimulation names={names} format={format} courts={courtsClamped} />
+      {showSim && (
+        <div
+          className="fixed inset-0 z-[60] overflow-y-auto bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => setShowSim(false)}
+        >
+          <div
+            className="mx-auto mt-6 w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex justify-end">
+              <button
+                onClick={() => setShowSim(false)}
+                className="rounded-full bg-surface-container-lowest px-3 py-1.5 text-sm font-semibold text-on-surface shadow-lg hover:bg-surface-container"
+              >
+                Close ×
+              </button>
+            </div>
+            <ScheduleSimulation
+              names={names}
+              format={format}
+              courts={courtsClamped}
+              genders={simGenders}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Mobile: pilih pemain dulu (di atas), baru pengaturan + susun tim.
           Desktop: tetap di kolom kanan. */}
