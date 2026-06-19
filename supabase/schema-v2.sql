@@ -119,6 +119,8 @@ create table public.events (
   courts          int  not null check (courts >= 1),
   scoring         jsonb not null,
   randomize_start boolean not null default true,
+  standings_sort  text not null default 'points' check (standings_sort in ('points','wins')),
+  tiebreak        text not null default 'unique' check (tiebreak in ('unique','allow','skip')),
   status          text not null default 'live' check (status in ('live','finished')),
   visibility      text not null default 'inherit'
                     check (visibility in ('inherit','private','public')),

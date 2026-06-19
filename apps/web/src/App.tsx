@@ -3481,15 +3481,10 @@ function LeagueScreen({
   const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
   const eventsQ = useAsync(() => listEvents(leagueId), [leagueId]);
   const standingsQ = useAsync(() => leagueStandings(leagueId), [leagueId]);
-  const [standingsSort, setStandingsSort] = useState<SortBy>("points");
-  const [standingsRankMode, setStandingsRankMode] = useState<RankMode>("unique");
 
   const league = leagueQ.data;
   const events = eventsQ.data ?? [];
-  const standings = [...(standingsQ.data?.standings ?? [])].sort(
-    sortStandings(standingsSort)
-  );
-  const standingRanks = computeRanks(standings, standingsRankMode);
+  const standings = standingsQ.data?.standings ?? []; // sudah urut by poin
 
   if (leagueQ.loading) return <p className="text-slate-400">Loading…</p>;
   if (!league) return <p>League not found.</p>;
@@ -3614,18 +3609,11 @@ function LeagueScreen({
           title="📊 League Standings (player totals)"
           action={
             standings.length > 0 ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <SortToggle value={standingsSort} onChange={setStandingsSort} />
-                <RankModeSelect
-                  value={standingsRankMode}
-                  onChange={setStandingsRankMode}
-                />
-                <ShareButton
-                  title={league.name}
-                  rows={buildShareRows(standings)}
-                  label="Share"
-                />
-              </div>
+              <ShareButton
+                title={league.name}
+                rows={buildShareRows(standings)}
+                label="Share"
+              />
             ) : undefined
           }
         >
@@ -3669,7 +3657,7 @@ function LeagueScreen({
                                 : "text-on-surface-variant"
                         }`}
                       >
-                        {standingRanks[i]}
+                        {i + 1}
                       </span>
                     </td>
                     <td className="py-2 font-semibold">{s.playerId}</td>
@@ -4888,6 +4876,8 @@ function CreateScreen({
   const [startTime, setStartTime] = useState("");
   const [format, setFormat] = useState<Format>("americano");
   const [courts, setCourts] = useState(1);
+  const [standingsSort, setStandingsSort] = useState<SortBy>("points");
+  const [tiebreak, setTiebreak] = useState<RankMode>("unique");
   const [scoringType, setScoringType] = useState<"point" | "normal">("point");
   const [points, setPoints] = useState(24);
   const [normalMode, setNormalMode] = useState<"first" | "total">("first");
@@ -5019,6 +5009,8 @@ function CreateScreen({
         format,
         courts: courtsClamped,
         scoring,
+        standingsSort,
+        tiebreak,
         randomizeStart: randomize,
         participants: selected,
         teams: finalTeams
@@ -5226,6 +5218,20 @@ function CreateScreen({
           <span className="ml-2 text-xs text-on-surface-variant">
             max {maxCourts}
           </span>
+        </Field>
+
+        <Field label="Leaderboard sort">
+          <SortToggle value={standingsSort} onChange={setStandingsSort} />
+          <p className="mt-1 text-xs text-on-surface-variant">
+            Rank standings by total points or by wins.
+          </p>
+        </Field>
+
+        <Field label="Tie-break rule">
+          <RankModeSelect value={tiebreak} onChange={setTiebreak} />
+          <p className="mt-1 text-xs text-on-surface-variant">
+            How equal stats share rank numbers.
+          </p>
         </Field>
 
         <Field label="Scoring system">
@@ -5815,7 +5821,11 @@ function SessionInner({
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <RoundsPanel session={session} canEdit={canEdit} />
         <div className="space-y-5">
-          <Leaderboard session={session} />
+          <Leaderboard
+            session={session}
+            sortBy={event.standingsSort}
+            rankMode={event.tiebreak}
+          />
           {/* Rating ELO disembunyikan sementara. */}
         </div>
       </div>
@@ -6251,16 +6261,37 @@ type RankMode = "unique" | "allow" | "skip";
 function tieKey(s: Standing): string {
   return `${s.adjustedPoints}|${s.wins}|${s.losses}|${s.ties}|${s.gamesDiff}`;
 }
+function teamTieKey(s: TeamStanding): string {
+  return `${s.points}|${s.wins}|${s.losses}|${s.ties}|${s.gamesDiff}`;
+}
+
+/** Urutan klasemen TIM: by poin atau by menang. */
+function sortTeamStandings(by: SortBy) {
+  return (a: TeamStanding, b: TeamStanding): number =>
+    by === "wins"
+      ? b.wins - a.wins ||
+        b.wins - b.losses - (a.wins - a.losses) ||
+        b.points - a.points ||
+        teamKey(a.team).localeCompare(teamKey(b.team))
+      : b.points - a.points ||
+        b.gamesDiff - a.gamesDiff ||
+        b.wins - a.wins ||
+        teamKey(a.team).localeCompare(teamKey(b.team));
+}
 
 /** Nomor peringkat per baris sesuai mode. rows sudah terurut. */
-function computeRanks(rows: Standing[], mode: RankMode): number[] {
+function computeRanks<T>(
+  rows: T[],
+  mode: RankMode,
+  keyFn: (r: T) => string
+): number[] {
   if (mode === "unique") return rows.map((_, i) => i + 1); // 1,2,3,4
   const ranks: number[] = [];
   let lastKey: string | null = null;
   let lastRank = 0;
   let dense = 0;
   rows.forEach((r, i) => {
-    const key = tieKey(r);
+    const key = keyFn(r);
     if (key === lastKey) {
       ranks.push(lastRank); // seri → bagi peringkat
     } else {
@@ -6295,11 +6326,19 @@ function RankModeSelect({
   );
 }
 
-function Leaderboard({ session }: { session: Session }) {
-  const [sortBy, setSortBy] = useState<SortBy>("points");
-  const [rankMode, setRankMode] = useState<RankMode>("unique");
+function Leaderboard({
+  session,
+  sortBy,
+  rankMode,
+}: {
+  session: Session;
+  sortBy: SortBy;
+  rankMode: RankMode;
+}) {
   if (isTeamFormat(session.config.format)) {
-    return <TeamLeaderboard session={session} />;
+    return (
+      <TeamLeaderboard session={session} sortBy={sortBy} rankMode={rankMode} />
+    );
   }
   // Seed dengan SEMUA pemain (skor 0) supaya tabel tampil sejak awal.
   const byId = new Map(
@@ -6308,20 +6347,16 @@ function Leaderboard({ session }: { session: Session }) {
   const standings = session.players
     .map((p) => byId.get(p) ?? zeroStanding(p))
     .sort(sortStandings(sortBy));
-  const ranks = computeRanks(standings, rankMode);
+  const ranks = computeRanks(standings, rankMode, tieKey);
   return (
     <Card
       title="🏆 Standings"
       action={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <SortToggle value={sortBy} onChange={setSortBy} />
-          <RankModeSelect value={rankMode} onChange={setRankMode} />
-          <ShareButton
-            title={session.config.name}
-            rows={buildShareRows(standings)}
-            label="Share"
-          />
-        </div>
+        <ShareButton
+          title={session.config.name}
+          rows={buildShareRows(standings)}
+          label="Share"
+        />
       }
     >
       {(
@@ -6411,20 +6446,23 @@ function zeroTeamStanding(team: Pair): TeamStanding {
   };
 }
 
-function TeamLeaderboard({ session }: { session: Session }) {
+function TeamLeaderboard({
+  session,
+  sortBy,
+  rankMode,
+}: {
+  session: Session;
+  sortBy: SortBy;
+  rankMode: RankMode;
+}) {
   // Seed dengan SEMUA tim (skor 0) supaya tabel tampil sejak awal.
   const byKey = new Map(
     computeTeamStandings(session.results).map((s) => [teamKey(s.team), s])
   );
   const standings = session.teams
     .map((t) => byKey.get(teamKey(t)) ?? zeroTeamStanding(t))
-    .sort(
-      (a, b) =>
-        b.points - a.points ||
-        b.gamesDiff - a.gamesDiff ||
-        b.wins - a.wins ||
-        teamKey(a.team).localeCompare(teamKey(b.team))
-    );
+    .sort(sortTeamStandings(sortBy));
+  const ranks = computeRanks(standings, rankMode, teamTieKey);
   return (
     <Card title="🏆 Team Standings">
       {(
@@ -6452,7 +6490,7 @@ function TeamLeaderboard({ session }: { session: Session }) {
                   key={s.team.join("|")}
                   className="border-b border-outline-variant/15 last:border-0"
                 >
-                  <td className="py-2 pr-2 text-on-surface-variant">{i + 1}</td>
+                  <td className="py-2 pr-2 text-on-surface-variant">{ranks[i]}</td>
                   <td className="py-2 font-semibold">{s.team.join(" & ")}</td>
                   <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.points}

@@ -769,6 +769,9 @@ export interface DbEvent {
   photoUrl: string | null;
   /** Jadwal mulai (ms). null = mulai sekarang/segera. */
   startAt: number | null;
+  /** Pengaturan leaderboard sesi (diatur saat buat sesi). */
+  standingsSort: "points" | "wins";
+  tiebreak: "unique" | "allow" | "skip";
   playerIds: string[];
   /** Nama peserta (identitas engine). */
   players: string[];
@@ -779,7 +782,7 @@ export interface DbEvent {
 }
 
 const EVENT_COLS =
-  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,notes,photo_url,start_at,player_ids,player_names,teams,rounds,scores,created_at";
+  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,notes,photo_url,start_at,standings_sort,tiebreak,player_ids,player_names,teams,rounds,scores,created_at";
 
 function mapEvent(r: any): DbEvent {
   return {
@@ -797,6 +800,8 @@ function mapEvent(r: any): DbEvent {
     notes: r.notes ?? null,
     photoUrl: r.photo_url ?? null,
     startAt: r.start_at ? Date.parse(r.start_at) : null,
+    standingsSort: r.standings_sort ?? "points",
+    tiebreak: r.tiebreak ?? "unique",
     playerIds: r.player_ids ?? [],
     players: r.player_names ?? [],
     teams: r.teams ?? [],
@@ -899,6 +904,9 @@ export interface NewEvent {
   photoUrl?: string | null;
   /** Jadwal mulai (ms). null/undefined = sekarang. */
   startAt?: number | null;
+  /** Pengaturan leaderboard sesi. Default points / unique. */
+  standingsSort?: "points" | "wins";
+  tiebreak?: "unique" | "allow" | "skip";
 }
 
 export async function createEvent(input: NewEvent): Promise<DbEvent> {
@@ -920,6 +928,8 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
       notes: input.notes?.trim() || null,
       photo_url: input.photoUrl || null,
       start_at: input.startAt ? new Date(input.startAt).toISOString() : null,
+      standings_sort: input.standingsSort ?? "points",
+      tiebreak: input.tiebreak ?? "unique",
       player_ids: input.participants.map((p) => p.id),
       player_names: input.participants.map((p) => p.name),
       teams: input.teams ?? [],

@@ -66,6 +66,11 @@ alter table public.events  add column if not exists description text;
 alter table public.events  add column if not exists notes text;       -- catatan (HTML editor)
 alter table public.events  add column if not exists photo_url text;    -- foto turnamen (data URL/link)
 alter table public.events  add column if not exists start_at timestamptz;
+-- Pengaturan leaderboard sesi (diatur saat buat sesi): urutan & aturan tie-break.
+alter table public.events  add column if not exists standings_sort text not null default 'points'
+  check (standings_sort in ('points','wins'));
+alter table public.events  add column if not exists tiebreak text not null default 'unique'
+  check (tiebreak in ('unique','allow','skip'));
 alter table public.leagues add column if not exists description text;
 -- Notes (HTML dari editor) + foto (data URL / link) liga.
 alter table public.leagues add column if not exists notes text;
