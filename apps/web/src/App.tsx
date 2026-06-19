@@ -3471,10 +3471,13 @@ function LeagueScreen({
   const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
   const eventsQ = useAsync(() => listEvents(leagueId), [leagueId]);
   const standingsQ = useAsync(() => leagueStandings(leagueId), [leagueId]);
+  const [standingsSort, setStandingsSort] = useState<SortBy>("points");
 
   const league = leagueQ.data;
   const events = eventsQ.data ?? [];
-  const standings = standingsQ.data?.standings ?? [];
+  const standings = [...(standingsQ.data?.standings ?? [])].sort(
+    sortStandings(standingsSort)
+  );
 
   if (leagueQ.loading) return <p className="text-slate-400">Loading…</p>;
   if (!league) return <p>League not found.</p>;
@@ -3599,11 +3602,14 @@ function LeagueScreen({
           title="📊 League Standings (player totals)"
           action={
             standings.length > 0 ? (
-              <ShareButton
-                title={league.name}
-                rows={buildShareRows(standings)}
-                label="Share"
-              />
+              <div className="flex items-center gap-2">
+                <SortToggle value={standingsSort} onChange={setStandingsSort} />
+                <ShareButton
+                  title={league.name}
+                  rows={buildShareRows(standings)}
+                  label="Share"
+                />
+              </div>
             ) : undefined
           }
         >
