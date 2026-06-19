@@ -44,6 +44,7 @@ import {
   deletePlayer,
   setPlayerGender,
   gendersForPlayers,
+  globalAvatars,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -481,6 +482,8 @@ function DashboardScreen({
   const latestEventsQ = useAsync(() => listVisibleEvents(), []);
   const myIdQ = useAsync(() => myPlayerId(), []);
 
+  const avatarsQ = useAsync(() => globalAvatars(), []);
+  const avatars = avatarsQ.data ?? {};
   const myName = user ? displayName(user) : "";
   const myId = myIdQ.data ?? null;
   const nameById = statsQ.data?.nameById ?? {};
@@ -779,7 +782,10 @@ function DashboardScreen({
                       }`}
                     >
                       <RankBadge rank={i + 1} />
-                      <TeamAvatar name={nameById[r.id] ?? r.name} />
+                      <TeamAvatar
+                        name={nameById[r.id] ?? r.name}
+                        src={avatars[r.id]}
+                      />
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                         {nameById[r.id] ?? r.name}
                       </span>
@@ -2346,6 +2352,8 @@ function ExploreScreen({
   const eventsQ = useAsync(() => discoverEvents(), []);
   const rosterQ = useAsync(() => listPlayers(), []);
   const statsQ = useAsync(() => globalStats(), []);
+  const avatarsQ = useAsync(() => globalAvatars(), []);
+  const avatars = avatarsQ.data ?? {};
 
   const [code, setCode] = useState("");
 
@@ -2658,7 +2666,7 @@ function ExploreScreen({
                         –
                       </span>
                     )}
-                    <TeamAvatar name={p.name} />
+                    <TeamAvatar name={p.name} src={avatars[p.id]} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-semibold">{p.name}</span>
@@ -2727,6 +2735,8 @@ function LeaderboardScreen({
 }) {
   const stats = useAsync(() => globalStats(), []);
   const roster = useAsync(() => listPlayers(), []);
+  const avatarsQ = useAsync(() => globalAvatars(), []);
+  const avatars = avatarsQ.data ?? {};
   const meIdQ = useAsync(() => (user ? myPlayerId() : Promise.resolve(null)), [user]);
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(10);
@@ -2843,6 +2853,7 @@ function LeaderboardScreen({
               r={r}
               rank={i + 1}
               me={r.pid === meId}
+              src={avatars[r.pid]}
               onOpen={() => onOpenPlayer(r.pid)}
             />
           ))}
@@ -2879,7 +2890,7 @@ function LeaderboardScreen({
                     onClick={() => onOpenPlayer(r.pid)}
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
-                    <TeamAvatar name={r.name} />
+                    <TeamAvatar name={r.name} src={avatars[r.pid]} />
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-semibold">{r.name}</span>
@@ -2932,7 +2943,7 @@ function LeaderboardScreen({
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-container text-sm text-on-surface-variant">
                   –
                 </span>
-                <TeamAvatar name={r.name} />
+                <TeamAvatar name={r.name} src={avatars[r.pid]} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate font-semibold">{r.name}</span>
@@ -2969,11 +2980,13 @@ function PodiumCard({
   r,
   rank,
   me,
+  src,
   onOpen,
 }: {
   r: RankRow;
   rank: number;
   me: boolean;
+  src?: string | null;
   onOpen: () => void;
 }) {
   const champ = rank === 1;
@@ -3032,13 +3045,21 @@ function PodiumCard({
       </span>
 
       <span className="relative">
-        <span
-          className={`grid place-items-center rounded-full font-bold ring-4 ${accent.ring} ${avatarColor(
-            r.name
-          )} ${champ ? "h-16 w-16 text-xl sm:h-20 sm:w-20 sm:text-2xl" : "h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl"}`}
-        >
-          {initialsOf(r.name)}
-        </span>
+        {src ? (
+          <img
+            src={src}
+            alt=""
+            className={`rounded-full object-cover ring-4 ${accent.ring} ${champ ? "h-16 w-16 sm:h-20 sm:w-20" : "h-14 w-14 sm:h-16 sm:w-16"}`}
+          />
+        ) : (
+          <span
+            className={`grid place-items-center rounded-full font-bold ring-4 ${accent.ring} ${avatarColor(
+              r.name
+            )} ${champ ? "h-16 w-16 text-xl sm:h-20 sm:w-20 sm:text-2xl" : "h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl"}`}
+          >
+            {initialsOf(r.name)}
+          </span>
+        )}
         <span
           className={`absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full font-data-mono text-[11px] font-extrabold shadow ring-2 ring-surface-container-lowest ${accent.medal}`}
         >
@@ -3100,6 +3121,8 @@ function PlayerProfileScreen({
 }) {
   const stats = useAsync(() => globalStats(), []);
   const hist = useAsync(() => playerHistory(id), [id]);
+  const avatarsQ = useAsync(() => globalAvatars(), []);
+  const avatar = avatarsQ.data?.[id] ?? null;
   const name = stats.data?.nameById[id] ?? id;
 
   const me = (() => {
@@ -3135,13 +3158,21 @@ function PlayerProfileScreen({
       <section className="relative overflow-hidden rounded-2xl bg-navy p-5 text-white md:p-6">
         <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary-fixed/10 blur-3xl" />
         <div className="relative flex items-center gap-4">
-          <span
-            className={`grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-on-secondary-fixed-variant text-3xl font-extrabold ${avatarColor(
-              name
-            )}`}
-          >
-            {initialsOf(name)}
-          </span>
+          {avatar ? (
+            <img
+              src={avatar}
+              alt=""
+              className="h-20 w-20 shrink-0 rounded-full border-4 border-on-secondary-fixed-variant object-cover"
+            />
+          ) : (
+            <span
+              className={`grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-on-secondary-fixed-variant text-3xl font-extrabold ${avatarColor(
+                name
+              )}`}
+            >
+              {initialsOf(name)}
+            </span>
+          )}
           <div className="min-w-0">
             <h1 className="truncate font-display text-2xl font-bold">{name}</h1>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -6908,8 +6939,17 @@ function initialsOf(name: string): string {
   return s.toUpperCase();
 }
 
-/** Avatar inisial berwarna (konsisten per nama). */
-function TeamAvatar({ name }: { name: string }) {
+/** Avatar: foto profil bila ada, selain itu inisial berwarna (konsisten per nama). */
+function TeamAvatar({ name, src }: { name: string; src?: string | null }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className="h-7 w-7 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
   return (
     <span
       className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${avatarColor(

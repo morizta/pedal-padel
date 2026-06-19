@@ -141,6 +141,31 @@ export async function setPlayerGender(
   if (error) throw error;
 }
 
+/** Peta playerId → foto profil (avatar) untuk pemain ber-akun (global). */
+export async function globalAvatars(): Promise<Record<string, string>> {
+  const { data: pls } = await db()
+    .from("players")
+    .select("id,user_id")
+    .not("user_id", "is", null);
+  const userIds = [
+    ...new Set((pls ?? []).map((p) => p.user_id).filter(Boolean)),
+  ] as string[];
+  if (!userIds.length) return {};
+  const { data: profs } = await db()
+    .from("profiles")
+    .select("id,avatar_url")
+    .in("id", userIds);
+  const avByUser = new Map(
+    (profs ?? []).map((p) => [p.id, p.avatar_url as string | null])
+  );
+  const out: Record<string, string> = {};
+  for (const p of pls ?? []) {
+    const av = p.user_id ? avByUser.get(p.user_id) : null;
+    if (av) out[p.id] = av;
+  }
+  return out;
+}
+
 /** Gender beberapa pemain by id → { id: gender|null } (untuk format Mix). */
 export async function gendersForPlayers(
   ids: string[]
