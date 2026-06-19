@@ -902,15 +902,7 @@ function DashEventList({
                 {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
               </span>
             </span>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                e.status === "finished"
-                  ? "bg-surface-container text-on-surface-variant"
-                  : "bg-primary-container text-on-primary-container"
-              }`}
-            >
-              {e.status === "finished" ? "finished" : "live"}
-            </span>
+            <StatusBadge event={e} />
           </button>
         </li>
       ))}
@@ -1015,15 +1007,7 @@ function MyEventsScreen({
             {r ? `Rank #${r.rank}/${r.total}` : "No results yet"}
           </span>
         </span>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
-            e.status === "finished"
-              ? "bg-surface-container text-on-surface-variant"
-              : "bg-primary-container text-on-primary-container"
-          }`}
-        >
-          {e.status === "finished" ? "FINISHED" : "LIVE"}
-        </span>
+        <StatusBadge event={e} />
       </button>
       {canDelete && (
         <button
@@ -1485,7 +1469,7 @@ function AdminPanel({
                 <span className="block truncate font-semibold">{e.name}</span>
                 <span className="text-xs text-on-surface-variant">
                   {FORMAT_LABEL[e.format]} · {e.players.length} players ·{" "}
-                  {e.status === "finished" ? "finished" : "live"}
+                  {eventStatus(e)}
                 </span>
               </button>
               <button
@@ -2212,6 +2196,45 @@ function ProfileScreen({
 
 /* ---------- Home: daftar liga & turnamen ---------- */
 
+/* Status turunan turnamen: scheduled (start_at masa depan) / live / finished. */
+function eventStatus(e: {
+  status: string;
+  startAt: number | null;
+}): "scheduled" | "live" | "finished" {
+  if (e.status === "finished") return "finished";
+  if (e.startAt && e.startAt > Date.now()) return "scheduled";
+  return "live";
+}
+
+const STATUS_STYLE: Record<
+  "scheduled" | "live" | "finished",
+  { label: string; cls: string }
+> = {
+  scheduled: { label: "Scheduled", cls: "bg-elo-bronze/15 text-elo-bronze" },
+  live: { label: "Live", cls: "bg-win-green/15 text-win-green" },
+  finished: {
+    label: "Finished",
+    cls: "bg-surface-container text-on-surface-variant",
+  },
+};
+
+function StatusBadge({
+  event,
+  className = "",
+}: {
+  event: { status: string; startAt: number | null };
+  className?: string;
+}) {
+  const { label, cls } = STATUS_STYLE[eventStatus(event)];
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${cls} ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 const FORMAT_LABEL: Record<Format, string> = {
   americano: "Americano",
   mexicano: "Mexicano",
@@ -2595,15 +2618,7 @@ function ExploreScreen({
                       {fmtDate(e.startAt ?? e.createdAt)}
                     </span>
                   </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
-                      e.status === "finished"
-                        ? "bg-surface-container text-on-surface-variant"
-                        : "bg-primary-container text-on-primary-container"
-                    }`}
-                  >
-                    {e.status === "finished" ? "FINISHED" : "LIVE"}
-                  </span>
+                  <StatusBadge event={e} />
                 </button>
               </li>
             ))}
@@ -3387,8 +3402,6 @@ function EventList({
   return (
     <ul className="space-y-2">
       {events.map((e) => {
-        const upcoming =
-          e.status !== "finished" && !!e.startAt && e.startAt > Date.now();
         return (
           <li
             key={e.id}
@@ -3423,21 +3436,7 @@ function EventList({
                   {e.startAt ? `🗓 ${fmtDate(e.startAt)}` : fmtDate(e.createdAt)}
                 </span>
               </span>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 font-label-caps text-label-caps ${
-                  e.status === "finished"
-                    ? "bg-surface-container text-on-surface-variant"
-                    : upcoming
-                      ? "bg-elo-gold/20 text-elo-bronze"
-                      : "bg-primary-container text-on-primary-container"
-                }`}
-              >
-                {e.status === "finished"
-                  ? "FINISHED"
-                  : upcoming
-                    ? "UPCOMING"
-                    : "LIVE"}
-              </span>
+              <StatusBadge event={e} />
             </button>
             {(canManage || (meId && e.ownerId === meId)) && (
               <button
@@ -6003,9 +6002,12 @@ function MetaBar({
             </span>
             BACK
           </button>
-          <h2 className="truncate font-display text-xl font-bold">
-            {config.name}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate font-display text-xl font-bold">
+              {config.name}
+            </h2>
+            <StatusBadge event={event} />
+          </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/60">
             {items.map((it, i) => (
               <span key={i} className="flex items-center gap-2">
