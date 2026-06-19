@@ -238,6 +238,8 @@ masuk ranking global (BR-2). Komunitas **lintas-sport** (BR-12).
 | FR-EV-7 | Event punya detail: deskripsi, catatan, foto. | ✅ |
 | FR-EV-8 | Orang luar dapat **bergabung ke event** (minta-gabung / kode / undangan), mirip komunitas. | ⬜ |
 | FR-EV-9 | Toggle **"butuh persetujuan"** per event — berlaku untuk minta-gabung **maupun** kode. | ⬜ |
+| FR-EV-10 | **Simulasi/preview jadwal** sebelum/saat sesi: distribusi main per pemain + matriks partner + indikator keadilan (gaya Padlup). | ⬜ |
+| FR-EV-11 | **Lebih banyak match type** (lihat rincian di bawah): Mix (gender campur), King of the Hill (KOTH), varian Club (2 klub), Knockout, Group Stage. | ⬜ |
 
 #### Rincian perilaku & aturan — Event / Turnamen
 
@@ -322,6 +324,24 @@ masuk ranking global (BR-2). Komunitas **lintas-sport** (BR-12).
 | FR-LB-3 | **Leaderboard global**: ELO lintas seluruh event di app. | 🟡 |
 | FR-LB-4 | ELO margin-aware (selisih skor memengaruhi pergeseran) & K-factor dinamis. | ✅ |
 | FR-LB-5 | Rating menampilkan indikator keandalan (reliability) untuk pemain <20 match. | ✅ |
+| FR-LB-6 | **Sort leaderboard** bisa dipilih: by **poin** atau by **menang** (win). | ⬜ |
+| FR-LB-7 | **Aturan tie-break** dapat dikonfigurasi: *allow tied* (peringkat sama, lanjut normal 1,2,2,3) · *skip after tied* (1,2,2,4) · *no tied* (unik, dipecah by metode sort lalu head-to-head lalu alfabetis). | ⬜ |
+
+#### Backlog — match type & format (inspirasi Padlup)
+
+Saat ini ada **4**: Americano, Mexicano, Team Americano, Team Mexicano. Kandidat tambahan:
+
+| Match type | Deskripsi | Catatan |
+|---|---|---|
+| **Mix Americano / Mixicano** | Tim campur gender (♂+♀); main dgn & lawan semua. | Butuh **atribut gender** pada pemain + constraint pairing. |
+| **King of the Hill (KOTH)** | Pemenang naik lapangan, yang kalah turun; lapangan lebih tinggi poin lebih besar. | Format dinamis berbasis lapangan; engine baru. |
+| **Team KOTH** | KOTH dgn tim tetap. | — |
+| **Club Americano / Club Team / Club Mexicano** | 2 klub; pasangan hanya dalam klub, lawan lintas klub. | Butuh konsep "klub" pada peserta (≈ komunitas/tim). |
+| **Knockout** | Bracket eliminasi; yang kalah gugur. | Engine bracket baru. |
+| **Group Stage** | Round-robin grup → top lolos ke knockout. | Kombinasi grup + bracket. |
+
+> Semua ini **engine matchmaking baru** (di luar 4 yang ada) — penambahan signifikan,
+> diprioritaskan setelah fondasi v2 (schema relasional + 3 leaderboard) stabil.
 
 #### Rincian perilaku & aturan — Sistem Peringkat
 
