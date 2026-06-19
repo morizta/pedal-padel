@@ -5980,7 +5980,10 @@ function SessionInner({
   );
   const isLeagueAdmin =
     leagueQ.data?.myRole === "owner" || leagueQ.data?.myRole === "admin";
-  const canEdit = !!user && (user.id === event.ownerId || isLeagueAdmin);
+  // canManage = boleh kelola (owner/admin) → tombol finish/reopen tetap muncul.
+  // canEdit = boleh ubah skor/jadwal → HANYA bila belum finished (kunci hasil).
+  const canManage = !!user && (user.id === event.ownerId || isLeagueAdmin);
+  const canEdit = canManage && event.status !== "finished";
 
   const session = useSession(
     { config, players: event.players, restore, initialTeams: event.teams, genders },
@@ -6004,7 +6007,12 @@ function SessionInner({
 
   return (
     <div className="space-y-5">
-      <MetaBar session={session} event={event} onExit={onExit} canEdit={canEdit} />
+      <MetaBar
+        session={session}
+        event={event}
+        onExit={onExit}
+        canEdit={canManage}
+      />
       {(event.description || event.notes || event.photoUrl) && (
         <Card title="ℹ️ About this tournament">
           {event.photoUrl && (
@@ -6025,6 +6033,13 @@ function SessionInner({
             </div>
           )}
         </Card>
+      )}
+      {event.status === "finished" && (
+        <div className="flex items-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
+          <span className="material-symbols-outlined text-[20px]">lock</span>
+          Tournament finished — results are locked.
+          {canManage && " Use Reopen (top right) to edit again."}
+        </div>
       )}
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <RoundsPanel session={session} canEdit={canEdit} />
