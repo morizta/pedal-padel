@@ -89,17 +89,27 @@ describe("generateAmericano — round-robin pasangan", () => {
     return players(n).map((id) => played.get(id) ?? 0);
   }
 
-  it("kelipatan 4: jumlah main SAMA persis untuk semua (selisih 0)", () => {
-    for (const n of [8, 12, 16]) {
+  it("N ≡ 0/1 (mod 4): jumlah main SAMA persis untuk semua (selisih 0)", () => {
+    for (const n of [5, 8, 9, 12, 13, 16]) {
       const c = playCounts(n);
       expect(Math.max(...c) - Math.min(...c)).toBe(0);
     }
   });
 
-  it("N ≡ 2 (mod 4): jumlah main hampir rata (selisih ≤ 2)", () => {
-    for (const n of [6, 10, 14]) {
+  it("DEF-2: jumlah main selisih ≤ 1 untuk SEMUA N (round-robin pasangan penuh)", () => {
+    for (let n = 4; n <= 16; n++) {
       const c = playCounts(n);
-      expect(Math.max(...c) - Math.min(...c)).toBeLessThanOrEqual(2);
+      expect(Math.max(...c) - Math.min(...c)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("esensi Americano: tiap pasangan ≤ 1× & coverage penuh (N≡0/1) / kurang 1 (N≡2/3)", () => {
+    for (let n = 4; n <= 14; n++) {
+      const counts = partnerCounts(generateAmericano(players(n), { courts: 1 }));
+      for (const c of counts.values()) expect(c).toBeLessThanOrEqual(1); // tak ada partner dobel
+      const total = (n * (n - 1)) / 2;
+      const expected = total % 2 === 0 ? total : total - 1; // C(n,2) ganjil → 1 pasangan absen
+      expect(counts.size).toBe(expected);
     }
   });
 

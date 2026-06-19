@@ -520,28 +520,27 @@ Mesin pengatur pasangan/lawan tiap ronde. Logika murni di `@pedal/engine`
 
 | Format | Pasangan | Sifat | Algoritma | Klasemen |
 |---|---|---|---|---|
-| **Americano** | berganti tiap ronde | **statik** (jadwal dibuat di awal) | round-robin pasangan via **circle method**: tiap pemain berpasangan dgn tiap pemain lain sekali; pasangan dijodohkan 2-2 jadi match | individual (poin) |
+| **Americano** | berganti tiap ronde | **statik** (jadwal dibuat di awal) | **round-robin pasangan penuh**: bangkitkan semua C(n,2) pasangan → jodohkan greedy jadi match (2 pasangan disjoint), main merata (gap ≤1) | individual (poin) |
 | **Mexicano** | berganti | **dinamis** (ikut klasemen) | tiap lapangan: 4 pemain berperingkat dipasang **(1+4) vs (2+3)** agar seimbang; ronde berikutnya pakai urutan klasemen terbaru | individual (poin) |
 | **Team Americano** | **tetap** sepanjang sesi | statik | round-robin penuh antar-**tim** (circle method): tiap tim lawan semua tim sekali | per tim |
 | **Team Mexicano** | tetap | dinamis | tiap ronde tim diadu by peringkat: **1v2, 3v4, …** | per tim |
 
 ### 9.3 Ekspektasi main/istirahat (hasil uji engine)
 
-**Americano — keadilan bergantung `N mod 4`:**
+**Americano — round-robin pasangan PENUH (pasca DEF-2, gap ≤1 semua N):**
 
-| N | ronde (1 ct) | main/pemain | gap | pasangan terpakai |
-|---|---|---|---|---|
-| 4, 5, 8, 9, 12 (N≡0/1 mod 4) | — | **merata** | **0** | penuh |
-| 6, 10 (N≡2 mod 4) | — | timpang | **1** | sebagian |
-| 7, 11 (N≡3 mod 4) | — | timpang | **2** | sebagian |
+| N (mod 4) | gap main | pasangan terpakai |
+|---|---|---|
+| ≡ 0/1 (4,5,8,9,12,13,16) | **0** (semua sama, main n−1×) | **penuh** = C(n,2) |
+| ≡ 2/3 (6,7,10,11,14,15) | **1** (2 pemain main n−2×) | C(n,2) − 1 (tepat 1 pasangan absen) |
 
-> Contoh N=7,1 ct: main/pemain 3–5 (idealnya 4 merata). Jumlah **lapangan tak
-> mengubah keadilan** — hanya memampatkan jumlah ronde.
+> Contoh 7p/1ct: **10 ronde, main 5–6, partner 20/21** — setara Americano lengkap
+> aplikasi sejenis. Jumlah **lapangan tak mengubah keadilan** — hanya memampatkan ronde.
 
 **Team Americano — selalu adil:** tiap tim main tepat **T−1** kali (gap 0, semua N).
 
-**Mexicano / Team Mexicano:** seharusnya merata, tetapi implementasi sekarang
-mengambil **peringkat teratas** tiap ronde → lihat cacat DEF-3.
+**Mexicano / Team Mexicano:** istirahat dirotasi adil via `restCount` (pasca DEF-3) —
+tak ada lagi bench permanen.
 
 ### 9.4 Cacat keadilan yang diketahui (BACKLOG)
 
@@ -551,7 +550,7 @@ mengambil **peringkat teratas** tiap ronde → lihat cacat DEF-3.
 | ID | Cacat | Bukti | Akar masalah | Usulan perbaikan | Prioritas |
 |---|---|---|---|---|---|
 | **DEF-1** | **Americano: main beruntun** — pemain main banyak ronde berturut tanpa istirahat. | Kasus trial 7p/1ct: satu pemain **main 4 ronde beruntun** (R4–R7); lain **istirahat 3 beruntun**. | Tahap-2 pemaketan match ke ronde **greedy first-fit** ([americano.ts L100-111](../packages/engine/src/americano.ts#L100-L111)) — tak mempertimbangkan "siapa baru main"; urutan ronde = urutan match digenerate. | **✅ DIPERBAIKI** — pemaketan **recency-aware** (skor = Σ streak-main per match; pilih match dgn pemain paling baru istirahat). 7p/1ct: beruntun **4→3**; ada tes regresi (`≤3`). Round-robin pasangan & invarian "ronde penuh" tetap. **Residu:** N dgn slot-istirahat sedikit (mis. 10p/2ct, 8 dari 10 main/ronde) masih bisa streak panjang — terbatas struktur, ditunda. | ✅ Selesai |
-| **DEF-2** | **Americano: timpang total** untuk N≡2,3 (mod 4) — selisih main 1–2 match. | Matriks §9.3 (N=6,7,10,11). | Pemilihan pasangan-istirahat hanya menyeimbangkan pasangan di-drop, bukan total main per pemain (termasuk "bye" semu). | **Diselidiki → ditunda (struktural).** Dicoba balancing by total-main: gap **tak berubah** (N=7,11 tetap 2). Untuk N≡3 (mod 4) tiap pemain idealnya di-drop tepat 2× tapi parity round-robin tak selalu mengizinkan; gap-0 butuh assignment global (search/ILP) — bernilai rendah (selisih 1–2 match se-sesi, bukan keluhan nyata). Gap tetap dijaga ≤2. | 🟢 Rendah (ditunda) |
+| **DEF-2** | **Americano: timpang total** untuk N≡2,3 (mod 4) — selisih main 1–2 match. | Matriks §9.3 (N=6,7,10,11). | Algoritma lama **membuang** pasangan sisa tiap ronde (tak menjadwalkannya ulang) → round-robin pasangan tak tuntas; total main timpang & variasi partner kurang. | **✅ DIPERBAIKI** — penjadwal diganti ke **round-robin pasangan PENUH**: bangkitkan semua C(n,2) pasangan lalu jodohkan greedy jadi match (2 pasangan disjoint). Gap **≤2 → ≤1** semua N (N≡0/1: gap 0; N≡2/3: tepat 1 pasangan absen → gap 1). **7p/1ct kini 10 ronde, main 5–6, partner 20/21** — setara Americano lengkap aplikasi sejenis. Esensi "semua berpasangan" terjaga; tes mengunci. | ✅ Selesai |
 | **DEF-3** | **Mexicano/Team Mexicano: bench permanen** — pemain yang sekali kena bye di ronde awal bisa istirahat selamanya. | Simulasi 12 ronde N=5–9: ada pemain main **0×**, lain main **12×**. | Istirahat = peringkat terbawah; pemain istirahat tak dapat poin → tetap di dasar → istirahat lagi. `rankPlayers` menaruh yang belum main di rank `∞`. | **✅ DIPERBAIKI** — rotasi bye adil: `restCount` (id/tim → jumlah istirahat) diteruskan dari session ke engine; tiap ronde istirahatkan yang **paling sedikit** istirahat (bukan peringkat bawah), independen skor. Simulasi N=5–9 × 12 ronde: rest-gap **0..12 → ≤1**. Tes regresi mengunci. | ✅ Selesai |
 
 ---

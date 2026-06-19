@@ -1,16 +1,19 @@
 /**
- * Generator jadwal Americano (format individual) — ROUND-ROBIN PASANGAN.
+ * Generator jadwal Americano (format individual) — ROUND-ROBIN PASANGAN PENUH.
  *
- * Inti Americano: tiap pemain BERPASANGAN dengan setiap pemain lain (sekali),
- * lalu pasangan-pasangan diadu sebagai match. Dibangun via circle method:
- *  - Tiap "ronde pasangan" membentuk pasangan disjoint yang menutup semua pemain.
- *  - Sepanjang N−1 ronde, tiap pemain berpasangan dengan tiap pemain tepat sekali.
- *  - Pasangan-pasangan lalu dijodohkan 2-2 menjadi match dan dipak ke lapangan;
- *    bila tak habis dibagi, ronde terakhir memakai lebih sedikit lapangan.
+ * Inti Americano: tiap pemain BERPASANGAN dengan SETIAP pemain lain tepat sekali.
+ * Algoritma:
+ *  1. Bangkitkan SEMUA pasangan unik (C(n,2) "edge" dari graf lengkap K_n).
+ *  2. Jodohkan pasangan-pasangan menjadi match (2 pasangan beda-pemain = 4 orang),
+ *     greedy berdasar jumlah main → tiap pemain main merata.
+ *  3. Pak match ke ronde/lapangan secara recency-aware (tak ada main beruntun).
  *
- * Catatan: untuk N kelipatan 4 hasilnya sempurna. Untuk N ≡ 2 (mod 4), tiap
- * ronde tersisa satu pasangan yang beristirahat (mereka tetap tercatat sebagai
- * pasangan, namun tak selalu sempat bermain) — keterbatasan kombinatorik wajar.
+ * Sifat hasil:
+ *  - N ≡ 0/1 (mod 4): C(n,2) genap → SEMUA pasangan terjodohkan; tiap pemain
+ *    main n−1 kali (gap 0).
+ *  - N ≡ 2/3 (mod 4): C(n,2) ganjil → TEPAT satu pasangan tak kebagian match;
+ *    dua pemainnya main n−2, sisanya n−1 (gap 1) — optimal, sama seperti
+ *    Americano "lengkap" pada aplikasi sejenis.
  */
 
 import type { PlayerId, Round } from "./types.js";
@@ -18,30 +21,6 @@ import type { PlayerId, Round } from "./types.js";
 export interface AmericanoOptions {
   /** Jumlah lapangan. Default: sebanyak mungkin = floor(N/4). */
   courts?: number;
-}
-
-/**
- * Circle method: hasilkan daftar "ronde pasangan". Tiap ronde = pasangan
- * (indeks pemain) disjoint. Sepanjang semua ronde tiap pasangan muncul sekali.
- */
-function partnershipRounds(n: number): [number, number][][] {
-  const order: number[] = Array.from({ length: n }, (_, k) => k);
-  if (n % 2 === 1) order.push(-1); // pemain "bye" semu bila ganjil
-  const m = order.length;
-  const half = m / 2;
-  const rounds: [number, number][][] = [];
-
-  for (let r = 0; r < m - 1; r++) {
-    const pairs: [number, number][] = [];
-    for (let i = 0; i < half; i++) {
-      const a = order[i]!;
-      const b = order[m - 1 - i]!;
-      if (a !== -1 && b !== -1) pairs.push([a, b]);
-    }
-    rounds.push(pairs);
-    order.splice(1, 0, order.pop()!); // rotasi: pemain pertama tetap
-  }
-  return rounds;
 }
 
 export function generateAmericano(
@@ -59,40 +38,61 @@ export function generateAmericano(
     );
   }
 
-  // 1. Tentukan SEMUA match (4 pemain) dari round-robin pasangan, dengan
-  //    pemilihan pasangan-istirahat yang adil (bila jumlah pasangan ganjil).
-  //    Catatan DEF-2: untuk N≡2,3 (mod 4) total main bisa timpang ≤2 — itu
-  //    keterbatasan struktural round-robin (gap-0 butuh assignment global).
-  const restCount = new Array<number>(n).fill(0);
+  // 1. Semua pasangan unik (edge K_n).
+  const edges: [number, number][] = [];
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++) edges.push([i, j]);
+
+  // 2. Jodohkan pasangan → match (2 pasangan disjoint = 4 pemain). Greedy: mulai
+  //    dari pasangan dgn pemain paling sedikit main, lalu cari pasangan disjoint
+  //    yang juga paling sedikit main → distribusi main merata (gap ≤1). Pasangan
+  //    yang tak bisa dijodohkan (hanya mungkin bila C(n,2) ganjil) dibiarkan —
+  //    itulah satu-satunya pasangan yang "absen".
+  const used = new Array<boolean>(edges.length).fill(false);
+  const playCount = new Array<number>(n).fill(0);
   const allMatches: [number, number, number, number][] = [];
 
-  for (const pairs of partnershipRounds(n)) {
-    let active = pairs;
-    if (pairs.length % 2 === 1) {
-      // Pilih pasangan istirahat: minimkan max(rest) lalu total rest → adil.
-      let dropIdx = 0;
-      let bestMax = Infinity;
-      let bestSum = Infinity;
-      for (let i = 0; i < pairs.length; i++) {
-        const [a, b] = pairs[i]!;
-        const hi = Math.max(restCount[a]!, restCount[b]!);
-        const sum = restCount[a]! + restCount[b]!;
-        if (hi < bestMax || (hi === bestMax && sum < bestSum)) {
-          bestMax = hi;
-          bestSum = sum;
-          dropIdx = i;
-        }
+  for (;;) {
+    // Seed: pasangan belum-terpakai dgn total main terkecil.
+    let e1 = -1;
+    let best1 = Infinity;
+    for (let k = 0; k < edges.length; k++) {
+      if (used[k]) continue;
+      const [a, b] = edges[k]!;
+      const s = playCount[a]! + playCount[b]!;
+      if (s < best1) {
+        best1 = s;
+        e1 = k;
       }
-      const [ra, rb] = pairs[dropIdx]!;
-      restCount[ra] = restCount[ra]! + 1;
-      restCount[rb] = restCount[rb]! + 1;
-      active = pairs.filter((_, i) => i !== dropIdx);
     }
-    for (let i = 0; i + 1 < active.length; i += 2) {
-      const [a, b] = active[i]!;
-      const [c, d] = active[i + 1]!;
-      allMatches.push([a, b, c, d]);
+    if (e1 < 0) break; // semua pasangan terpakai
+
+    const [a, b] = edges[e1]!;
+    // Partner: pasangan disjoint (tak berbagi pemain) dgn total main terkecil.
+    let e2 = -1;
+    let best2 = Infinity;
+    for (let k = 0; k < edges.length; k++) {
+      if (used[k] || k === e1) continue;
+      const [c, d] = edges[k]!;
+      if (c === a || c === b || d === a || d === b) continue;
+      const s = playCount[c]! + playCount[d]!;
+      if (s < best2) {
+        best2 = s;
+        e2 = k;
+      }
     }
+    if (e2 < 0) {
+      used[e1] = true; // tak ada pasangan disjoint → pasangan ini absen
+      continue;
+    }
+    used[e1] = true;
+    used[e2] = true;
+    const [c, d] = edges[e2]!;
+    allMatches.push([a, b, c, d]);
+    playCount[a] = playCount[a]! + 1;
+    playCount[b] = playCount[b]! + 1;
+    playCount[c] = playCount[c]! + 1;
+    playCount[d] = playCount[d]! + 1;
   }
 
   // 2. Penjadwalan RECENCY-AWARE: bangun ronde satu per satu; tiap ronde
