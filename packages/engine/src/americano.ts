@@ -61,6 +61,8 @@ export function generateAmericano(
 
   // 1. Tentukan SEMUA match (4 pemain) dari round-robin pasangan, dengan
   //    pemilihan pasangan-istirahat yang adil (bila jumlah pasangan ganjil).
+  //    Catatan DEF-2: untuk N≡2,3 (mod 4) total main bisa timpang ≤2 — itu
+  //    keterbatasan struktural round-robin (gap-0 butuh assignment global).
   const restCount = new Array<number>(n).fill(0);
   const allMatches: [number, number, number, number][] = [];
 
