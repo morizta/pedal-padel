@@ -612,6 +612,18 @@ function DashboardScreen({
             }
             tabs={[
               {
+                key: "turnamen",
+                label: "Tournament",
+                icon: "sports_tennis",
+                node: (
+                  <DashEventList
+                    events={latestEventsD}
+                    onNavigate={onNavigate}
+                    emptyText="No tournaments yet."
+                  />
+                ),
+              },
+              {
                 key: "liga",
                 label: "League",
                 icon: "emoji_events",
@@ -635,18 +647,6 @@ function DashboardScreen({
                   />
                 ),
               },
-              {
-                key: "turnamen",
-                label: "Tournament",
-                icon: "sports_tennis",
-                node: (
-                  <DashEventList
-                    events={latestEventsD}
-                    onNavigate={onNavigate}
-                    emptyText="No tournaments yet."
-                  />
-                ),
-              },
             ]}
           />
 
@@ -655,6 +655,26 @@ function DashboardScreen({
           <DashTabCard
             title="Mine"
             tabs={[
+              {
+                key: "turnamen",
+                label: "Tournament",
+                icon: "sports_tennis",
+                action: (
+                  <button
+                    onClick={() => onNavigate({ t: "myEvents" })}
+                    className="text-xs font-semibold text-primary"
+                  >
+                    Manage
+                  </button>
+                ),
+                node: (
+                  <DashEventList
+                    events={myEvents}
+                    onNavigate={onNavigate}
+                    emptyText="No tournaments yet. Click 'Play Now'."
+                  />
+                ),
+              },
               {
                 key: "liga",
                 label: "League",
@@ -686,26 +706,6 @@ function DashboardScreen({
                               ? "Member"
                               : undefined,
                     }))}
-                  />
-                ),
-              },
-              {
-                key: "turnamen",
-                label: "Tournament",
-                icon: "sports_tennis",
-                action: (
-                  <button
-                    onClick={() => onNavigate({ t: "myEvents" })}
-                    className="text-xs font-semibold text-primary"
-                  >
-                    Manage
-                  </button>
-                ),
-                node: (
-                  <DashEventList
-                    events={myEvents}
-                    onNavigate={onNavigate}
-                    emptyText="No tournaments yet. Click 'Play Now'."
                   />
                 ),
               },
@@ -1263,7 +1263,7 @@ function AdminPanel({
   const eventsQ = useAsync(() => listVisibleEvents(), []);
   const playersQ = useAsync(() => adminListPlayers(), []);
   const userCountQ = useAsync(() => countProfiles(), []);
-  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("liga");
+  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("turnamen");
   const [mergeGuest, setMergeGuest] = useState<{
     id: string;
     name: string;
@@ -1392,8 +1392,8 @@ function AdminPanel({
       <div className="flex w-fit rounded-xl border border-outline-variant/40 bg-surface-container p-1 text-sm">
         {(
           [
-            ["liga", "League", "emoji_events"],
             ["turnamen", "Tournament", "sports_tennis"],
+            ["liga", "League", "emoji_events"],
             ["pemain", "Player", "group"],
           ] as const
         ).map(([k, l, icon]) => (
@@ -2339,7 +2339,7 @@ function ExploreScreen({
   user: User | null;
   onNavigate: (v: View) => void;
 }) {
-  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("liga");
+  const [tab, setTab] = useState<"liga" | "turnamen" | "pemain">("turnamen");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const leaguesQ = useAsync(() => discoverLeagues(), []);
@@ -2458,8 +2458,8 @@ function ExploreScreen({
       <div className="flex rounded-2xl border border-outline-variant/40 bg-surface-container p-1 shadow-sm">
         {(
           [
-            ["liga", "League", "emoji_events"],
             ["turnamen", "Tournament", "sports_tennis"],
+            ["liga", "League", "emoji_events"],
             ["pemain", "Player", "group"],
           ] as const
         ).map(([k, l, icon]) => (
