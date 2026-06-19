@@ -5876,7 +5876,50 @@ function zeroStanding(playerId: string): Standing {
   };
 }
 
+/* Urutan klasemen: by poin (default) atau by jumlah menang. */
+type SortBy = "points" | "wins";
+
+function sortStandings(by: SortBy) {
+  return (a: Standing, b: Standing): number =>
+    by === "wins"
+      ? b.wins - a.wins ||
+        b.wins - b.losses - (a.wins - a.losses) ||
+        b.adjustedPoints - a.adjustedPoints ||
+        a.playerId.localeCompare(b.playerId)
+      : b.adjustedPoints - a.adjustedPoints ||
+        b.gamesDiff - a.gamesDiff ||
+        b.wins - a.wins ||
+        a.playerId.localeCompare(b.playerId);
+}
+
+function SortToggle({
+  value,
+  onChange,
+}: {
+  value: SortBy;
+  onChange: (v: SortBy) => void;
+}) {
+  return (
+    <div className="flex overflow-hidden rounded-lg border border-outline-variant text-xs font-semibold">
+      {(["points", "wins"] as const).map((k) => (
+        <button
+          key={k}
+          onClick={() => onChange(k)}
+          className={`px-2.5 py-1 ${
+            value === k
+              ? "bg-primary-fixed text-on-primary-fixed"
+              : "text-on-surface-variant hover:bg-surface-container-low"
+          }`}
+        >
+          {k === "points" ? "Points" : "Wins"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Leaderboard({ session }: { session: Session }) {
+  const [sortBy, setSortBy] = useState<SortBy>("points");
   if (isTeamFormat(session.config.format)) {
     return <TeamLeaderboard session={session} />;
   }
@@ -5886,22 +5929,19 @@ function Leaderboard({ session }: { session: Session }) {
   );
   const standings = session.players
     .map((p) => byId.get(p) ?? zeroStanding(p))
-    .sort(
-      (a, b) =>
-        b.adjustedPoints - a.adjustedPoints ||
-        b.gamesDiff - a.gamesDiff ||
-        b.wins - a.wins ||
-        a.playerId.localeCompare(b.playerId)
-    );
+    .sort(sortStandings(sortBy));
   return (
     <Card
       title="🏆 Standings"
       action={
-        <ShareButton
-          title={session.config.name}
-          rows={buildShareRows(standings)}
-          label="Share"
-        />
+        <div className="flex items-center gap-2">
+          <SortToggle value={sortBy} onChange={setSortBy} />
+          <ShareButton
+            title={session.config.name}
+            rows={buildShareRows(standings)}
+            label="Share"
+          />
+        </div>
       }
     >
       {(
