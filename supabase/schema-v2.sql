@@ -35,6 +35,7 @@ create unique index profiles_username_lower_key on public.profiles (lower(userna
 create table public.players (
   id            uuid primary key default gen_random_uuid(),
   display_name  text not null,
+  gender        text check (gender in ('male','female')), -- opsional; untuk format Mix/Mixicano (gender campur)
   user_id       uuid unique references auth.users on delete set null, -- null = tamu; unik = 1 self-player/akun
   owner_id      uuid not null references auth.users on delete cascade, -- pengelola (pembuat tamu)
   deleted_at    timestamptz,          -- soft-delete: history match tetap (anonim), demi ELO orang lain

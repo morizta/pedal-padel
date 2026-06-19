@@ -117,6 +117,7 @@ Pembeda utama: **leaderboard individual persisten 3-tingkat** + **dimensi sosial
 | FR-ID-5 | Identitas pemain berbasis **ID stabil**; dua pemain bernama sama tetap terpisah. | 🟡 |
 | FR-ID-6 | Superadmin dapat **merge tamu → akun** (history pindah, baris tamu dihapus) dengan pratinjau & konfirmasi. | ✅ |
 | FR-ID-7 | User dapat edit profil: nama, username unik, foto. | ✅ |
+| FR-ID-8 | Pemain punya atribut **gender** (opsional, `male`/`female`/kosong) — **persiapan** format Mix/Mixicano; tanpa dampak fitur lain saat ini. | ⬜ |
 
 #### Rincian perilaku & aturan — Identitas
 
