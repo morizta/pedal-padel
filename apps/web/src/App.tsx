@@ -3711,6 +3711,27 @@ function LeagueScreen({
         </Card>
       )}
 
+      {/* Turnamen di liga — menonjol & penuh (fokus pertandingan), bukan kartu kecil di kanan. */}
+      <Card title="🎾 Tournaments in this league">
+        <StateText
+          loading={eventsQ.loading}
+          error={eventsQ.error}
+          empty={events.length === 0}
+          emptyText="No tournaments yet."
+        />
+        <EventList
+          events={events}
+          meId={user?.id ?? null}
+          canManage={isAdmin}
+          onOpen={(id) => onNavigate({ t: "session", id })}
+          onDelete={async (id) => {
+            await deleteEvent(id);
+            eventsQ.reload();
+            standingsQ.reload();
+          }}
+        />
+      </Card>
+
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card
           title="📊 League Standings (player totals)"
@@ -3795,28 +3816,7 @@ function LeagueScreen({
           />
         </Card>
 
-        <div className="space-y-5">
-          <Card title="Sessions in league">
-            <StateText
-              loading={eventsQ.loading}
-              error={eventsQ.error}
-              empty={events.length === 0}
-              emptyText="No sessions yet."
-            />
-            <EventList
-              events={events}
-              meId={user?.id ?? null}
-              canManage={isAdmin}
-              onOpen={(id) => onNavigate({ t: "session", id })}
-              onDelete={async (id) => {
-                await deleteEvent(id);
-                eventsQ.reload();
-                standingsQ.reload();
-              }}
-            />
-          </Card>
-          <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
-        </div>
+        <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
       </div>
       {editing && (
         <EditLeagueModal
@@ -5984,6 +5984,8 @@ function SessionInner({
     event.rounds.length > 0
       ? { rounds: event.rounds, scores: event.scores, teams: event.teams }
       : undefined;
+  // Mobile: tampilkan satu panel (Rounds / Leaderboard); desktop dua kolom.
+  const [mobileTab, setMobileTab] = useState<"rounds" | "leaderboard">("rounds");
 
   const { user } = useAuth();
   // Pembuat turnamen ATAU admin/owner liga boleh acak, ubah jadwal & skor.
@@ -6056,17 +6058,44 @@ function SessionInner({
           {canManage && " Use Reopen (top right) to edit again."}
         </div>
       )}
-      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <RoundsPanel session={session} canEdit={canEdit} />
-        <div className="space-y-5">
+      {/* Desktop: Leaderboard kiri + Match Rounds kanan. Mobile: satu panel. */}
+      <div className="grid gap-5 lg:grid-cols-[26rem_1fr]">
+        <div className={mobileTab === "leaderboard" ? "" : "hidden lg:block"}>
           <Leaderboard
             session={session}
             sortBy={event.standingsSort}
             rankMode={event.tiebreak}
           />
-          {/* Rating ELO disembunyikan sementara. */}
+        </div>
+        <div className={mobileTab === "rounds" ? "" : "hidden lg:block"}>
+          <RoundsPanel session={session} canEdit={canEdit} />
         </div>
       </div>
+
+      {/* Mobile: tab bar mengambang (di atas nav global) untuk ganti panel. */}
+      <div className="fixed inset-x-0 bottom-[84px] z-30 mx-auto flex w-[calc(100%-2rem)] max-w-xs overflow-hidden rounded-full border border-outline-variant bg-surface-container-lowest p-1 text-sm font-semibold shadow-lg lg:hidden">
+        {(
+          [
+            ["rounds", "Rounds", "sports_tennis"],
+            ["leaderboard", "Leaderboard", "leaderboard"],
+          ] as const
+        ).map(([k, label, icon]) => (
+          <button
+            key={k}
+            onClick={() => setMobileTab(k)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 transition ${
+              mobileTab === k
+                ? "bg-primary-fixed text-on-primary-fixed"
+                : "text-on-surface-variant"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+            {label}
+          </button>
+        ))}
+      </div>
+      {/* Clearance agar konten tak ketutup bar tab mengambang di mobile. */}
+      <div className="h-16 lg:hidden" />
     </div>
   );
 }
