@@ -6184,6 +6184,8 @@ function RoundsPanel({
   canEdit: boolean;
 }) {
   const { rounds, scores, config } = session;
+  // Shuffle hanya boleh sebelum ada skor (acak ulang merusak hasil tercatat).
+  const noScores = session.results.length === 0;
   const [active, setActive] = useState(rounds.length - 1);
   const [picking, setPicking] = useState<{
     court: number;
@@ -6291,16 +6293,18 @@ function RoundsPanel({
             >
               Add round +
             </button>
-            <button
-              onClick={session.reshuffle}
-              title="Reshuffle schedule"
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                shuffle
-              </span>
-              Shuffle
-            </button>
+            {noScores && (
+              <button
+                onClick={session.reshuffle}
+                title="Reshuffle schedule"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  shuffle
+                </span>
+                Shuffle
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -6313,7 +6317,7 @@ function RoundsPanel({
                 ? "Complete this round's scores first"
                 : "Next round →"}
             </button>
-            {isLast && (
+            {isLast && noScores && (
               <button
                 onClick={session.reshuffle}
                 className="rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold hover:bg-surface-container-low"
