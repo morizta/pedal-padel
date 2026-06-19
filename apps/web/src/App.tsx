@@ -6761,18 +6761,28 @@ function Stepper({
   max: number;
   onChange: (v: number) => void;
 }) {
+  const btn =
+    "grid h-10 w-10 place-items-center rounded-xl border border-outline-variant text-xl text-on-surface transition hover:bg-surface-container disabled:cursor-not-allowed disabled:text-outline disabled:hover:bg-transparent";
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-3">
       <button
+        type="button"
         onClick={() => onChange(Math.max(min, value - 1))}
-        className="h-9 w-9 rounded-lg bg-surface-container text-lg text-on-surface hover:bg-surface-container-high"
+        disabled={value <= min}
+        className={btn}
+        aria-label="Decrease"
       >
         −
       </button>
-      <span className="w-6 text-center font-semibold tabular-nums">{value}</span>
+      <span className="w-8 text-center text-lg font-bold tabular-nums">
+        {value}
+      </span>
       <button
+        type="button"
         onClick={() => onChange(Math.min(max, value + 1))}
-        className="h-9 w-9 rounded-lg bg-surface-container text-lg text-on-surface hover:bg-surface-container-high"
+        disabled={value >= max}
+        className={btn}
+        aria-label="Increase"
       >
         +
       </button>
@@ -6791,11 +6801,12 @@ function Chip({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+      className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
         active
-          ? "bg-navy text-white"
-          : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+          ? "bg-primary-fixed text-on-primary-fixed"
+          : "border border-outline-variant text-on-surface-variant hover:bg-surface-container"
       }`}
     >
       {label}
@@ -6815,18 +6826,19 @@ function Toggle({
   offLabel: string;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-surface-container p-1 text-sm">
+    <div className="flex w-full rounded-xl border border-outline-variant bg-surface-container p-1 text-sm">
       {[
         { v: true, label: onLabel },
         { v: false, label: offLabel },
       ].map((o) => (
         <button
           key={o.label}
+          type="button"
           onClick={() => onChange(o.v)}
-          className={`rounded-md px-3 py-2 font-semibold transition ${
+          className={`flex-1 rounded-lg px-3 py-2 font-semibold transition ${
             value === o.v
               ? "bg-surface-container-lowest text-on-surface shadow-sm"
-              : "text-on-surface-variant"
+              : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
           {o.label}
