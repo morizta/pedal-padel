@@ -6125,6 +6125,10 @@ function RoundsPanel({
           {round.matches.map((m) => {
             const s = scores[`${round.index}-${m.court}`];
             const played = !!s && s.a + s.b > 0;
+            const aWin = played && s!.a > s!.b;
+            const bWin = played && s!.b > s!.a;
+            const nameCls = (win: boolean, lose: boolean) =>
+              `text-sm ${win ? "font-bold text-on-surface" : lose ? "font-medium text-on-surface-variant" : "font-semibold"}`;
             return (
               <div
                 key={m.court}
@@ -6145,10 +6149,11 @@ function RoundsPanel({
                     disabled={!canEdit}
                     className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-left transition enabled:hover:bg-surface-container-high disabled:cursor-default"
                   >
-                    <span className="text-sm font-semibold">
+                    <span className={`flex items-center gap-1 ${nameCls(aWin, bWin)}`}>
+                      {aWin && <span className="text-xs">🏆</span>}
                       {m.teamA.join(" & ")}
                     </span>
-                    <ScoreChip value={s?.a} />
+                    <ScoreChip value={s?.a} win={aWin} />
                   </button>
                   <span className="font-display text-outline">:</span>
                   {/* Sisi kanan: klik → pilih skor tim B */}
@@ -6157,9 +6162,12 @@ function RoundsPanel({
                     disabled={!canEdit}
                     className="flex flex-1 items-center justify-between gap-2 rounded-lg p-1 text-right transition enabled:hover:bg-surface-container-high disabled:cursor-default"
                   >
-                    <ScoreChip value={s?.b} />
-                    <span className="text-sm font-semibold">
+                    <ScoreChip value={s?.b} win={bWin} />
+                    <span
+                      className={`flex items-center justify-end gap-1 ${nameCls(bWin, aWin)}`}
+                    >
                       {m.teamB.join(" & ")}
+                      {bWin && <span className="text-xs">🏆</span>}
                     </span>
                   </button>
                 </div>
@@ -6233,9 +6241,15 @@ function RoundsPanel({
   );
 }
 
-function ScoreChip({ value }: { value?: number }) {
+function ScoreChip({ value, win = false }: { value?: number; win?: boolean }) {
   return (
-    <span className="grid h-11 w-12 place-items-center rounded-lg bg-navy font-data-mono text-lg font-bold text-primary-fixed tabular-nums">
+    <span
+      className={`grid h-11 w-12 place-items-center rounded-lg font-data-mono text-lg font-bold tabular-nums ${
+        win
+          ? "bg-primary-fixed text-on-primary-fixed"
+          : "bg-navy text-primary-fixed"
+      }`}
+    >
       {value ?? "–"}
     </span>
   );
