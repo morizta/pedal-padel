@@ -462,3 +462,26 @@ create policy sa_all_lu on public.league_users for all
 drop policy if exists sa_all_players on public.players;
 create policy sa_all_players on public.players for all
   using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));
+
+-- ────────────────────────────────────────────────────────────────────
+-- 7. Storage: foto (avatar/turnamen/liga) sebagai FILE (ganti base64 di DB).
+--    Baca publik (share/link); tulis user terautentikasi.
+-- ────────────────────────────────────────────────────────────────────
+insert into storage.buckets (id, name, public) values
+  ('avatars','avatars',true),
+  ('event-photos','event-photos',true),
+  ('league-photos','league-photos',true)
+on conflict (id) do nothing;
+
+drop policy if exists storage_read on storage.objects;
+create policy storage_read on storage.objects for select
+  using (bucket_id in ('avatars','event-photos','league-photos'));
+drop policy if exists storage_write on storage.objects;
+create policy storage_write on storage.objects for insert to authenticated
+  with check (bucket_id in ('avatars','event-photos','league-photos'));
+drop policy if exists storage_update on storage.objects;
+create policy storage_update on storage.objects for update to authenticated
+  using (bucket_id in ('avatars','event-photos','league-photos'));
+drop policy if exists storage_delete on storage.objects;
+create policy storage_delete on storage.objects for delete to authenticated
+  using (bucket_id in ('avatars','event-photos','league-photos'));

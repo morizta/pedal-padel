@@ -141,6 +141,53 @@ export async function setPlayerGender(
   if (error) throw error;
 }
 
+/* ---------- Upload foto ke Supabase Storage (ganti base64) ---------- */
+
+/** Resize gambar → Blob JPEG (di browser, via canvas). */
+function resizeToJpegBlob(file: File, max: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("Resize failed"))),
+          "image/jpeg",
+          0.82
+        );
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+export type ImageBucket = "avatars" | "event-photos" | "league-photos";
+
+/** Resize + unggah gambar ke Storage → kembalikan URL publik (bukan base64). */
+export async function uploadImage(
+  file: File,
+  bucket: ImageBucket,
+  max = 512
+): Promise<string> {
+  const blob = await resizeToJpegBlob(file, max);
+  const uid = (await currentUserId()) ?? "anon";
+  const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const { error } = await db()
+    .storage.from(bucket)
+    .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+  if (error) throw error;
+  const { data } = db().storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /** Peta playerId → foto profil (avatar) untuk pemain ber-akun (global). */
 export async function globalAvatars(): Promise<Record<string, string>> {
   const { data: pls } = await db()

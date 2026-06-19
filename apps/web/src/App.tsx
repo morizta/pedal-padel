@@ -45,6 +45,7 @@ import {
   setPlayerGender,
   gendersForPlayers,
   globalAvatars,
+  uploadImage,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -1956,9 +1957,9 @@ function ProfileScreen({
                 const f = e.target.files?.[0];
                 if (!f) return;
                 try {
-                  setAvatarUrl(await readImageDataUrl(f));
+                  setAvatarUrl(await uploadImage(f, "avatars", 256));
                 } catch {
-                  void alertDialog("Failed to read image.", {
+                  void alertDialog("Failed to upload image.", {
                     title: "Failed",
                     tone: "danger",
                   });
@@ -3862,7 +3863,7 @@ function EditLeagueModal({
     const f = e.target.files?.[0];
     if (f) {
       try {
-        setPhoto(await readImageDataUrl(f));
+        setPhoto(await uploadImage(f, "league-photos", 800));
       } catch {
         void alertDialog("Failed to read image.", { title: "Failed", tone: "danger" });
       }
@@ -4442,27 +4443,6 @@ function NotesHtml({ html }: { html: string }) {
 }
 
 /** Baca file gambar → data URL terkompres (maks sisi terpanjang `max` px). */
-function readImageDataUrl(file: File, max = 256): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.75));
-      };
-      img.onerror = reject;
-      img.src = reader.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 /** Halaman buat liga (proper): foto, nama, deskripsi, notes (WYSIWYG),
  *  visibilitas, dan tambah anggota (undang akun / tamu). */
 function CreateLeagueScreen({
@@ -4510,7 +4490,7 @@ function CreateLeagueScreen({
     const f = e.target.files?.[0];
     if (f) {
       try {
-        setPhoto(await readImageDataUrl(f));
+        setPhoto(await uploadImage(f, "league-photos", 800));
       } catch {
         void alertDialog("Failed to read image.", { title: "Failed", tone: "danger" });
       }
@@ -5359,7 +5339,7 @@ function CreateScreen({
               const f = e.target.files?.[0];
               if (!f) return;
               try {
-                setPhoto(await readImageDataUrl(f));
+                setPhoto(await uploadImage(f, "event-photos", 800));
               } catch {
                 void alertDialog("Failed to read image.", {
                   title: "Failed",
