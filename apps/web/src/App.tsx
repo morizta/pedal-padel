@@ -13,9 +13,13 @@ import {
   computeTeamStandings,
   teamKey,
   reliability,
+  generateAmericano,
+  generateTeamAmericano,
+  pairUp,
   type Standing,
   type TeamStanding,
   type Pair,
+  type Round,
 } from "@pedal/engine";
 import { computeRatings } from "./ratings";
 import {
@@ -4645,6 +4649,147 @@ function CreateLeagueScreen({
   );
 }
 
+/* Simulasi/preview jadwal: distribusi main + keadilan + matriks partner (FR-EV-10). */
+function ScheduleSimulation({
+  names,
+  format,
+  courts,
+}: {
+  names: string[];
+  format: Format;
+  courts: number;
+}) {
+  if (names.length < 4) return null;
+  const isStatic = format === "americano" || format === "team_americano";
+
+  let rounds: Round[] | null = null;
+  if (isStatic) {
+    try {
+      rounds =
+        format === "americano"
+          ? generateAmericano(names, { courts })
+          : generateTeamAmericano(pairUp(names), { courts });
+    } catch {
+      rounds = null;
+    }
+  }
+
+  if (!isStatic) {
+    return (
+      <Card title="Schedule simulation">
+        <p className="rounded-xl bg-surface-container-low px-3 py-4 text-sm text-on-surface-variant">
+          {FORMAT_LABEL[format]} is dynamic — pairings depend on live results each
+          round, so the full schedule can't be previewed up front.
+        </p>
+      </Card>
+    );
+  }
+  if (!rounds) return null;
+
+  const games: Record<string, number> = {};
+  for (const n of names) games[n] = 0;
+  for (const r of rounds)
+    for (const m of r.matches)
+      for (const p of [...m.teamA, ...m.teamB]) games[p] = (games[p] ?? 0) + 1;
+  const ranked = [...names].sort((a, b) => (games[b] ?? 0) - (games[a] ?? 0));
+  const counts = ranked.map((n) => games[n] ?? 0);
+  const min = Math.min(...counts);
+  const max = Math.max(...counts);
+  const gap = max - min;
+  const fairness = gap === 0 ? "Perfect" : gap === 1 ? "Good" : "Fair";
+  const fairnessColor =
+    gap === 0 ? "text-win-green" : gap === 1 ? "text-primary" : "text-error";
+
+  const showPartners = format === "americano" && names.length <= 12;
+  const pkey = (a: string, b: string) => [a, b].sort().join(" ");
+  const partnerCount: Record<string, number> = {};
+  if (showPartners)
+    for (const r of rounds)
+      for (const m of r.matches)
+        for (const team of [m.teamA, m.teamB])
+          partnerCount[pkey(team[0], team[1])] =
+            (partnerCount[pkey(team[0], team[1])] ?? 0) + 1;
+
+  return (
+    <Card title="Schedule simulation">
+      <p className="-mt-1 mb-3 text-xs text-on-surface-variant">
+        {rounds.length} rounds · {courts} court{courts > 1 ? "s" : ""} — match
+        distribution & fairness
+      </p>
+
+      <div className="mb-1 font-label-caps text-label-caps text-on-surface-variant">
+        Games per player
+      </div>
+      <ul className="space-y-1">
+        {ranked.map((n, i) => (
+          <li key={n} className="flex items-center gap-2 text-sm">
+            <span className="w-5 text-right text-on-surface-variant">{i + 1}</span>
+            <span className="flex-1 truncate font-semibold">{n}</span>
+            <span className="font-data-mono font-bold tabular-nums">
+              {games[n] ?? 0}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 text-xs">
+        Fairness:{" "}
+        <span className={`font-semibold ${fairnessColor}`}>{fairness}</span>{" "}
+        <span className="text-on-surface-variant">
+          ({min === max ? `${min} each` : `${min}–${max}`})
+        </span>
+      </div>
+
+      {showPartners && (
+        <div className="mt-4">
+          <div className="mb-1 font-label-caps text-label-caps text-on-surface-variant">
+            Partners (times in same team)
+          </div>
+          <div className="overflow-x-auto">
+            <table className="text-center text-xs">
+              <thead>
+                <tr className="text-on-surface-variant">
+                  <th className="p-1"></th>
+                  {names.map((n) => (
+                    <th key={n} className="p-1 font-semibold">
+                      {n.slice(0, 3)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {names.map((a) => (
+                  <tr key={a}>
+                    <td className="p-1 text-left font-semibold text-on-surface-variant">
+                      {a.slice(0, 3)}
+                    </td>
+                    {names.map((b) => {
+                      if (a === b)
+                        return (
+                          <td key={b} className="p-1 text-outline">
+                            –
+                          </td>
+                        );
+                      const c = partnerCount[pkey(a, b)] ?? 0;
+                      return (
+                        <td
+                          key={b}
+                          className={`p-1 ${c > 0 ? "bg-win-green/15 text-on-surface" : "text-outline"}`}
+                        >
+                          {c}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function CreateScreen({
   leagueId,
   onCreated,
@@ -5126,6 +5271,8 @@ function CreateScreen({
           {startLabel}
         </button>
       </Card>
+
+      <ScheduleSimulation names={names} format={format} courts={courtsClamped} />
 
       {/* Mobile: pilih pemain dulu (di atas), baru pengaturan + susun tim.
           Desktop: tetap di kolom kanan. */}
