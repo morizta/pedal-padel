@@ -4872,8 +4872,7 @@ function CreateScreen({
   const [photo, setPhoto] = useState<string | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const [startMode, setStartMode] = useState<"now" | "schedule">("now");
-  const [startDate, setStartDate] = useState("");
-  const [startTime, setStartTime] = useState("");
+  const [startDateTime, setStartDateTime] = useState(""); // "YYYY-MM-DDTHH:MM"
   const [format, setFormat] = useState<Format>("americano");
   const [courts, setCourts] = useState(1);
   const [standingsSort, setStandingsSort] = useState<SortBy>("points");
@@ -5023,8 +5022,8 @@ function CreateScreen({
         notes,
         photoUrl: photo,
         startAt:
-          startMode === "schedule" && startDate
-            ? new Date(`${startDate}T${startTime || "00:00"}`).getTime()
+          startMode === "schedule" && startDateTime
+            ? new Date(startDateTime).getTime()
             : null,
       });
       onCreated(event.id);
@@ -5141,35 +5140,17 @@ function CreateScreen({
             offLabel="Pick date"
           />
           {startMode === "schedule" && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <label className="flex-1">
-                <span className="mb-1 block text-xs text-on-surface-variant">
-                  Date
-                </span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="input w-full"
-                />
-              </label>
-              <label className="flex-1">
-                <span className="mb-1 block text-xs text-on-surface-variant">
-                  Time
-                </span>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="input w-full"
-                />
-              </label>
-            </div>
+            <input
+              type="datetime-local"
+              value={startDateTime}
+              onChange={(e) => setStartDateTime(e.target.value)}
+              className="input mt-2"
+            />
           )}
-          <p className="mt-1 text-xs text-on-surface-variant">
+          <p className="mt-1.5 text-xs text-on-surface-variant">
             {startMode === "now"
               ? "Session starts now."
-              : startDate
+              : startDateTime
                 ? "Scheduled — shows as an upcoming session until its time."
                 : "Pick a start date & time."}
           </p>
@@ -6237,12 +6218,13 @@ function SortToggle({
   onChange: (v: SortBy) => void;
 }) {
   return (
-    <div className="flex overflow-hidden rounded-lg border border-outline-variant text-xs font-semibold">
+    <div className="flex w-full overflow-hidden rounded-xl border border-outline-variant text-sm font-semibold">
       {(["points", "wins"] as const).map((k) => (
         <button
           key={k}
+          type="button"
           onClick={() => onChange(k)}
-          className={`px-2.5 py-1 ${
+          className={`flex-1 px-3 py-2.5 transition ${
             value === k
               ? "bg-primary-fixed text-on-primary-fixed"
               : "text-on-surface-variant hover:bg-surface-container-low"
@@ -6317,7 +6299,7 @@ function RankModeSelect({
       value={value}
       onChange={(e) => onChange(e.target.value as RankMode)}
       title="Tie-break rule"
-      className="rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs font-semibold text-on-surface-variant"
+      className="w-full rounded-xl border border-outline-variant bg-surface-container-lowest px-3.5 py-2.5 text-sm font-semibold text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
     >
       <option value="unique">No ties · 1,2,3</option>
       <option value="allow">Allow ties · 1,2,2,3</option>
