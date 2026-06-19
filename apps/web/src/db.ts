@@ -49,26 +49,37 @@ export async function countProfiles(): Promise<number> {
 
 /* ---------- Pemain ---------- */
 
+export type Gender = "male" | "female";
+
 export interface Player {
   id: string;
   name: string;
   isGuest: boolean;
+  gender: Gender | null;
 }
 
 function mapPlayer(r: {
   id: string;
   display_name: string;
   user_id: string | null;
+  gender?: string | null;
 }): Player {
-  return { id: r.id, name: r.display_name, isGuest: !r.user_id };
+  return {
+    id: r.id,
+    name: r.display_name,
+    isGuest: !r.user_id,
+    gender: (r.gender as Gender | null) ?? null,
+  };
 }
+
+const PLAYER_COLS = "id,display_name,user_id,gender";
 
 export async function listPlayers(): Promise<Player[]> {
   const owner = await currentUserId();
   if (!owner) return [];
   const { data, error } = await db()
     .from("players")
-    .select("id,display_name,user_id")
+    .select(PLAYER_COLS)
     .eq("owner_id", owner)
     .order("display_name");
   if (error) throw error;
@@ -79,7 +90,7 @@ export async function listPlayers(): Promise<Player[]> {
 export async function adminListPlayers(limit = 1000): Promise<Player[]> {
   const { data, error } = await db()
     .from("players")
-    .select("id,display_name,user_id")
+    .select(PLAYER_COLS)
     .order("display_name")
     .limit(limit);
   if (error) throw error;
@@ -88,7 +99,7 @@ export async function adminListPlayers(limit = 1000): Promise<Player[]> {
 
 export async function createPlayer(
   name: string,
-  opts: { guest?: boolean } = {}
+  opts: { guest?: boolean; gender?: Gender } = {}
 ): Promise<Player | undefined> {
   const clean = name.trim();
   if (!clean) return undefined;
@@ -98,20 +109,47 @@ export async function createPlayer(
   // Dedupe by nama (case-insensitive) milik user ini.
   const { data: existing } = await db()
     .from("players")
-    .select("id,display_name,user_id")
+    .select(PLAYER_COLS)
     .eq("owner_id", owner)
     .ilike("display_name", clean)
     .limit(1);
-  if (existing && existing.length) return mapPlayer(existing[0]!);
+  if (existing && existing.length) {
+    const p = mapPlayer(existing[0]!);
+    // Isi gender bila belum ada & disediakan.
+    if (opts.gender && !p.gender) {
+      await db().from("players").update({ gender: opts.gender }).eq("id", p.id);
+      return { ...p, gender: opts.gender };
+    }
+    return p;
+  }
 
   const { data, error } = await db()
     .from("players")
-    .insert({ display_name: clean, owner_id: owner })
-    .select("id,display_name,user_id")
+    .insert({ display_name: clean, owner_id: owner, gender: opts.gender ?? null })
+    .select(PLAYER_COLS)
     .single();
   if (error) throw error;
-  void opts;
   return mapPlayer(data!);
+}
+
+/** Set/ubah gender pemain (untuk format Mix). */
+export async function setPlayerGender(
+  id: string,
+  gender: Gender | null
+): Promise<void> {
+  const { error } = await db().from("players").update({ gender }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Gender beberapa pemain by id → { id: gender|null } (untuk format Mix). */
+export async function gendersForPlayers(
+  ids: string[]
+): Promise<Record<string, Gender | null>> {
+  if (!ids.length) return {};
+  const { data } = await db().from("players").select("id,gender").in("id", ids);
+  const out: Record<string, Gender | null> = {};
+  for (const r of data ?? []) out[r.id] = (r.gender as Gender | null) ?? null;
+  return out;
 }
 
 export async function deletePlayer(id: string): Promise<void> {

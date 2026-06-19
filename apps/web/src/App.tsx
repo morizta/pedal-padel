@@ -26,6 +26,7 @@ import {
   useSession,
   isTeamFormat,
   isScheduledFormat,
+  isMixFormat,
   scoreSpec,
   type Format,
   type ScoringConfig,
@@ -40,6 +41,8 @@ import {
   mergeGuestIntoAccount,
   createPlayer,
   deletePlayer,
+  setPlayerGender,
+  gendersForPlayers,
   searchUsers,
   ensureSelfPlayer,
   getMyProfile,
@@ -2213,6 +2216,8 @@ const FORMAT_LABEL: Record<Format, string> = {
   mexicano: "Mexicano",
   team_americano: "Team Americano",
   team_mexicano: "Team Mexicano",
+  mix_americano: "Mix Americano",
+  mixicano: "Mixicano",
 };
 
 function fmtDate(ts: number): string {
@@ -4252,6 +4257,16 @@ const FORMATS: { id: Format; name: string; desc: string }[] = [
     name: "Team Mexicano",
     desc: "Fixed pairs. Balanced matchups each round.",
   },
+  {
+    id: "mix_americano",
+    name: "Mix Americano",
+    desc: "Mixed teams (♂+♀). Play with & against everyone.",
+  },
+  {
+    id: "mixicano",
+    name: "Mixicano",
+    desc: "Mixed teams (♂+♀). Balanced matchups each round.",
+  },
 ];
 
 const POINT_OPTIONS = [16, 21, 24, 32, 0]; // 0 = Undefined / bebas
@@ -4684,8 +4699,8 @@ function ScheduleSimulation({
     return (
       <Card title="Schedule simulation">
         <p className="rounded-xl bg-surface-container-low px-3 py-4 text-sm text-on-surface-variant">
-          {FORMAT_LABEL[format]} is dynamic — pairings depend on live results each
-          round, so the full schedule can't be previewed up front.
+          Preview is available for Americano & Team Americano. {FORMAT_LABEL[format]}{" "}
+          pairings are formed during play (balanced by results / gender each round).
         </p>
       </Card>
     );
@@ -4843,6 +4858,10 @@ function CreateScreen({
   const inLeague = leagueQ.data;
   const registered = useAsync(() => listPlayers(), []);
   const registeredList = registered.data ?? [];
+  // Override gender lokal (format Mix); fallback ke gender tersimpan pemain.
+  const [genderOverride, setGenderOverride] = useState<
+    Record<string, "male" | "female">
+  >({});
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -4895,6 +4914,19 @@ function CreateScreen({
   const needsEven = isTeamFormat(format);
   const evenOk = !needsEven || names.length % 2 === 0;
 
+  // Format Mix: butuh ≥2 pria & ≥2 wanita. Gender = override lokal / tersimpan.
+  const isMix = isMixFormat(format);
+  const genderOf = (id: string): "male" | "female" | null =>
+    genderOverride[id] ??
+    (registeredList.find((p) => p.id === id)?.gender ?? null);
+  const setGender = (id: string, g: "male" | "female") => {
+    setGenderOverride((prev) => ({ ...prev, [id]: g }));
+    void setPlayerGender(id, g); // persist → dibaca lagi saat sesi (Mix)
+  };
+  const maleCount = selected.filter((s) => genderOf(s.id) === "male").length;
+  const femaleCount = selected.filter((s) => genderOf(s.id) === "female").length;
+  const mixOk = !isMix || (maleCount >= 2 && femaleCount >= 2);
+
   // Pasangan manual (format tim): bersihkan tim yang anggotanya tak lagi dipilih.
   const isManual = isTeamFormat(format) && pairing === "manual";
   const validManualTeams = manualTeams.filter(
@@ -4931,7 +4963,7 @@ function CreateScreen({
       : null;
 
   const canStart =
-    names.length >= 4 && evenOk && manualComplete && !busy;
+    names.length >= 4 && evenOk && manualComplete && mixOk && !busy;
   const startLabel = busy
     ? "Creating…"
     : !evenOk
@@ -5322,6 +5354,14 @@ function CreateScreen({
           onToggle={togglePlayer}
           onAddGuest={addGuest}
         />
+        {isMix && (
+          <p
+            className={`mt-2 text-xs ${mixOk ? "text-on-surface-variant" : "text-error"}`}
+          >
+            Mix needs ≥2 ♂ and ≥2 ♀ — set each player's gender below (currently{" "}
+            {maleCount}♂ / {femaleCount}♀).
+          </p>
+        )}
 
         {names.length === 0 ? (
           <p className="mt-3 text-sm text-on-surface-variant">
@@ -5359,6 +5399,24 @@ function CreateScreen({
                       {guest ? "guest" : "account"}
                     </span>
                   </span>
+                  {isMix && (
+                    <div className="flex shrink-0 overflow-hidden rounded-lg border border-outline-variant text-sm font-bold">
+                      {(["male", "female"] as const).map((g) => (
+                        <button
+                          key={g}
+                          onClick={() => setGender(sel.id, g)}
+                          title={g === "male" ? "Male" : "Female"}
+                          className={`px-2 py-0.5 ${
+                            genderOf(sel.id) === g
+                              ? "bg-primary-fixed text-on-primary-fixed"
+                              : "text-on-surface-variant hover:bg-surface-container"
+                          }`}
+                        >
+                          {g === "male" ? "♂" : "♀"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <button
                     onClick={() => togglePlayer(sel)}
                     className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-lg text-on-surface-variant hover:bg-error-container hover:text-error"
@@ -5595,16 +5653,39 @@ function SessionScreen({
   onExit: (ev: DbEvent | undefined) => void;
 }) {
   const eventQ = useAsync(() => getEvent(eventId), [eventId]);
+  const ev = eventQ.data;
+  const isMix = ev ? isMixFormat(ev.format) : false;
+  // Format Mix butuh gender peserta → ambil by id, petakan ke NAMA (PlayerId sesi).
+  const gendersQ = useAsync(
+    () =>
+      ev && isMix
+        ? gendersForPlayers(ev.playerIds)
+        : Promise.resolve({} as Record<string, "male" | "female" | null>),
+    [ev?.id, isMix]
+  );
   if (eventQ.loading) return <p className="text-slate-400">Loading session…</p>;
-  if (!eventQ.data) return <p>Session not found.</p>;
-  return <SessionInner event={eventQ.data} onExit={onExit} />;
+  if (!ev) return <p>Session not found.</p>;
+  if (isMix && gendersQ.loading)
+    return <p className="text-slate-400">Loading session…</p>;
+
+  const genders: Record<string, "male" | "female"> = {};
+  if (isMix && gendersQ.data) {
+    ev.playerIds.forEach((id, i) => {
+      const g = gendersQ.data![id];
+      const name = ev.players[i];
+      if (g && name) genders[name] = g;
+    });
+  }
+  return <SessionInner event={ev} genders={genders} onExit={onExit} />;
 }
 
 function SessionInner({
   event,
+  genders,
   onExit,
 }: {
   event: DbEvent;
+  genders: Record<string, "male" | "female">;
   onExit: (ev: DbEvent | undefined) => void;
 }) {
   const config: SessionConfig = {
@@ -5632,7 +5713,7 @@ function SessionInner({
   const canEdit = !!user && (user.id === event.ownerId || isLeagueAdmin);
 
   const session = useSession(
-    { config, players: event.players, restore, initialTeams: event.teams },
+    { config, players: event.players, restore, initialTeams: event.teams, genders },
     () => onExit(event)
   );
 

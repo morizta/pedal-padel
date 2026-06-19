@@ -74,6 +74,10 @@ alter table public.leagues add column if not exists photo_url text;
 -- Username unik (handle) + avatar untuk profil.
 alter table public.profiles add column if not exists username   text;
 alter table public.profiles add column if not exists avatar_url text;
+
+-- Gender opsional pemain (untuk format Mix/Mixicano). null = tak ditentukan.
+alter table public.players
+  add column if not exists gender text check (gender in ('male','female'));
 create unique index if not exists profiles_username_lower_key
   on public.profiles (lower(username));
 

@@ -334,7 +334,7 @@ Saat ini ada **4**: Americano, Mexicano, Team Americano, Team Mexicano. Kandidat
 
 | Match type | Deskripsi | Catatan |
 |---|---|---|
-| **Mix Americano / Mixicano** | Tim campur gender (♂+♀); main dgn & lawan semua. | 🟡 **Engine selesai** (`mix.ts`: `generateMixAmericano` + `nextMixicanoRound`, 6 tes). Sisa: gender di players (live DB) + UI input gender + opsi format + wiring `session.ts`. |
+| **Mix Americano / Mixicano** | Tim campur gender (♂+♀); main dgn & lawan semua. | ✅ **Terintegrasi.** Engine `mix.ts` (6 tes) + `players.gender` (live schema & schema-v2) + UI input ♂/♀ di Buat Sesi (validasi ≥2♂+2♀) + opsi format + wiring `session.ts` (init/nextRound/reshuffle) + SessionScreen ambil gender peserta. ⚠️ Jalankan `alter table players add gender` di Supabase. |
 | **King of the Hill (KOTH)** | Pemenang naik lapangan, yang kalah turun; lapangan lebih tinggi poin lebih besar. | Format dinamis berbasis lapangan; engine baru. |
 | **Team KOTH** | KOTH dgn tim tetap. | — |
 | **Club Americano / Club Team / Club Mexicano** | 2 klub; pasangan hanya dalam klub, lawan lintas klub. | Butuh konsep "klub" pada peserta (≈ komunitas/tim). |
