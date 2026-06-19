@@ -93,21 +93,56 @@ export function generateAmericano(
     }
   }
 
-  // 2. Pak SEMUA match secara global ke lapangan: tiap ronde memaksimalkan
-  //    lapangan (≤ courts) tanpa pemain main dua kali. Ronde parsial hanya di akhir.
+  // 2. Penjadwalan RECENCY-AWARE: bangun ronde satu per satu; tiap ronde
+  //    memprioritaskan pemain yang BARU istirahat → tak ada "main beruntun"
+  //    panjang (memperbaiki DEF-1). Tetap memaksimalkan lapangan (ronde penuh
+  //    kecuali yang terakhir) & tak ada pemain main dua kali per ronde.
+  const remaining = allMatches.slice();
+  const consec = new Array<number>(n).fill(0); // ronde main beruntun s/d ronde lalu
+  const playedTotal = new Array<number>(n).fill(0); // total main (tie-break keadilan)
   const buckets: { ms: [number, number, number, number][]; using: Set<number> }[] =
     [];
-  for (const m of allMatches) {
-    let placed = false;
-    for (const bk of buckets) {
-      if (bk.ms.length < courts && !m.some((p) => bk.using.has(p))) {
-        bk.ms.push(m);
-        for (const p of m) bk.using.add(p);
-        placed = true;
-        break;
+
+  while (remaining.length) {
+    const using = new Set<number>();
+    const ms: [number, number, number, number][] = [];
+    while (ms.length < courts) {
+      // Pilih match bebas-konflik dgn "tekanan main" terkecil:
+      //   utama  = Σ consec[p]  → utamakan pemain yang baru istirahat
+      //   tie    = Σ playedTotal[p] → utamakan yang lebih jarang main
+      let bestK = -1;
+      let bestScore = Infinity;
+      let bestTie = Infinity;
+      for (let k = 0; k < remaining.length; k++) {
+        const m = remaining[k]!;
+        if (m.some((p) => using.has(p))) continue;
+        let score = 0;
+        let tie = 0;
+        for (const p of m) {
+          score += consec[p]!;
+          tie += playedTotal[p]!;
+        }
+        if (score < bestScore || (score === bestScore && tie < bestTie)) {
+          bestScore = score;
+          bestTie = tie;
+          bestK = k;
+        }
+      }
+      if (bestK < 0) break; // tak ada match bebas-konflik lagi → ronde (parsial) selesai
+      const picked = remaining.splice(bestK, 1)[0]!;
+      ms.push(picked);
+      for (const p of picked) using.add(p);
+    }
+    // Perbarui streak: yang main → consec++ & total++; yang istirahat → consec=0.
+    for (let p = 0; p < n; p++) {
+      if (using.has(p)) {
+        consec[p] = consec[p]! + 1;
+        playedTotal[p] = playedTotal[p]! + 1;
+      } else {
+        consec[p] = 0;
       }
     }
-    if (!placed) buckets.push({ ms: [m], using: new Set(m) });
+    buckets.push({ ms, using });
   }
 
   return buckets.map((bk, idx) => ({

@@ -120,3 +120,43 @@ describe("generateAmericano — round-robin pasangan", () => {
     for (const r of rounds) expect(r.matches.length).toBeLessThanOrEqual(1);
   });
 });
+
+describe("generateAmericano — keadilan temporal (DEF-1: tak main beruntun)", () => {
+  function maxConsecutivePlay(
+    rounds: ReturnType<typeof generateAmericano>,
+    id: PlayerId
+  ): number {
+    let max = 0;
+    let cur = 0;
+    for (const r of rounds) {
+      const playing = r.matches.some((m) =>
+        [...m.teamA, ...m.teamB].includes(id)
+      );
+      if (playing) {
+        cur += 1;
+        max = Math.max(max, cur);
+      } else {
+        cur = 0;
+      }
+    }
+    return max;
+  }
+
+  it("7 pemain / 1 lapangan: tak ada yang main > 3 ronde beruntun (kasus trial)", () => {
+    const ps = players(7);
+    const rounds = generateAmericano(ps, { courts: 1 });
+    for (const id of ps) {
+      expect(maxConsecutivePlay(rounds, id)).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it("penjadwalan recency-aware menyebar main/istirahat (6 & 11 pemain, 1 lapangan)", () => {
+    for (const n of [6, 11]) {
+      const ps = players(n);
+      const rounds = generateAmericano(ps, { courts: 1 });
+      for (const id of ps) {
+        expect(maxConsecutivePlay(rounds, id)).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+});
