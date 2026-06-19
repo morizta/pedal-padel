@@ -6015,20 +6015,58 @@ function MetaBar({
             ))}
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={async () => {
-              await updateEvent(event.id, { status: "finished" });
-              onExit(event);
-            }}
-            className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
-          >
-            <span className="material-symbols-outlined text-[20px]">
-              check_circle
-            </span>
-            Mark finished
-          </button>
-        )}
+        {canEdit &&
+          (event.status === "finished" ? (
+            // Sudah selesai → tak ada tombol finish; tawarkan buka kembali.
+            <button
+              onClick={async () => {
+                await updateEvent(event.id, { status: "live" });
+                onExit(event);
+              }}
+              className="flex items-center gap-1.5 rounded-xl border border-white/25 px-4 py-2.5 font-semibold text-white transition hover:bg-white/10 active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                restart_alt
+              </span>
+              Reopen
+            </button>
+          ) : event.startAt && event.startAt > Date.now() ? (
+            // Terjadwal (belum waktunya) → tombol mulai lebih awal.
+            // (Otomatis jadi "berlangsung" begitu waktu lewat.)
+            <button
+              onClick={async () => {
+                await updateEvent(event.id, { startAt: null });
+                onExit(event);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                play_arrow
+              </span>
+              Start now
+            </button>
+          ) : (
+            // Berlangsung → tombol selesai (dengan konfirmasi).
+            <button
+              onClick={async () => {
+                if (
+                  !(await confirmDialog(
+                    "Mark this tournament as finished? Standings will be final.",
+                    { title: "Finish tournament" }
+                  ))
+                )
+                  return;
+                await updateEvent(event.id, { status: "finished" });
+                onExit(event);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-primary-fixed px-4 py-2.5 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                check_circle
+              </span>
+              Mark finished
+            </button>
+          ))}
       </div>
     </section>
   );

@@ -279,10 +279,15 @@ masuk ranking global (BR-2). Komunitas **lintas-sport** (BR-12).
 **Siklus hidup event:**
 1. **Buat** (`/main/baru`): pilih sport, format, lapangan, peserta, skor, jadwal,
    visibilitas → status `live`, ronde 1 ter-generate (lihat §9).
-2. **Berlangsung** (`/main/:id`): input skor, **Ronde berikutnya** / **Tambah ronde**
-   (lanjut tanpa sesi baru, FR-EV-4) / **Acak ulang**; klasemen real-time.
-3. **Akhiri** → status `finished` (idealnya cap `finished_at`); hasil mengunci
-   klasemen turnamen & menyumbang ELO komunitas + global (§8, BR-8).
+2. **Terjadwal** (start_at masa depan): tampil sebagai *upcoming*. Tombol **Start now**
+   memulai lebih awal (hapus jadwal). **Auto-start**: begitu waktu lewat, status
+   terjadwal hilang → otomatis dianggap **berlangsung** (turunan, tanpa aksi).
+3. **Berlangsung** (`/main/:id`): input skor, **Ronde berikutnya** / **Tambah ronde**
+   (lanjut tanpa sesi baru, FR-EV-4) / **Acak ulang**; klasemen real-time. Tombol
+   **Mark finished** (dengan konfirmasi).
+4. **Selesai** → status `finished`; hasil mengunci klasemen turnamen & menyumbang ELO
+   (§8, BR-8). Tombol finish **tak muncul lagi**; diganti **Reopen** (kembali ke
+   `live`) bila perlu koreksi.
 
 **Backlog terkait event:**
 - **Join event + approval toggle** (FR-EV-8/9) — model seragam dgn komunitas.

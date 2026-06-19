@@ -944,13 +944,21 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
 
 export async function updateEvent(
   id: string,
-  patch: { rounds?: Round[]; scores?: Scores; teams?: Pair[]; status?: string }
+  patch: {
+    rounds?: Round[];
+    scores?: Scores;
+    teams?: Pair[];
+    status?: string;
+    startAt?: number | null;
+  }
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.rounds !== undefined) row.rounds = patch.rounds;
   if (patch.scores !== undefined) row.scores = patch.scores;
   if (patch.teams !== undefined) row.teams = patch.teams;
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.startAt !== undefined)
+    row.start_at = patch.startAt ? new Date(patch.startAt).toISOString() : null;
   const { error } = await db().from("events").update(row).eq("id", id);
   if (error) throw error;
 }
