@@ -194,7 +194,8 @@ jelajah, ranking, profil (RLS baca publik). Aksi tulis → prompt **Masuk/Daftar
   — tak terpengaruh toggle.
 - **Status sekarang:** publik **selalu** approval; privat-via-kode & undangan
   **langsung** member (belum ada toggle). Target = jadikan approval **konfigurabel**
-  & berlaku ke kode juga.
+  & berlaku ke kode juga. **schema-v2 sudah menyiapkan** kolom `require_approval` +
+  RPC join yang menghormatinya (tinggal app).
 - **Approver** = owner atau admin ("admin atau lainnya" = pemegang peran admin).
 
 - Ganti **Publik → Privat**: sistem **meng-generate kode** baru bila belum ada.
@@ -281,7 +282,9 @@ masuk ranking global (BR-2). Komunitas **lintas-sport** (BR-12).
    klasemen turnamen & menyumbang ELO komunitas + global (§8, BR-8).
 
 **Backlog terkait event:**
-- **Join event + approval toggle** (FR-EV-8/9) — model seragam dgn komunitas. **Dikonfirmasi**, belum diimplementasi.
+- **Join event + approval toggle** (FR-EV-8/9) — model seragam dgn komunitas.
+  **schema-v2 sudah memodelkan** (`require_approval`, `join_code`, tabel `event_users`,
+  RPC `request_join_event`/`join_event_with_code`/`invite_to_event`). Tinggal app.
 - Visibilitas event yang **benar-benar menyembunyikan** baca (perlu ubah RLS dari
   `using(true)` ke berbasis `event_is_public`).
 - Tambah/keluarkan peserta **setelah** event berjalan (saat ini roster ditetapkan di awal).
@@ -674,6 +677,9 @@ hanya superadmin (RLS). *Alur:* hapus pemain; merge dgn pratinjau match terdampa
   `player_names[]` — id & nama snapshot satu baris, tak bisa desync).
 - EVENT 1:N MATCH; MATCH N:M PEMAIN lewat **MATCH_PEMAIN** (FK ke PEMAIN → integritas).
 - **SPORT** (padel/tenis/…): tiap EVENT terikat **satu sport**; komunitas **lintas-sport**.
+- **Keanggotaan-akun seragam**: KOMUNITAS_ANGGOTA (`league_users`) & **EVENT_ANGGOTA**
+  (`event_users`) — keduanya status `pending`/`member` + toggle `require_approval`
+  (BR-14). Berbeda dari **peserta-pemain** (EVENT_PESERTA, termasuk tamu).
 - RATING_PEMAIN di-scope **per (pemain, sport, komunitas|global)** — satu baris
   global per sport + satu baris per (komunitas, sport).
 
