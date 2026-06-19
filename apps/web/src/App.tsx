@@ -528,35 +528,38 @@ function DashboardScreen({
                 : "Browse rankings, leagues & tournaments. Sign in / Sign up (top right) to start playing."}
             </p>
           </div>
-          {user && (
-            <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-              <div className="font-label-caps text-label-caps text-primary-fixed">
-                {nextMatch ? "NEXT MATCH" : "STATS"}
-              </div>
-              {nextMatch ? (
-                <button
-                  onClick={() => onNavigate({ t: "session", id: nextMatch.id })}
-                  className="mt-1 block text-left"
-                >
-                  <div className="truncate font-bold">{nextMatch.name}</div>
-                  <div className="text-xs text-white/60">
-                    {nextMatch.startAt
-                      ? `🗓 ${fmtDate(nextMatch.startAt)}`
-                      : "Ongoing"}
-                  </div>
-                </button>
-              ) : (
-                <div className="mt-1 flex items-end gap-3">
-                  <span className="font-data-mono text-2xl font-bold text-primary-fixed">
-                    {myRating?.matchesPlayed ? Math.round(myRating.rating) : 1000}
+          {user &&
+            (nextMatch ? (
+              <button
+                onClick={() => onNavigate({ t: "session", id: nextMatch.id })}
+                className="rounded-xl bg-primary-fixed/10 px-4 py-3 text-left ring-1 ring-primary-fixed/30 transition hover:bg-primary-fixed/20"
+              >
+                <div className="flex items-center gap-1.5 font-label-caps text-label-caps text-primary-fixed">
+                  <span className="material-symbols-outlined text-[16px]">
+                    sports_tennis
                   </span>
-                  <span className="pb-1 text-xs text-white/50">
-                    ELO{myIdx >= 0 ? ` · #${myIdx + 1}` : ""}
-                  </span>
+                  NEXT MATCH
                 </div>
-              )}
-            </div>
-          )}
+                <div className="mt-1 max-w-[12rem] truncate font-bold">
+                  {nextMatch.name}
+                </div>
+                <div className="text-xs text-white/60">
+                  {nextMatch.startAt
+                    ? `🗓 ${fmtDate(nextMatch.startAt)}`
+                    : "Ongoing"}
+                </div>
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigate({ t: "create", leagueId: null })}
+                className="flex items-center gap-2 rounded-xl bg-primary-fixed px-4 py-3 font-semibold text-on-primary-fixed transition hover:bg-primary-fixed-dim"
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  add_circle
+                </span>
+                New session
+              </button>
+            ))}
         </div>
       </section>
 
@@ -581,7 +584,9 @@ function DashboardScreen({
           Explore
         </button>
         <button
-          onClick={() => onNavigate({ t: "leagues" })}
+          onClick={() =>
+            user ? onNavigate({ t: "myLeagues" }) : needLogin()
+          }
           className="flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 font-semibold transition hover:border-primary-fixed-dim"
         >
           <span className="material-symbols-outlined text-on-surface-variant">
@@ -716,7 +721,7 @@ function DashboardScreen({
             <div className="font-label-caps text-label-caps text-primary-fixed">
               MY STATS
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center">
               {[
                 {
                   k: "ELO",
@@ -724,14 +729,15 @@ function DashboardScreen({
                     ? Math.round(myRating.rating)
                     : 1000,
                 },
+                { k: "Rank", v: myIdx >= 0 ? `#${myIdx + 1}` : "–" },
+                { k: "Matches", v: myRating?.matchesPlayed ?? 0 },
                 {
                   k: "Win %",
                   v: mySt ? `${Math.round(mySt.winRate * 100)}%` : "0%",
                 },
-                { k: "Rank", v: myIdx >= 0 ? `#${myIdx + 1}` : "–" },
               ].map((s) => (
                 <div key={s.k} className="rounded-xl bg-white/5 py-3">
-                  <div className="font-data-mono text-xl font-bold text-primary-fixed">
+                  <div className="font-data-mono text-xl font-bold text-primary-fixed tabular-nums">
                     {s.v}
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-white/50">
