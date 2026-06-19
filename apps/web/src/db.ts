@@ -536,6 +536,7 @@ export interface DiscoverLeague {
   createdAt: number;
   memberCount: number;
   myStatus: "member" | "pending" | null;
+  photoUrl: string | null;
 }
 
 /** Liga PUBLIC yang bisa ditemukan & di-request gabung. */
@@ -543,7 +544,7 @@ export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
   const uid = await currentUserId();
   let query = db()
     .from("leagues")
-    .select("id,name,created_at,league_users(user_id,status)")
+    .select("id,name,created_at,photo_url,league_users(user_id,status)")
     .eq("visibility", "public")
     .order("created_at", { ascending: false })
     .limit(50);
@@ -560,6 +561,7 @@ export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
       myStatus: uid
         ? (lu.find((m: any) => m.user_id === uid)?.status ?? null)
         : null,
+      photoUrl: r.photo_url ?? null,
     };
   });
 }
@@ -571,6 +573,7 @@ export interface LatestLeague {
   memberCount: number;
   visibility: "private" | "public";
   myStatus: "member" | "pending" | null;
+  photoUrl: string | null;
 }
 
 /**
@@ -581,7 +584,7 @@ export async function latestLeagues(limit = 8): Promise<LatestLeague[]> {
   const uid = await currentUserId();
   const { data, error } = await db()
     .from("leagues")
-    .select("id,name,created_at,visibility,league_users(user_id,status)")
+    .select("id,name,created_at,visibility,photo_url,league_users(user_id,status)")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -596,6 +599,7 @@ export async function latestLeagues(limit = 8): Promise<LatestLeague[]> {
       myStatus: uid
         ? (lu.find((m: any) => m.user_id === uid)?.status ?? null)
         : null,
+      photoUrl: r.photo_url ?? null,
     };
   });
 }
