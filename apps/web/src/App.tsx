@@ -2003,6 +2003,9 @@ function ProfileScreen({
                 </h1>
                 <div className="text-sm text-white/60">@{shownUser}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="rounded border border-primary-fixed/30 bg-primary-fixed/10 px-2 py-1 font-label-caps text-label-caps text-primary-fixed">
+                    {me?.played ? Math.round(me.rating ?? 1000) : 1000} ELO
+                  </span>
                   {me?.rank != null && (
                     <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
                       #{me.rank} GLOBAL
@@ -2011,6 +2014,11 @@ function ProfileScreen({
                   <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
                     {me?.played ?? 0} MATCH
                   </span>
+                  {me?.st && me.played > 0 && (
+                    <span className="rounded border border-white/15 bg-white/5 px-2 py-1 font-label-caps text-label-caps">
+                      {Math.round(me.st.winRate * 100)}% WIN
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
