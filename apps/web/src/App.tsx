@@ -1805,6 +1805,8 @@ function ProfileScreen({
     [user]
   );
   const [editing, setEditing] = useState(false);
+  // Mobile: tab antara dua list (tak numpuk panjang). Desktop tampil berdampingan.
+  const [tab, setTab] = useState<"matches" | "tournaments">("matches");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -2111,7 +2113,34 @@ function ProfileScreen({
         </section>
       </div>
 
-      {/* Turnamen Terakhir */}
+      {/* Mobile: tab Matches/Tournaments (tak numpuk). Desktop: berdampingan. */}
+      <div className="flex rounded-2xl border border-outline-variant/40 bg-surface-container p-1 text-sm font-semibold lg:hidden">
+        {(
+          [
+            ["matches", "Matches", "history"],
+            ["tournaments", "Tournaments", "sports_tennis"],
+          ] as const
+        ).map(([k, l, icon]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 transition ${
+              tab === k
+                ? "bg-primary-fixed text-on-primary-fixed"
+                : "text-on-surface-variant"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+      {/* Turnamen Terakhir (kanan di desktop) */}
+      <div
+        className={`${tab === "tournaments" ? "" : "hidden lg:block"} lg:order-2`}
+      >
       <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 font-display text-base font-bold">
@@ -2174,8 +2203,10 @@ function ProfileScreen({
           })}
         </ul>
       </section>
+      </div>
 
-      {/* Pertandingan Terakhir */}
+      {/* Pertandingan Terakhir (kiri di desktop) */}
+      <div className={`${tab === "matches" ? "" : "hidden lg:block"} lg:order-1`}>
       <section className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 font-display text-base font-bold">
@@ -2205,6 +2236,8 @@ function ProfileScreen({
           ))}
         </ul>
       </section>
+      </div>
+      </div>
 
       {isSA.data && (
         <button
