@@ -15,6 +15,12 @@ import type { Pair, PlayerId, Round, Match, MatchResult } from "./types.js";
 export interface TeamFormatOptions {
   /** Jumlah lapangan. Default: floor(jumlahTim / 2). */
   courts?: number;
+  /**
+   * Rotasi bye adil untuk Team Mexicano: teamKey → berapa kali tim sudah
+   * istirahat. Bila ada tim yang harus istirahat, pilih yang paling sedikit
+   * istirahat (bukan peringkat terbawah). Mencegah tim mandek di-bench (DEF-3).
+   */
+  restCount?: Record<string, number>;
 }
 
 /** Bentuk tim (pasangan) dari daftar pemain berurutan: [p0,p1],[p2,p3],… */
@@ -28,10 +34,10 @@ export function pairUp(players: readonly PlayerId[]): Pair[] {
 
 function resolveCourts(numTeams: number, opts: TeamFormatOptions): number {
   const courts = opts.courts ?? Math.floor(numTeams / 2);
-  if (courts < 1) throw new Error("Butuh minimal 2 tim (4 pemain).");
+  if (courts < 1) throw new Error("Needs at least 2 teams (4 players).");
   if (courts * 2 > numTeams) {
     throw new Error(
-      `Lapangan terlalu banyak: butuh ${courts * 2} tim untuk ${courts} lapangan, hanya ada ${numTeams}.`
+      `Too many courts: need ${courts * 2} teams for ${courts} courts, only ${numTeams} available.`
     );
   }
   return courts;
@@ -74,7 +80,7 @@ export function generateTeamAmericano(
   teams: readonly Pair[],
   opts: TeamFormatOptions = {}
 ): Round[] {
-  if (teams.length < 2) throw new Error("Team Americano butuh minimal 2 tim.");
+  if (teams.length < 2) throw new Error("Team Americano needs at least 2 teams.");
   const courts = resolveCourts(teams.length, opts);
   const pairs = roundRobinPairs(teams.length);
 
@@ -115,11 +121,29 @@ export function nextTeamMexicanoRound(
   roundIndex: number,
   opts: TeamFormatOptions = {}
 ): Round {
-  if (rankedTeams.length < 2) throw new Error("Team Mexicano butuh minimal 2 tim.");
+  if (rankedTeams.length < 2) throw new Error("Team Mexicano needs at least 2 teams.");
   const courts = resolveCourts(rankedTeams.length, opts);
   const perRound = courts * 2;
-  const active = rankedTeams.slice(0, perRound);
-  const resting = rankedTeams.slice(perRound);
+  const restN = rankedTeams.length - perRound;
+
+  let active: readonly Pair[];
+  let resting: readonly Pair[];
+  if (restN <= 0) {
+    active = rankedTeams.slice(0, perRound);
+    resting = rankedTeams.slice(perRound);
+  } else {
+    // Rotasi bye adil: istirahatkan tim yang PALING SEDIKIT istirahat.
+    const rc = opts.restCount ?? {};
+    const restSet = new Set(
+      rankedTeams
+        .map((t, rank) => ({ k: teamKey(t), rank }))
+        .sort((a, b) => (rc[a.k] ?? 0) - (rc[b.k] ?? 0) || b.rank - a.rank)
+        .slice(0, restN)
+        .map((x) => x.k)
+    );
+    resting = rankedTeams.filter((t) => restSet.has(teamKey(t)));
+    active = rankedTeams.filter((t) => !restSet.has(teamKey(t))); // tetap urut peringkat
+  }
 
   const matches: Match[] = [];
   for (let c = 0; c < courts; c++) {

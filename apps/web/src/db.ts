@@ -16,7 +16,7 @@ import type { Format, ScoringConfig, Scores } from "./session";
 import { supabase } from "./supabase";
 
 function db() {
-  if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+  if (!supabase) throw new Error("Supabase is not configured.");
   return supabase;
 }
 
@@ -49,26 +49,37 @@ export async function countProfiles(): Promise<number> {
 
 /* ---------- Pemain ---------- */
 
+export type Gender = "male" | "female";
+
 export interface Player {
   id: string;
   name: string;
   isGuest: boolean;
+  gender: Gender | null;
 }
 
 function mapPlayer(r: {
   id: string;
   display_name: string;
   user_id: string | null;
+  gender?: string | null;
 }): Player {
-  return { id: r.id, name: r.display_name, isGuest: !r.user_id };
+  return {
+    id: r.id,
+    name: r.display_name,
+    isGuest: !r.user_id,
+    gender: (r.gender as Gender | null) ?? null,
+  };
 }
+
+const PLAYER_COLS = "id,display_name,user_id,gender";
 
 export async function listPlayers(): Promise<Player[]> {
   const owner = await currentUserId();
   if (!owner) return [];
   const { data, error } = await db()
     .from("players")
-    .select("id,display_name,user_id")
+    .select(PLAYER_COLS)
     .eq("owner_id", owner)
     .order("display_name");
   if (error) throw error;
@@ -79,7 +90,7 @@ export async function listPlayers(): Promise<Player[]> {
 export async function adminListPlayers(limit = 1000): Promise<Player[]> {
   const { data, error } = await db()
     .from("players")
-    .select("id,display_name,user_id")
+    .select(PLAYER_COLS)
     .order("display_name")
     .limit(limit);
   if (error) throw error;
@@ -88,35 +99,195 @@ export async function adminListPlayers(limit = 1000): Promise<Player[]> {
 
 export async function createPlayer(
   name: string,
-  opts: { guest?: boolean } = {}
+  opts: { guest?: boolean; gender?: Gender } = {}
 ): Promise<Player | undefined> {
   const clean = name.trim();
   if (!clean) return undefined;
   const owner = await currentUserId();
-  if (!owner) throw new Error("Harus login untuk menambah pemain.");
+  if (!owner) throw new Error("You must be signed in to add a player.");
 
   // Dedupe by nama (case-insensitive) milik user ini.
   const { data: existing } = await db()
     .from("players")
-    .select("id,display_name,user_id")
+    .select(PLAYER_COLS)
     .eq("owner_id", owner)
     .ilike("display_name", clean)
     .limit(1);
-  if (existing && existing.length) return mapPlayer(existing[0]!);
+  if (existing && existing.length) {
+    const p = mapPlayer(existing[0]!);
+    // Isi gender bila belum ada & disediakan.
+    if (opts.gender && !p.gender) {
+      await db().from("players").update({ gender: opts.gender }).eq("id", p.id);
+      return { ...p, gender: opts.gender };
+    }
+    return p;
+  }
 
   const { data, error } = await db()
     .from("players")
-    .insert({ display_name: clean, owner_id: owner })
-    .select("id,display_name,user_id")
+    .insert({ display_name: clean, owner_id: owner, gender: opts.gender ?? null })
+    .select(PLAYER_COLS)
     .single();
   if (error) throw error;
-  void opts;
   return mapPlayer(data!);
+}
+
+/** Set/ubah gender pemain (untuk format Mix). */
+export async function setPlayerGender(
+  id: string,
+  gender: Gender | null
+): Promise<void> {
+  const { error } = await db().from("players").update({ gender }).eq("id", id);
+  if (error) throw error;
+}
+
+/* ---------- Upload foto ke Supabase Storage (ganti base64) ---------- */
+
+/** Resize gambar → Blob JPEG (di browser, via canvas). */
+function resizeToJpegBlob(file: File, max: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("Resize failed"))),
+          "image/jpeg",
+          0.82
+        );
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+export type ImageBucket = "avatars" | "event-photos" | "league-photos";
+
+/** Resize + unggah gambar ke Storage → kembalikan URL publik (bukan base64). */
+export async function uploadImage(
+  file: File,
+  bucket: ImageBucket,
+  max = 512
+): Promise<string> {
+  const blob = await resizeToJpegBlob(file, max);
+  const uid = (await currentUserId()) ?? "anon";
+  const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const { error } = await db()
+    .storage.from(bucket)
+    .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+  if (error) throw error;
+  const { data } = db().storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Peta playerId → foto profil (avatar) untuk pemain ber-akun (global). */
+export async function globalAvatars(): Promise<Record<string, string>> {
+  const { data: pls } = await db()
+    .from("players")
+    .select("id,user_id")
+    .not("user_id", "is", null);
+  const userIds = [
+    ...new Set((pls ?? []).map((p) => p.user_id).filter(Boolean)),
+  ] as string[];
+  if (!userIds.length) return {};
+  const { data: profs } = await db()
+    .from("profiles")
+    .select("id,avatar_url")
+    .in("id", userIds);
+  const avByUser = new Map(
+    (profs ?? []).map((p) => [p.id, p.avatar_url as string | null])
+  );
+  const out: Record<string, string> = {};
+  for (const p of pls ?? []) {
+    const av = p.user_id ? avByUser.get(p.user_id) : null;
+    if (av) out[p.id] = av;
+  }
+  return out;
+}
+
+/** Gender beberapa pemain by id → { id: gender|null } (untuk format Mix). */
+export async function gendersForPlayers(
+  ids: string[]
+): Promise<Record<string, Gender | null>> {
+  if (!ids.length) return {};
+  const { data } = await db().from("players").select("id,gender").in("id", ids);
+  const out: Record<string, Gender | null> = {};
+  for (const r of data ?? []) out[r.id] = (r.gender as Gender | null) ?? null;
+  return out;
 }
 
 export async function deletePlayer(id: string): Promise<void> {
   const { error } = await db().from("players").delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Gabungkan pemain TAMU ke sebuah AKUN: ganti nama tamu → nama akun di semua
+ * turnamen (player_names, player_ids, teams, rounds), lalu hapus baris tamu.
+ * Identitas ranking = NAMA, jadi setelah ini history tamu jadi milik akun.
+ * Superadmin-only (RLS sa_all_events/sa_all_players). Mengembalikan jumlah event.
+ */
+export async function mergeGuestIntoAccount(
+  guestId: string,
+  guestName: string,
+  accountId: string,
+  accountName: string
+): Promise<{ events: number }> {
+  // Nama sudah sama → history sudah otomatis gabung; cukup hapus baris tamu.
+  if (guestName === accountName) {
+    await deletePlayer(guestId);
+    return { events: 0 };
+  }
+
+  const all = await listVisibleEvents();
+  const affected = all.filter(
+    (e) => e.players.includes(guestName) || e.playerIds.includes(guestId)
+  );
+  // Cegah konflik: tamu & akun pernah main di turnamen yang sama.
+  const clash = affected.find((e) => e.players.includes(accountName));
+  if (clash)
+    throw new Error(
+      `Guest and account are both in tournament "${clash.name}". Merge cancelled to avoid a conflict.`
+    );
+
+  const rn = (n: string) => (n === guestName ? accountName : n);
+  const ri = (id: string) => (id === guestId ? accountId : id);
+
+  for (const e of affected) {
+    const rounds = e.rounds.map((r) => ({
+      ...r,
+      resting: (r.resting ?? []).map(rn),
+      matches: r.matches.map((m) => ({
+        ...m,
+        teamA: m.teamA.map(rn) as [string, string],
+        teamB: m.teamB.map(rn) as [string, string],
+      })),
+    }));
+    const teams = (e.teams ?? []).map(
+      (t) => [rn(t[0]), rn(t[1])] as [string, string]
+    );
+    const { error } = await db()
+      .from("events")
+      .update({
+        player_names: e.players.map(rn),
+        player_ids: e.playerIds.map(ri),
+        teams,
+        rounds,
+      })
+      .eq("id", e.id);
+    if (error) throw error;
+  }
+
+  await deletePlayer(guestId);
+  return { events: affected.length };
 }
 
 /**
@@ -135,7 +306,7 @@ export async function ensureSelfPlayer(name: string): Promise<void> {
   if (data && data.length > 0) return; // sudah ada
   await db()
     .from("players")
-    .insert({ display_name: name.trim() || "Pemain", user_id: uid, owner_id: uid });
+    .insert({ display_name: name.trim() || "Player", user_id: uid, owner_id: uid });
 }
 
 export interface AccountHit {
@@ -168,7 +339,7 @@ export async function searchUsers(query: string): Promise<AccountHit[]> {
   return profs
     .map((pr) => ({
       id: byUser.get(pr.id) ?? "",
-      name: pr.name ?? pr.username ?? "Pemain",
+      name: pr.name ?? pr.username ?? "Player",
       username: pr.username,
       avatarUrl: pr.avatar_url,
     }))
@@ -217,7 +388,7 @@ export async function updateProfile(patch: {
   avatarUrl?: string | null;
 }): Promise<void> {
   const uid = await currentUserId();
-  if (!uid) throw new Error("Harus login.");
+  if (!uid) throw new Error("You must be signed in.");
   const row: Record<string, unknown> = {};
   if (patch.name !== undefined) row.name = patch.name.trim();
   if (patch.username !== undefined) row.username = patch.username.trim().toLowerCase();
@@ -226,7 +397,7 @@ export async function updateProfile(patch: {
   const { error } = await db().from("profiles").update(row).eq("id", uid);
   if (error) {
     if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
-      throw new Error("Username sudah dipakai. Coba yang lain.");
+      throw new Error("Username is already taken. Try another.");
     }
     throw error;
   }
@@ -326,12 +497,12 @@ export interface NewLeague {
 
 export async function createLeague(input: NewLeague): Promise<League> {
   const owner = await currentUserId();
-  if (!owner) throw new Error("Harus login untuk membuat liga.");
+  if (!owner) throw new Error("You must be signed in to create a league.");
   const visibility = input.visibility ?? "private";
   const { data, error } = await db()
     .from("leagues")
     .insert({
-      name: input.name.trim() || "Liga Tanpa Nama",
+      name: input.name.trim() || "Untitled League",
       owner_id: owner,
       description: input.description?.trim() || null,
       notes: input.notes?.trim() || null,
@@ -360,7 +531,7 @@ export async function updateLeague(
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.name !== undefined)
-    row.name = patch.name.trim() || "Liga Tanpa Nama";
+    row.name = patch.name.trim() || "Untitled League";
   if (patch.description !== undefined)
     row.description = patch.description?.trim() || null;
   if (patch.notes !== undefined) row.notes = patch.notes?.trim() || null;
@@ -412,6 +583,7 @@ export interface DiscoverLeague {
   createdAt: number;
   memberCount: number;
   myStatus: "member" | "pending" | null;
+  photoUrl: string | null;
 }
 
 /** Liga PUBLIC yang bisa ditemukan & di-request gabung. */
@@ -419,7 +591,7 @@ export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
   const uid = await currentUserId();
   let query = db()
     .from("leagues")
-    .select("id,name,created_at,league_users(user_id,status)")
+    .select("id,name,created_at,photo_url,league_users(user_id,status)")
     .eq("visibility", "public")
     .order("created_at", { ascending: false })
     .limit(50);
@@ -436,6 +608,7 @@ export async function discoverLeagues(q?: string): Promise<DiscoverLeague[]> {
       myStatus: uid
         ? (lu.find((m: any) => m.user_id === uid)?.status ?? null)
         : null,
+      photoUrl: r.photo_url ?? null,
     };
   });
 }
@@ -447,6 +620,7 @@ export interface LatestLeague {
   memberCount: number;
   visibility: "private" | "public";
   myStatus: "member" | "pending" | null;
+  photoUrl: string | null;
 }
 
 /**
@@ -457,7 +631,7 @@ export async function latestLeagues(limit = 8): Promise<LatestLeague[]> {
   const uid = await currentUserId();
   const { data, error } = await db()
     .from("leagues")
-    .select("id,name,created_at,visibility,league_users(user_id,status)")
+    .select("id,name,created_at,visibility,photo_url,league_users(user_id,status)")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -472,6 +646,7 @@ export async function latestLeagues(limit = 8): Promise<LatestLeague[]> {
       myStatus: uid
         ? (lu.find((m: any) => m.user_id === uid)?.status ?? null)
         : null,
+      photoUrl: r.photo_url ?? null,
     };
   });
 }
@@ -505,7 +680,7 @@ export async function discoverPlayers(q?: string): Promise<AccountUser[]> {
   if (error) throw error;
   return (data ?? []).map((p: any) => ({
     userId: p.id,
-    name: p.name ?? p.username ?? "Pemain",
+    name: p.name ?? p.username ?? "Player",
     username: p.username,
     avatarUrl: p.avatar_url,
   }));
@@ -572,7 +747,7 @@ export async function listLeagueMembers(
       userId: m.user_id,
       status: m.status,
       role: m.role,
-      name: p?.name ?? p?.username ?? "Pemain",
+      name: p?.name ?? p?.username ?? "Player",
       username: p?.username ?? null,
       avatarUrl: p?.avatar_url ?? null,
     };
@@ -644,7 +819,7 @@ export async function searchAccounts(query: string): Promise<AccountUser[]> {
   if (error) throw error;
   return (data ?? []).map((p: any) => ({
     userId: p.id,
-    name: p.name ?? p.username ?? "Pemain",
+    name: p.name ?? p.username ?? "Player",
     username: p.username,
     avatarUrl: p.avatar_url,
   }));
@@ -670,6 +845,9 @@ export interface DbEvent {
   photoUrl: string | null;
   /** Jadwal mulai (ms). null = mulai sekarang/segera. */
   startAt: number | null;
+  /** Pengaturan leaderboard sesi (diatur saat buat sesi). */
+  standingsSort: "points" | "wins";
+  tiebreak: "unique" | "allow" | "skip";
   playerIds: string[];
   /** Nama peserta (identitas engine). */
   players: string[];
@@ -680,7 +858,7 @@ export interface DbEvent {
 }
 
 const EVENT_COLS =
-  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,notes,photo_url,start_at,player_ids,player_names,teams,rounds,scores,created_at";
+  "id,league_id,owner_id,name,format,courts,scoring,randomize_start,status,visibility,description,notes,photo_url,start_at,standings_sort,tiebreak,player_ids,player_names,teams,rounds,scores,created_at";
 
 function mapEvent(r: any): DbEvent {
   return {
@@ -698,6 +876,8 @@ function mapEvent(r: any): DbEvent {
     notes: r.notes ?? null,
     photoUrl: r.photo_url ?? null,
     startAt: r.start_at ? Date.parse(r.start_at) : null,
+    standingsSort: r.standings_sort ?? "points",
+    tiebreak: r.tiebreak ?? "unique",
     playerIds: r.player_ids ?? [],
     players: r.player_names ?? [],
     teams: r.teams ?? [],
@@ -800,17 +980,20 @@ export interface NewEvent {
   photoUrl?: string | null;
   /** Jadwal mulai (ms). null/undefined = sekarang. */
   startAt?: number | null;
+  /** Pengaturan leaderboard sesi. Default points / unique. */
+  standingsSort?: "points" | "wins";
+  tiebreak?: "unique" | "allow" | "skip";
 }
 
 export async function createEvent(input: NewEvent): Promise<DbEvent> {
   const owner = await currentUserId();
-  if (!owner) throw new Error("Harus login untuk membuat sesi.");
+  if (!owner) throw new Error("You must be signed in to create a session.");
   const { data, error } = await db()
     .from("events")
     .insert({
       league_id: input.leagueId,
       owner_id: owner,
-      name: input.name.trim() || "Sesi Tanpa Nama",
+      name: input.name.trim() || "Untitled Session",
       format: input.format,
       courts: input.courts,
       scoring: input.scoring,
@@ -821,6 +1004,8 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
       notes: input.notes?.trim() || null,
       photo_url: input.photoUrl || null,
       start_at: input.startAt ? new Date(input.startAt).toISOString() : null,
+      standings_sort: input.standingsSort ?? "points",
+      tiebreak: input.tiebreak ?? "unique",
       player_ids: input.participants.map((p) => p.id),
       player_names: input.participants.map((p) => p.name),
       teams: input.teams ?? [],
@@ -835,13 +1020,21 @@ export async function createEvent(input: NewEvent): Promise<DbEvent> {
 
 export async function updateEvent(
   id: string,
-  patch: { rounds?: Round[]; scores?: Scores; teams?: Pair[]; status?: string }
+  patch: {
+    rounds?: Round[];
+    scores?: Scores;
+    teams?: Pair[];
+    status?: string;
+    startAt?: number | null;
+  }
 ): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.rounds !== undefined) row.rounds = patch.rounds;
   if (patch.scores !== undefined) row.scores = patch.scores;
   if (patch.teams !== undefined) row.teams = patch.teams;
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.startAt !== undefined)
+    row.start_at = patch.startAt ? new Date(patch.startAt).toISOString() : null;
   const { error } = await db().from("events").update(row).eq("id", id);
   if (error) throw error;
 }
@@ -864,6 +1057,63 @@ export function eventResults(event: DbEvent): MatchResult[] {
   return out;
 }
 
+// ── Identitas berbasis ID (terjemah saat baca; data tetap simpan nama) ──
+// Peta nama→id untuk satu event (player_names[i] ↔ player_ids[i]).
+function nameToId(e: DbEvent): Map<string, string> {
+  const m = new Map<string, string>();
+  e.players.forEach((nm, i) => {
+    const id = e.playerIds[i];
+    if (id && !m.has(nm)) m.set(nm, id);
+  });
+  return m;
+}
+
+/** Sama seperti eventResults tapi tim memakai ID pemain (fallback: nama). */
+export function eventResultsById(event: DbEvent): MatchResult[] {
+  const map = nameToId(event);
+  const toId = (nm: string) => map.get(nm) ?? nm; // fallback nama (event lama)
+  const out: MatchResult[] = [];
+  for (const r of event.rounds) {
+    for (const m of r.matches) {
+      const s = event.scores[`${r.index}-${m.court}`];
+      if (s && s.a + s.b > 0)
+        out.push({
+          match: {
+            court: m.court,
+            teamA: [toId(m.teamA[0]!), toId(m.teamA[1]!)] as [string, string],
+            teamB: [toId(m.teamB[0]!), toId(m.teamB[1]!)] as [string, string],
+          },
+          scoreA: s.a,
+          scoreB: s.b,
+        });
+    }
+  }
+  return out;
+}
+
+/** Peta id→nama tampilan (nama terbaru menang; events urut terbaru dulu). */
+function buildNameById(events: DbEvent[]): Record<string, string> {
+  const nameById: Record<string, string> = {};
+  for (const e of events)
+    e.playerIds.forEach((id, i) => {
+      if (id && !(id in nameById)) nameById[id] = e.players[i] ?? id;
+    });
+  return nameById;
+}
+
+/** ID self-player user saat ini (untuk deteksi "saya" di ranking). */
+export async function myPlayerId(): Promise<string | null> {
+  const uid = await currentUserId();
+  if (!uid) return null;
+  const { data } = await db()
+    .from("players")
+    .select("id")
+    .eq("user_id", uid)
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function leagueStandings(
   leagueId: string
 ): Promise<{ standings: Standing[]; eventCount: number }> {
@@ -877,14 +1127,24 @@ export async function leagueStandings(
  * Mengembalikan hasil match mentah + daftar nama unik; rating dihitung di UI.
  */
 export async function globalStats(): Promise<{
-  results: MatchResult[];
-  names: string[];
+  results: MatchResult[]; // tim memakai ID pemain
+  ids: string[]; // semua id peserta (unik)
+  nameById: Record<string, string>; // id → nama tampilan
   eventCount: number;
 }> {
   const events = await listVisibleEvents();
-  const results = events.flatMap(eventResults);
-  const names = Array.from(new Set(events.flatMap((e) => e.players)));
-  return { results, names, eventCount: events.length };
+  const nameById = buildNameById(events);
+  const results = events.flatMap(eventResultsById);
+  const idSet = new Set<string>();
+  for (const e of events) for (const id of e.playerIds) if (id) idSet.add(id);
+  // Sertakan id hasil fallback-nama (event lama tanpa player_ids sinkron).
+  for (const r of results)
+    for (const t of [r.match.teamA, r.match.teamB])
+      for (const x of t) {
+        idSet.add(x);
+        if (!(x in nameById)) nameById[x] = x;
+      }
+  return { results, ids: [...idSet], nameById, eventCount: events.length };
 }
 
 /** Satu pertandingan dari sudut pandang seorang pemain (untuk riwayat profil). */
@@ -900,14 +1160,16 @@ export interface PlayerMatch {
   result: "win" | "loss" | "tie";
 }
 
-/** Riwayat match seorang pemain (by nama) lintas semua sesi, terbaru dulu. */
-export async function playerHistory(name: string): Promise<PlayerMatch[]> {
+/** Riwayat match seorang pemain (by ID) lintas semua sesi, terbaru dulu. */
+export async function playerHistory(playerId: string): Promise<PlayerMatch[]> {
   const events = await listVisibleEvents();
+  const nameById = buildNameById(events);
+  const nm = (id: string) => nameById[id] ?? id;
   const out: PlayerMatch[] = [];
   for (const e of events) {
-    for (const { match, scoreA, scoreB } of eventResults(e)) {
-      const onA = match.teamA.includes(name);
-      const onB = match.teamB.includes(name);
+    for (const { match, scoreA, scoreB } of eventResultsById(e)) {
+      const onA = match.teamA.includes(playerId);
+      const onB = match.teamB.includes(playerId);
       if (!onA && !onB) continue;
       const mine = onA ? match.teamA : match.teamB;
       const opp = onA ? match.teamB : match.teamA;
@@ -918,8 +1180,8 @@ export async function playerHistory(name: string): Promise<PlayerMatch[]> {
         eventName: e.name,
         date: e.createdAt,
         format: e.format,
-        partner: mine.find((x) => x !== name) ?? name,
-        opponents: [...opp],
+        partner: nm(mine.find((x) => x !== playerId) ?? playerId),
+        opponents: opp.map(nm),
         scoreFor: sf,
         scoreAgainst: sa,
         result: sf > sa ? "win" : sf < sa ? "loss" : "tie",

@@ -13,6 +13,14 @@ import type { PlayerId, Round, Match } from "./types.js";
 
 export interface MexicanoOptions {
   courts?: number;
+  /**
+   * Berapa kali tiap pemain SUDAH istirahat sejauh ini (id → jumlah). Dipakai
+   * untuk **rotasi bye yang adil**: bila ada yang harus istirahat, pilih pemain
+   * yang paling sedikit istirahat — bukan sekadar peringkat terbawah. Tanpa ini
+   * (DEF-3), pemain yang sekali kena bye di awal bisa mandek di dasar klasemen
+   * dan istirahat selamanya. Kosongkan untuk ronde pertama.
+   */
+  restCount?: Record<PlayerId, number>;
 }
 
 /**
@@ -25,13 +33,32 @@ export function nextMexicanoRound(
   opts: MexicanoOptions = {}
 ): Round {
   if (rankedPlayers.length < 4) {
-    throw new Error("Mexicano butuh minimal 4 pemain.");
+    throw new Error("Mexicano needs at least 4 players.");
   }
 
   const courts = opts.courts ?? Math.floor(rankedPlayers.length / 4);
   const perRound = courts * 4;
-  const active = rankedPlayers.slice(0, perRound);
-  const resting = rankedPlayers.slice(perRound);
+  const restN = rankedPlayers.length - perRound;
+
+  let active: readonly PlayerId[];
+  let resting: PlayerId[];
+  if (restN <= 0) {
+    active = rankedPlayers.slice(0, perRound);
+    resting = rankedPlayers.slice(perRound);
+  } else {
+    // Rotasi bye adil: istirahatkan pemain yang PALING SEDIKIT istirahat.
+    // Tie-break: peringkat lebih rendah (indeks besar) istirahat lebih dulu.
+    const rc = opts.restCount ?? {};
+    const restSet = new Set(
+      rankedPlayers
+        .map((id, rank) => ({ id, rank }))
+        .sort((a, b) => (rc[a.id] ?? 0) - (rc[b.id] ?? 0) || b.rank - a.rank)
+        .slice(0, restN)
+        .map((x) => x.id)
+    );
+    resting = rankedPlayers.filter((id) => restSet.has(id));
+    active = rankedPlayers.filter((id) => !restSet.has(id)); // tetap urut peringkat
+  }
 
   const matches: Match[] = [];
   for (let c = 0; c < courts; c++) {

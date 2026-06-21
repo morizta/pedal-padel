@@ -66,6 +66,11 @@ alter table public.events  add column if not exists description text;
 alter table public.events  add column if not exists notes text;       -- catatan (HTML editor)
 alter table public.events  add column if not exists photo_url text;    -- foto turnamen (data URL/link)
 alter table public.events  add column if not exists start_at timestamptz;
+-- Pengaturan leaderboard sesi (diatur saat buat sesi): urutan & aturan tie-break.
+alter table public.events  add column if not exists standings_sort text not null default 'points'
+  check (standings_sort in ('points','wins'));
+alter table public.events  add column if not exists tiebreak text not null default 'unique'
+  check (tiebreak in ('unique','allow','skip'));
 alter table public.leagues add column if not exists description text;
 -- Notes (HTML dari editor) + foto (data URL / link) liga.
 alter table public.leagues add column if not exists notes text;
@@ -74,6 +79,10 @@ alter table public.leagues add column if not exists photo_url text;
 -- Username unik (handle) + avatar untuk profil.
 alter table public.profiles add column if not exists username   text;
 alter table public.profiles add column if not exists avatar_url text;
+
+-- Gender opsional pemain (untuk format Mix/Mixicano). null = tak ditentukan.
+alter table public.players
+  add column if not exists gender text check (gender in ('male','female'));
 create unique index if not exists profiles_username_lower_key
   on public.profiles (lower(username));
 
@@ -453,3 +462,26 @@ create policy sa_all_lu on public.league_users for all
 drop policy if exists sa_all_players on public.players;
 create policy sa_all_players on public.players for all
   using (public.is_superadmin(auth.uid())) with check (public.is_superadmin(auth.uid()));
+
+-- ────────────────────────────────────────────────────────────────────
+-- 7. Storage: foto (avatar/turnamen/liga) sebagai FILE (ganti base64 di DB).
+--    Baca publik (share/link); tulis user terautentikasi.
+-- ────────────────────────────────────────────────────────────────────
+insert into storage.buckets (id, name, public) values
+  ('avatars','avatars',true),
+  ('event-photos','event-photos',true),
+  ('league-photos','league-photos',true)
+on conflict (id) do nothing;
+
+drop policy if exists storage_read on storage.objects;
+create policy storage_read on storage.objects for select
+  using (bucket_id in ('avatars','event-photos','league-photos'));
+drop policy if exists storage_write on storage.objects;
+create policy storage_write on storage.objects for insert to authenticated
+  with check (bucket_id in ('avatars','event-photos','league-photos'));
+drop policy if exists storage_update on storage.objects;
+create policy storage_update on storage.objects for update to authenticated
+  using (bucket_id in ('avatars','event-photos','league-photos'));
+drop policy if exists storage_delete on storage.objects;
+create policy storage_delete on storage.objects for delete to authenticated
+  using (bucket_id in ('avatars','event-photos','league-photos'));

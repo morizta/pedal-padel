@@ -15,8 +15,11 @@ import {
   nextMexicanoRound,
   generateTeamAmericano,
   nextTeamMexicanoRound,
+  generateMixAmericano,
+  nextMixicanoRound,
   pairUp,
   rankTeams,
+  teamKey,
   computeStandings,
   type Pair,
   type PlayerId,
@@ -28,14 +31,31 @@ export type Format =
   | "americano"
   | "mexicano"
   | "team_americano"
-  | "team_mexicano";
+  | "team_mexicano"
+  | "mix_americano"
+  | "mixicano";
+
+export type Gender = "male" | "female";
 
 export function isTeamFormat(f: Format): boolean {
   return f === "team_americano" || f === "team_mexicano";
 }
+export function isMixFormat(f: Format): boolean {
+  return f === "mix_americano" || f === "mixicano";
+}
 /** Jadwal pasti di awal (semua ronde langsung dibuka). Lawannya: dinamis. */
 export function isScheduledFormat(f: Format): boolean {
-  return f === "americano" || f === "team_americano";
+  return f === "americano" || f === "team_americano" || f === "mix_americano";
+}
+
+/** Pisahkan pemain per gender (untuk format Mix), pertahankan urutan. */
+function splitByGender(
+  players: readonly PlayerId[],
+  genders: Record<PlayerId, Gender>
+): { males: PlayerId[]; females: PlayerId[] } {
+  const males = players.filter((p) => genders[p] === "male");
+  const females = players.filter((p) => genders[p] === "female");
+  return { males, females };
 }
 
 /** Konfigurasi sistem skor. */
@@ -56,11 +76,11 @@ export interface ScoreSpec {
 export function scoreSpec(c: ScoringConfig): ScoreSpec {
   if (c.type === "point") {
     return c.points > 0
-      ? { complement: true, max: c.points, label: `${c.points} poin` }
-      : { complement: false, max: 40, label: "poin bebas" };
+      ? { complement: true, max: c.points, label: `${c.points} points` }
+      : { complement: false, max: 40, label: "free points" };
   }
   return c.mode === "total"
-    ? { complement: true, max: c.target, label: `total ${c.target} game` }
+    ? { complement: true, max: c.target, label: `total ${c.target} games` }
     : { complement: false, max: c.target, label: `first to ${c.target}` };
 }
 
@@ -96,6 +116,31 @@ export function rankPlayers(
     const rb = rank.get(b) ?? Number.POSITIVE_INFINITY;
     return ra - rb || a.localeCompare(b);
   });
+}
+
+/** Berapa kali tiap pemain sudah istirahat (untuk rotasi bye adil — DEF-3). */
+function playerRestCount(rs: readonly Round[]): Record<string, number> {
+  const rc: Record<string, number> = {};
+  for (const r of rs)
+    for (const id of r.resting) rc[id] = (rc[id] ?? 0) + 1;
+  return rc;
+}
+
+/** Berapa kali tiap TIM (teamKey) sudah istirahat — kedua pemainnya beristirahat. */
+function teamRestCount(
+  rs: readonly Round[],
+  teams: readonly Pair[]
+): Record<string, number> {
+  const rc: Record<string, number> = {};
+  for (const r of rs) {
+    const set = new Set(r.resting);
+    for (const t of teams)
+      if (set.has(t[0]) && set.has(t[1])) {
+        const k = teamKey(t);
+        rc[k] = (rc[k] ?? 0) + 1;
+      }
+  }
+  return rc;
 }
 
 export interface Session {
@@ -135,10 +180,12 @@ export function useSession(
     restore?: SessionRestore;
     /** Tim ditentukan manual (format tim). Kosong = auto-pairing. */
     initialTeams?: Pair[];
+    /** Gender per pemain (untuk format Mix/Mixicano). */
+    genders?: Record<PlayerId, Gender>;
   },
   onReset: () => void
 ): Session {
-  const { config, players, restore, initialTeams } = initial;
+  const { config, players, restore, initialTeams, genders = {} } = initial;
   const courts = config.courts;
 
   // Inisialisasi sekali dari SATU urutan, agar jadwal & ronde-1 konsisten.
@@ -166,6 +213,18 @@ export function useSession(
         schedule: null,
         teams: [],
         first: [nextMexicanoRound(ordered, 0, { courts })],
+      };
+    } else if (config.format === "mix_americano") {
+      // Jadwal campur PENUH (statik) — buka semua ronde sekaligus.
+      const { males, females } = splitByGender(ordered, genders);
+      const sched = generateMixAmericano(males, females, { courts });
+      initRef.current = { schedule: sched, teams: [], first: sched };
+    } else if (config.format === "mixicano") {
+      const { males, females } = splitByGender(ordered, genders);
+      initRef.current = {
+        schedule: null,
+        teams: [],
+        first: [nextMixicanoRound(males, females, 0, { courts })],
       };
     } else if (config.format === "team_americano") {
       // Manual jika initialTeams diisi, selain itu auto-pairing.
@@ -237,40 +296,63 @@ export function useSession(
       const offset = prev.length
         ? Math.max(...prev.map((r) => r.index)) + 1
         : 0;
-      const fresh =
-        config.format === "americano"
-          ? generateAmericano(shuffle(players), { courts })
-          : generateTeamAmericano(shuffle(teamsRef.current), { courts });
+      const sh = shuffle(players);
+      let fresh: Round[];
+      if (config.format === "americano") {
+        fresh = generateAmericano(sh, { courts });
+      } else if (config.format === "mix_americano") {
+        const { males, females } = splitByGender(sh, genders);
+        fresh = generateMixAmericano(males, females, { courts });
+      } else {
+        fresh = generateTeamAmericano(shuffle(teamsRef.current), { courts });
+      }
       const reindexed = fresh.map((r) => ({ ...r, index: r.index + offset }));
       scheduleRef.current = [...(scheduleRef.current ?? []), ...reindexed];
       return [...prev, ...reindexed];
     });
-  }, [config.format, players, courts]);
+  }, [config.format, players, courts, genders]);
 
   const nextRound = useCallback(() => {
     setRounds((prev) => {
       const idx = prev.length;
       switch (config.format) {
         case "americano":
-        case "team_americano": {
+        case "team_americano":
+        case "mix_americano": {
           const sched = scheduleRef.current!;
           return idx < sched.length ? [...prev, sched[idx]!] : prev;
         }
         case "mexicano":
           return [
             ...prev,
-            nextMexicanoRound(rankPlayers(players, results), idx, { courts }),
+            nextMexicanoRound(rankPlayers(players, results), idx, {
+              courts,
+              restCount: playerRestCount(prev),
+            }),
           ];
         case "team_mexicano":
           return [
             ...prev,
             nextTeamMexicanoRound(rankTeams(teamsRef.current, results), idx, {
               courts,
+              restCount: teamRestCount(prev, teamsRef.current),
             }),
           ];
+        case "mixicano": {
+          const { males, females } = splitByGender(players, genders);
+          return [
+            ...prev,
+            nextMixicanoRound(
+              rankPlayers(males, results),
+              rankPlayers(females, results),
+              idx,
+              { courts, restCount: playerRestCount(prev) }
+            ),
+          ];
+        }
       }
     });
-  }, [config.format, players, results, courts]);
+  }, [config.format, players, results, courts, genders]);
 
   const reshuffle = useCallback(() => {
     // Format terjadwal: regen SELURUH jadwal (acak ulang) & hapus semua skor.
@@ -289,25 +371,43 @@ export function useSession(
       setRounds(scheduleRef.current);
       return;
     }
+    if (config.format === "mix_americano") {
+      const { males, females } = splitByGender(shuffle(players), genders);
+      scheduleRef.current = generateMixAmericano(males, females, { courts });
+      setScores({});
+      setRounds(scheduleRef.current);
+      return;
+    }
 
     // Format dinamis: acak ulang ronde TERAKHIR saja.
     setRounds((prev) => {
       const idx = prev.length - 1;
       if (idx < 0) return prev;
+      const before = prev.slice(0, idx); // ronde sebelum yang diganti
       const replacement =
         config.format === "mexicano"
           ? nextMexicanoRound(
               idx === 0 ? shuffle(players) : rankPlayers(players, results),
               idx,
-              { courts }
+              { courts, restCount: playerRestCount(before) }
             )
-          : nextTeamMexicanoRound(
-              idx === 0
-                ? shuffle(teamsRef.current)
-                : rankTeams(teamsRef.current, results),
-              idx,
-              { courts }
-            );
+          : config.format === "mixicano"
+            ? (() => {
+                const { males, females } = splitByGender(players, genders);
+                return nextMixicanoRound(
+                  idx === 0 ? shuffle(males) : rankPlayers(males, results),
+                  idx === 0 ? shuffle(females) : rankPlayers(females, results),
+                  idx,
+                  { courts, restCount: playerRestCount(before) }
+                );
+              })()
+            : nextTeamMexicanoRound(
+                idx === 0
+                  ? shuffle(teamsRef.current)
+                  : rankTeams(teamsRef.current, results),
+                idx,
+                { courts, restCount: teamRestCount(before, teamsRef.current) }
+              );
       setScores((s) => {
         const copy = { ...s };
         for (const m of replacement.matches) delete copy[`${idx}-${m.court}`];
@@ -315,7 +415,7 @@ export function useSession(
       });
       return [...prev.slice(0, idx), replacement];
     });
-  }, [config.format, players, results, courts]);
+  }, [config.format, players, results, courts, genders]);
 
   return {
     config,
