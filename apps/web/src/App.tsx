@@ -3586,6 +3586,10 @@ function LeagueScreen({
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
+  // Mobile: tampilkan satu panel (Standings / Tournaments / Members), tak numpuk.
+  const [tab, setTab] = useState<"standings" | "tournaments" | "members">(
+    "standings"
+  );
   const leagueQ = useAsync(() => getLeague(leagueId), [leagueId]);
   const eventsQ = useAsync(() => listEvents(leagueId), [leagueId]);
   const standingsQ = useAsync(() => leagueStandings(leagueId), [leagueId]);
@@ -3717,8 +3721,33 @@ function LeagueScreen({
         </Card>
       )}
 
-      {/* Berdampingan: Leaderboard (kiri) & Turnamen (kanan) → tak saling dorong ke bawah. */}
+      {/* Mobile: tab switcher (desktop tampil semua kolom). */}
+      <div className="flex rounded-2xl border border-outline-variant/40 bg-surface-container p-1 text-sm font-semibold lg:hidden">
+        {(
+          [
+            ["standings", "Standings", "leaderboard"],
+            ["tournaments", "Matches", "sports_tennis"],
+            ["members", "Members", "group"],
+          ] as const
+        ).map(([k, l, icon]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-xl py-2 transition ${
+              tab === k
+                ? "bg-primary-fixed text-on-primary-fixed"
+                : "text-on-surface-variant"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Berdampingan: Standings (kiri) & Tournaments (kanan). Mobile: per-tab. */}
       <div className="grid gap-5 lg:grid-cols-2">
+        <div className={tab === "standings" ? "" : "hidden lg:block"}>
         <Card
           title="📊 League Standings (player totals)"
           action={
@@ -3801,8 +3830,10 @@ function LeagueScreen({
             ]}
           />
         </Card>
+        </div>
 
-        {/* Turnamen — kanan, dibatasi (preview 6 + Show all) supaya tak jadi tembok panjang. */}
+        {/* Turnamen — kanan. Mobile: per-tab. */}
+        <div className={tab === "tournaments" ? "" : "hidden lg:block"}>
         <Card
           title={`🎾 Tournaments${events.length ? ` (${events.length})` : ""}`}
           action={
@@ -3843,9 +3874,12 @@ function LeagueScreen({
             </button>
           )}
         </Card>
+        </div>
       </div>
 
-      <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
+      <div className={tab === "members" ? "" : "hidden lg:block"}>
+        <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
+      </div>
       {editing && (
         <EditLeagueModal
           league={league}
