@@ -2136,7 +2136,7 @@ function ProfileScreen({
         ))}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {/* Turnamen Terakhir (kanan di desktop) */}
       <div
         className={`${tab === "tournaments" ? "" : "hidden lg:block"} lg:order-2`}
@@ -3779,7 +3779,7 @@ function LeagueScreen({
       </div>
 
       {/* Berdampingan: Standings (kiri) & Tournaments (kanan). Mobile: per-tab. */}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className={tab === "standings" ? "" : "hidden lg:block"}>
         <Card
           title="📊 League Standings (player totals)"
@@ -6154,7 +6154,7 @@ function SessionInner({
         </div>
       )}
       {/* Desktop: Leaderboard kiri + Match Rounds kanan. Mobile: satu panel. */}
-      <div className="grid gap-5 lg:grid-cols-[26rem_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[26rem_1fr]">
         <div className={mobileTab === "leaderboard" ? "" : "hidden lg:block"}>
           <Leaderboard
             session={session}
