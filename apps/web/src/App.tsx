@@ -720,8 +720,8 @@ function DashboardScreen({
           )}
         </div>
 
-        {/* Kanan */}
-        <div className="space-y-5">
+        {/* Kanan. Mobile (login): naik ke atas — stats tepat di bawah hero, tak terkubur. */}
+        <div className={`space-y-5 ${user ? "order-first lg:order-none" : ""}`}>
           {user && (
           <section className="rounded-2xl bg-navy p-5 text-white shadow-sm">
             <div className="font-label-caps text-label-caps text-primary-fixed">
