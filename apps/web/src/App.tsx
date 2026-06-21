@@ -3717,49 +3717,8 @@ function LeagueScreen({
         </Card>
       )}
 
-      {/* Turnamen di liga — menonjol (fokus match) tapi DIBATASI (bisa banyak). */}
-      <Card
-        title={`🎾 Tournaments${events.length ? ` (${events.length})` : ""}`}
-        action={
-          events.length > EVENT_PREVIEW ? (
-            <button
-              onClick={() => setShowAllEvents((v) => !v)}
-              className="text-xs font-semibold text-primary"
-            >
-              {showAllEvents ? "Show less" : `Show all ${events.length}`}
-            </button>
-          ) : undefined
-        }
-      >
-        <StateText
-          loading={eventsQ.loading}
-          error={eventsQ.error}
-          empty={events.length === 0}
-          emptyText="No tournaments yet."
-        />
-        <EventList
-          events={shownEvents}
-          meId={user?.id ?? null}
-          canManage={isAdmin}
-          onOpen={(id) => onNavigate({ t: "session", id })}
-          onDelete={async (id) => {
-            await deleteEvent(id);
-            eventsQ.reload();
-            standingsQ.reload();
-          }}
-        />
-        {!showAllEvents && events.length > EVENT_PREVIEW && (
-          <button
-            onClick={() => setShowAllEvents(true)}
-            className="mt-2 w-full rounded-xl border border-outline-variant/50 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
-          >
-            Show {events.length - EVENT_PREVIEW} more tournament
-            {events.length - EVENT_PREVIEW > 1 ? "s" : ""}
-          </button>
-        )}
-      </Card>
-
-      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
+      {/* Berdampingan: Leaderboard (kiri) & Turnamen (kanan) → tak saling dorong ke bawah. */}
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card
           title="📊 League Standings (player totals)"
           action={
@@ -3843,8 +3802,50 @@ function LeagueScreen({
           />
         </Card>
 
-        <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
+        {/* Turnamen — kanan, dibatasi (preview 6 + Show all) supaya tak jadi tembok panjang. */}
+        <Card
+          title={`🎾 Tournaments${events.length ? ` (${events.length})` : ""}`}
+          action={
+            events.length > EVENT_PREVIEW ? (
+              <button
+                onClick={() => setShowAllEvents((v) => !v)}
+                className="text-xs font-semibold text-primary"
+              >
+                {showAllEvents ? "Show less" : `Show all ${events.length}`}
+              </button>
+            ) : undefined
+          }
+        >
+          <StateText
+            loading={eventsQ.loading}
+            error={eventsQ.error}
+            empty={events.length === 0}
+            emptyText="No tournaments yet."
+          />
+          <EventList
+            events={shownEvents}
+            meId={user?.id ?? null}
+            canManage={isAdmin}
+            onOpen={(id) => onNavigate({ t: "session", id })}
+            onDelete={async (id) => {
+              await deleteEvent(id);
+              eventsQ.reload();
+              standingsQ.reload();
+            }}
+          />
+          {!showAllEvents && events.length > EVENT_PREVIEW && (
+            <button
+              onClick={() => setShowAllEvents(true)}
+              className="mt-2 w-full rounded-xl border border-outline-variant/50 py-2.5 text-sm font-semibold text-primary hover:bg-surface-container-low"
+            >
+              Show {events.length - EVENT_PREVIEW} more tournament
+              {events.length - EVENT_PREVIEW > 1 ? "s" : ""}
+            </button>
+          )}
+        </Card>
       </div>
+
+      <LeaguePeople leagueId={leagueId} isAdmin={isAdmin} />
       {editing && (
         <EditLeagueModal
           league={league}
