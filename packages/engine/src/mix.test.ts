@@ -84,3 +84,35 @@ describe("nextMixicanoRound", () => {
     expect(Math.max(...wc) - Math.min(...wc)).toBeLessThanOrEqual(1);
   });
 });
+
+describe("generateMixAmericano — lawan tak menumpuk (regresi)", () => {
+  // Bug lama (sama seperti Americano): pasangan campur dijodohkan tanpa melihat
+  // lawan, jadi M1 selalu berhadapan dengan M2 di SEMUA pertandingannya.
+  it("6 pria + 6 wanita: tak ada pasang yang berhadapan lebih dari 4×", () => {
+    const males = Array.from({ length: 6 }, (_, i) => `m${i + 1}`);
+    const females = Array.from({ length: 6 }, (_, i) => `f${i + 1}`);
+    for (const courts of [1, 2, 3]) {
+      const rounds = generateMixAmericano(males, females, { courts });
+      const opp = new Map<string, number>();
+      for (const r of rounds)
+        for (const m of r.matches)
+          for (const a of m.teamA)
+            for (const b of m.teamB) {
+              const key = [a, b].sort().join("-");
+              opp.set(key, (opp.get(key) ?? 0) + 1);
+            }
+      expect(Math.max(...opp.values())).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("6 pria + 6 wanita / 3 lapangan: 6 ronde penuh, tak ada yang istirahat", () => {
+    const males = Array.from({ length: 6 }, (_, i) => `m${i + 1}`);
+    const females = Array.from({ length: 6 }, (_, i) => `f${i + 1}`);
+    const rounds = generateMixAmericano(males, females, { courts: 3 });
+    expect(rounds.length).toBe(6);
+    for (const r of rounds) {
+      expect(r.matches.length).toBe(3);
+      expect(r.resting).toHaveLength(0);
+    }
+  });
+});
