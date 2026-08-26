@@ -141,3 +141,67 @@ body {
     @apply w-full rounded-xl border border-outline-variant bg-surface-container-lowest px-3.5 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30;
   }
 }
+
+/* ── Simulasi jadwal: ronde muncul satu per satu ─────────────────────── */
+@keyframes sim-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.sim-pop {
+  animation: sim-pop 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes sim-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.sim-sheet-in {
+  animation: sim-sheet-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes sim-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.sim-fade-in {
+  animation: sim-fade-in 0.22s ease-out both;
+}
+
+/* Titik "live" saat simulasi berjalan. */
+@keyframes sim-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.sim-blink {
+  animation: sim-blink 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-pop,
+  .sim-sheet-in,
+  .sim-fade-in,
+  .sim-blink {
+    animation: none;
+  }
+}
