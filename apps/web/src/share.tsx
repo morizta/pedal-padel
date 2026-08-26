@@ -170,6 +170,12 @@ function StandingsTable({
   rows: ShareRow[];
   dark: boolean;
 }) {
+  // Kolom +M disembunyikan kalau sesi ini memang tak memakai kompensasi
+  // (semua nol) — supaya gambar tak penuh tanda strip.
+  const showPlusM = rows.some((r) => r.plusM > 0);
+  const cols = showPlusM
+    ? "70px 1fr 150px 110px 90px 110px"
+    : "70px 1fr 150px 110px 110px";
   const head = dark ? "rgba(255,255,255,.75)" : "rgba(0,0,0,.55)";
   const rowBg = dark ? "rgba(255,255,255,.06)" : "#fff";
   const rowText = dark ? "#fff" : "#1a1a1a";
@@ -178,7 +184,7 @@ function StandingsTable({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "70px 1fr 150px 110px 90px 110px",
+          gridTemplateColumns: cols,
           padding: "0 24px",
           fontFamily: "'Inter', sans-serif",
           fontSize: 26,
@@ -190,7 +196,7 @@ function StandingsTable({
         <span>Player</span>
         <span style={{ textAlign: "center" }}>W-L-T</span>
         <span style={{ textAlign: "center" }}>Diff</span>
-        <span style={{ textAlign: "center" }}>+M</span>
+        {showPlusM && <span style={{ textAlign: "center" }}>+M</span>}
         <span style={{ textAlign: "right" }}>P</span>
       </div>
       {rows.map((r) => (
@@ -198,7 +204,7 @@ function StandingsTable({
           key={r.rank}
           style={{
             display: "grid",
-            gridTemplateColumns: "70px 1fr 150px 110px 90px 110px",
+            gridTemplateColumns: cols,
             alignItems: "center",
             background: rowBg,
             borderRadius: 18,
@@ -227,16 +233,18 @@ function StandingsTable({
           <span style={{ ...mono, fontSize: 28, textAlign: "center" }}>
             {signed(r.diff)}
           </span>
-          <span
-            style={{
-              ...mono,
-              fontSize: 28,
-              textAlign: "center",
-              color: r.plusM > 0 ? "#5fb800" : head,
-            }}
-          >
-            {r.plusM > 0 ? `+${r.plusM}` : "–"}
-          </span>
+          {showPlusM && (
+            <span
+              style={{
+                ...mono,
+                fontSize: 28,
+                textAlign: "center",
+                color: r.plusM > 0 ? "#5fb800" : head,
+              }}
+            >
+              {r.plusM > 0 ? `+${r.plusM}` : "–"}
+            </span>
+          )}
           <span
             style={{
               ...mono,

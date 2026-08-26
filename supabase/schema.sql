@@ -71,6 +71,10 @@ alter table public.events  add column if not exists standings_sort text not null
   check (standings_sort in ('points','wins'));
 alter table public.events  add column if not exists tiebreak text not null default 'unique'
   check (tiebreak in ('unique','allow','skip'));
+-- Poin kompensasi (+M): pemain yang main lebih sedikit (kena bye) diberi poin
+-- tambahan sebesar rata-rata poin per match-nya. false = klasemen memakai poin
+-- mentah saja, pemain yang main lebih sedikit tidak ditambal.
+alter table public.events  add column if not exists compensate boolean not null default true;
 alter table public.leagues add column if not exists description text;
 -- Notes (HTML dari editor) + foto (data URL / link) liga.
 alter table public.leagues add column if not exists notes text;

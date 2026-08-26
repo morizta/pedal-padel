@@ -5570,6 +5570,7 @@ function CreateScreen({
   const [courts, setCourts] = useState(1);
   const [standingsSort, setStandingsSort] = useState<SortBy>("points");
   const [tiebreak, setTiebreak] = useState<RankMode>("unique");
+  const [compensate, setCompensate] = useState(true); // poin +M
   const [scoringType, setScoringType] = useState<"point" | "normal">("point");
   const [points, setPoints] = useState(24);
   const [normalMode, setNormalMode] = useState<"first" | "total">("first");
@@ -5703,6 +5704,7 @@ function CreateScreen({
         scoring,
         standingsSort,
         tiebreak,
+        compensate,
         randomizeStart: randomize,
         participants: selected,
         teams: finalTeams
@@ -5902,6 +5904,20 @@ function CreateScreen({
           <RankModeSelect value={tiebreak} onChange={setTiebreak} />
           <p className="mt-1 text-xs text-on-surface-variant">
             How equal stats share rank numbers.
+          </p>
+        </Field>
+
+        <Field label="Compensation points (+M)">
+          <Toggle
+            value={compensate}
+            onChange={setCompensate}
+            onLabel="On"
+            offLabel="Off"
+          />
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {compensate
+              ? "Players who play fewer matches get extra points \u2014 their own average per match \u00d7 matches missed \u2014 so a bye doesn't cost them the lead."
+              : "Players who play fewer matches than others will not receive extra compensation points to make up the difference. Standings use raw points only."}
           </p>
         </Field>
 
@@ -6496,6 +6512,7 @@ function SessionInner({
             session={session}
             sortBy={event.standingsSort}
             rankMode={event.tiebreak}
+            compensate={event.compensate}
           />
         </div>
         <div className={mobileTab === "rounds" ? "" : "hidden lg:block"}>
@@ -7088,10 +7105,13 @@ function Leaderboard({
   session,
   sortBy,
   rankMode,
+  compensate = true,
 }: {
   session: Session;
   sortBy: SortBy;
   rankMode: RankMode;
+  /** false = tanpa poin +M, klasemen memakai poin mentah. */
+  compensate?: boolean;
 }) {
   if (isTeamFormat(session.config.format)) {
     return (
@@ -7100,7 +7120,7 @@ function Leaderboard({
   }
   // Seed dengan SEMUA pemain (skor 0) supaya tabel tampil sejak awal.
   const byId = new Map(
-    computeStandings(session.results).map((s) => [s.playerId, s])
+    computeStandings(session.results, { compensate }).map((s) => [s.playerId, s])
   );
   const standings = session.players
     .map((p) => byId.get(p) ?? zeroStanding(p))
@@ -7125,9 +7145,11 @@ function Leaderboard({
                 <th className="pb-2 pr-2">#</th>
                 <th className="pb-2">Player</th>
                 <th className="pb-2 text-right">P</th>
-                <th className="pb-2 text-right" title="Compensation (+M)">
-                  +M
-                </th>
+                {compensate && (
+                  <th className="pb-2 text-right" title="Compensation (+M)">
+                    +M
+                  </th>
+                )}
                 <th className="pb-2 text-right" title="Wins-Losses-Ties">
                   W-L-T
                 </th>
@@ -7147,9 +7169,11 @@ function Leaderboard({
                   <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.adjustedPoints}
                   </td>
-                  <td className="py-2 text-right text-win-green">
-                    {s.compensation > 0 ? `+${s.compensation}` : "–"}
-                  </td>
+                  {compensate && (
+                    <td className="py-2 text-right text-win-green">
+                      {s.compensation > 0 ? `+${s.compensation}` : "–"}
+                    </td>
+                  )}
                   <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.wins}-{s.losses}-{s.ties}
                   </td>
@@ -7167,8 +7191,15 @@ function Leaderboard({
       )}
       <Legend
         items={[
-          ["P", "Points (already includes +M)"],
-          ["+M", "Compensation points for playing fewer matches (bye)"],
+          ...(compensate
+            ? ([
+                ["P", "Points (already includes +M)"],
+                [
+                  "+M",
+                  "Compensation for missed matches: your average points per match \u00d7 matches missed",
+                ],
+              ] as [string, string][])
+            : ([["P", "Points scored (no compensation)"]] as [string, string][])),
           ["W-L-T", "Wins - Losses - Ties"],
           ["Played", "Matches played"],
           ["Diff", "Point difference (scored − conceded)"],
