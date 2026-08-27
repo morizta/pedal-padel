@@ -170,6 +170,12 @@ function StandingsTable({
   rows: ShareRow[];
   dark: boolean;
 }) {
+  // Kolom +M disembunyikan kalau sesi ini memang tak memakai kompensasi
+  // (semua nol) — supaya gambar tak penuh tanda strip.
+  const showPlusM = rows.some((r) => r.plusM > 0);
+  const cols = showPlusM
+    ? "70px 1fr 150px 110px 90px 110px"
+    : "70px 1fr 150px 110px 110px";
   const head = dark ? "rgba(255,255,255,.75)" : "rgba(0,0,0,.55)";
   const rowBg = dark ? "rgba(255,255,255,.06)" : "#fff";
   const rowText = dark ? "#fff" : "#1a1a1a";
@@ -178,7 +184,7 @@ function StandingsTable({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "70px 1fr 150px 110px 90px 110px",
+          gridTemplateColumns: cols,
           padding: "0 24px",
           fontFamily: "'Inter', sans-serif",
           fontSize: 26,
@@ -190,7 +196,7 @@ function StandingsTable({
         <span>Player</span>
         <span style={{ textAlign: "center" }}>W-L-T</span>
         <span style={{ textAlign: "center" }}>Diff</span>
-        <span style={{ textAlign: "center" }}>+M</span>
+        {showPlusM && <span style={{ textAlign: "center" }}>+M</span>}
         <span style={{ textAlign: "right" }}>P</span>
       </div>
       {rows.map((r) => (
@@ -198,7 +204,7 @@ function StandingsTable({
           key={r.rank}
           style={{
             display: "grid",
-            gridTemplateColumns: "70px 1fr 150px 110px 90px 110px",
+            gridTemplateColumns: cols,
             alignItems: "center",
             background: rowBg,
             borderRadius: 18,
@@ -227,16 +233,18 @@ function StandingsTable({
           <span style={{ ...mono, fontSize: 28, textAlign: "center" }}>
             {signed(r.diff)}
           </span>
-          <span
-            style={{
-              ...mono,
-              fontSize: 28,
-              textAlign: "center",
-              color: r.plusM > 0 ? "#5fb800" : head,
-            }}
-          >
-            {r.plusM > 0 ? `+${r.plusM}` : "–"}
-          </span>
+          {showPlusM && (
+            <span
+              style={{
+                ...mono,
+                fontSize: 28,
+                textAlign: "center",
+                color: r.plusM > 0 ? "#5fb800" : head,
+              }}
+            >
+              {r.plusM > 0 ? `+${r.plusM}` : "–"}
+            </span>
+          )}
           <span
             style={{
               ...mono,
@@ -362,8 +370,11 @@ function BgImage({
   if (!bg) return null;
   return (
     <>
-      {/* bg = data URL lokal → JANGAN set crossOrigin (merusak load di mobile). */}
+      {/* bg = data URL lokal → JANGAN set crossOrigin (merusak load di mobile).
+          data-share-bg: saat capture foto ini digambar langsung ke canvas
+          (lihat capture()), jadi elemennya disembunyikan sementara. */}
       <img
+        data-share-bg=""
         src={bg}
         alt=""
         style={{
@@ -579,6 +590,7 @@ export function ShareModal({
   const [overlay, setOverlay] = useState(0.55);
   const [busy, setBusy] = useState(false);
   const captureRef = useRef<HTMLDivElement>(null);
+  const warmedUp = useRef(false);
 
   const template = TEMPLATES[tpl] ?? TEMPLATES[0]!;
   const visibleRows = useMemo(
@@ -617,11 +629,32 @@ export function ShareModal({
     // tanpa ini foto bisa kosong di hasil. cacheBust DIHILANGKAN karena merusak
     // data URL (menambah ?query) → foto tak muncul saat download/share.
     await waitForImages(node);
-    const url = await toPng(node, {
-      width: W,
-      height: H,
-      pixelRatio: 1,
-    });
+
+    // Safari/iOS kerap menghasilkan render PERTAMA yang belum lengkap (font &
+    // gambar belum terpasang di SVG foreignObject). Sekali render pemanasan,
+    // hasilnya dibuang.
+    if (!warmedUp.current) {
+      warmedUp.current = true;
+      await toPng(node, { width: W, height: H, pixelRatio: 1 }).catch(() => "");
+    }
+
+    // Foto latar TIDAK dititipkan ke html-to-image: di HP, data URL foto yang
+    // besar sering gagal ikut ter-embed ke SVG foreignObject → hasil share /
+    // download keluar tanpa foto. Jadi foto digambar langsung ke <canvas>, lalu
+    // hasil html-to-image (scrim + konten, latarnya transparan) ditumpuk.
+    const photo = bg ? await loadImage(bg).catch(() => null) : null;
+    const bgImg = photo
+      ? (node.querySelector("img[data-share-bg]") as HTMLImageElement | null)
+      : null;
+    if (bgImg) bgImg.style.visibility = "hidden";
+    let overlay: string;
+    try {
+      overlay = await toPng(node, { width: W, height: H, pixelRatio: 1 });
+    } finally {
+      if (bgImg) bgImg.style.visibility = "";
+    }
+
+    const url = photo ? await compose(photo, overlay) : overlay;
     const blob = await (await fetch(url)).blob();
     const safe = title.replace(/[^\w-]+/g, "_").slice(0, 40) || "standings";
     const file = new File([blob], `${safe}.png`, { type: "image/png" });
@@ -643,7 +676,7 @@ export function ShareModal({
           text: `${title} Standings — via SICOPA`,
         });
       } else {
-        download(out.url, out.file.name);
+        download(out.file);
         void alertDialog("Your browser doesn't support sharing files — the image was downloaded.", {
           title: "Downloaded",
         });
@@ -664,7 +697,7 @@ export function ShareModal({
     setBusy(true);
     try {
       const out = await capture();
-      if (out) download(out.url, out.file.name);
+      if (out) download(out.file);
     } catch (e) {
       void alertDialog("Failed to create image: " + (e as Error).message, {
         title: "Failed",
@@ -675,12 +708,21 @@ export function ShareModal({
     }
   }
 
-  function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => setBg(reader.result as string);
-    reader.readAsDataURL(f);
+    e.target.value = ""; // supaya memilih file yang sama lagi tetap memicu change
+    setBusy(true);
+    try {
+      setBg(await shrinkPhoto(f));
+    } catch {
+      void alertDialog("Failed to read the photo.", {
+        title: "Failed",
+        tone: "danger",
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -888,11 +930,76 @@ async function waitForImages(node: HTMLElement): Promise<void> {
   );
 }
 
-function download(url: string, name: string) {
+/** Muat gambar dari URL/data URL. */
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("gagal memuat gambar"));
+    img.src = src;
+  });
+}
+
+/**
+ * Foto latar (cover) + overlay hasil html-to-image → satu PNG.
+ * Menggambar foto lewat canvas jauh lebih andal di HP daripada menitipkannya
+ * ke html-to-image.
+ */
+async function compose(photo: HTMLImageElement, overlayUrl: string): Promise<string> {
+  const overlay = await loadImage(overlayUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return overlayUrl;
+  // object-fit: cover — samakan dengan tampilan preview.
+  const s = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
+  const w = photo.naturalWidth * s;
+  const h = photo.naturalHeight * s;
+  ctx.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
+  ctx.drawImage(overlay, 0, 0, W, H);
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Foto kamera HP bisa 4000 px / 8 MB. Data URL sebesar itu berat di preview dan
+ * gampang gagal saat capture, jadi diperkecil dulu — 1600 px sudah lebih dari
+ * cukup untuk kanvas 1080×1920.
+ */
+async function shrinkPhoto(file: File, max = 1600): Promise<string> {
+  const src = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("gagal membaca file"));
+    reader.readAsDataURL(file);
+  });
+  const img = await loadImage(src);
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  if (scale === 1 && file.size <= 1_500_000) return src;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+/**
+ * Simpan file. Pakai blob URL (bukan data URL): di HP, data URL beberapa MB
+ * kerap ditolak/diabaikan browser saat diunduh. Anchor dipasang ke DOM dulu
+ * karena sebagian browser mobile mengabaikan klik pada elemen lepas.
+ */
+function download(file: File) {
+  const url = URL.createObjectURL(file);
   const a = document.createElement("a");
   a.href = url;
-  a.download = name;
+  a.download = file.name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
   a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /* ---------- Tombol pemicu ---------- */

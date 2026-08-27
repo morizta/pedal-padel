@@ -70,7 +70,31 @@ function packMatchesIntoRounds(
     buckets.push({ ms, using });
   }
 
-  return buckets.map((bk, idx) => ({
+  // Rapikan: ronde yang belum penuh (bukan yang terakhir) ditambal dengan match
+  // dari ronde berikutnya yang tak bentrok; yang tetap tak penuh digeser ke
+  // belakang. Hasilnya ronde lebih sedikit & lapangan tak menganggur di tengah.
+  for (let i = 0; i < buckets.length; i++) {
+    const here = buckets[i]!;
+    for (let j = i + 1; j < buckets.length && here.ms.length < courts; j++) {
+      const later = buckets[j]!;
+      for (let k = 0; k < later.ms.length && here.ms.length < courts; k++) {
+        const mm = later.ms[k]!;
+        if (mm.some((p) => here.using.has(p))) continue;
+        here.ms.push(mm);
+        for (const p of mm) here.using.add(p);
+        later.ms.splice(k, 1);
+        for (const p of mm) later.using.delete(p);
+        k -= 1;
+      }
+    }
+  }
+  const nonEmpty = buckets.filter((bk) => bk.ms.length > 0);
+  const ordered = [
+    ...nonEmpty.filter((bk) => bk.ms.length >= courts),
+    ...nonEmpty.filter((bk) => bk.ms.length < courts),
+  ];
+
+  return ordered.map((bk, idx) => ({
     index: idx,
     matches: bk.ms.map((m, c) => ({
       court: c + 1,
@@ -109,53 +133,69 @@ export function generateMixAmericano(
     );
   }
 
-  // Semua pasangan campur (edge bipartit pria×wanita).
-  const edges: [PlayerId, PlayerId][] = [];
-  for (const m of males) for (const f of females) edges.push([m, f]);
+  // 1. GELOMBANG pasangan campur: pewarnaan sisi graf bipartit pria×wanita —
+  //    pasangan (i,j) masuk gelombang (i+j) mod L, L = max(#pria, #wanita).
+  //    Satu gelombang berisi pasangan yang SALING LEPAS dan seluruhnya menutup
+  //    semua kombinasi pria×wanita tepat sekali.
+  const L = Math.max(males.length, females.length);
+  const waves: [PlayerId, PlayerId][][] = Array.from({ length: L }, () => []);
+  males.forEach((m, i) =>
+    females.forEach((f, j) => waves[(i + j) % L]!.push([m, f]))
+  );
 
-  // Jodohkan pasangan → match: 2 pasangan dgn pria BERBEDA & wanita BERBEDA.
-  // Greedy: prioritas pemain paling sedikit main → distribusi merata.
-  const used = new Array<boolean>(edges.length).fill(false);
-  const play = new Map<PlayerId, number>();
-  for (const p of [...males, ...females]) play.set(p, 0);
+  // 2. Pasangan dalam satu gelombang dijodohkan jadi match, memilih kombinasi
+  //    dengan pengulangan lawan TERKECIL (dikuadratkan supaya menyebar, bukan
+  //    menumpuk di segelintir orang). Sisa gelombang ganjil ditunda.
+  const opp = new Map<string, number>();
+  const oppKey = (a: PlayerId, b: PlayerId) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+  const oppOf = (a: PlayerId, b: PlayerId) => opp.get(oppKey(a, b)) ?? 0;
   const matches: [PlayerId, PlayerId, PlayerId, PlayerId][] = [];
 
-  for (;;) {
-    let e1 = -1;
-    let best1 = Infinity;
-    for (let k = 0; k < edges.length; k++) {
-      if (used[k]) continue;
-      const [m, f] = edges[k]!;
-      const s = play.get(m)! + play.get(f)!;
-      if (s < best1) {
-        best1 = s;
-        e1 = k;
-      }
+  const cost = (x: [PlayerId, PlayerId], y: [PlayerId, PlayerId]): number => {
+    let c = 0;
+    for (const a of x) for (const b of y) c += oppOf(a, b) ** 2;
+    return c;
+  };
+  const commit = (x: [PlayerId, PlayerId], y: [PlayerId, PlayerId]) => {
+    matches.push([x[0], x[1], y[0], y[1]]);
+    for (const a of x)
+      for (const b of y) opp.set(oppKey(a, b), oppOf(a, b) + 1);
+  };
+  /** Pria & wanita harus berbeda antar dua tim dalam satu match. */
+  const compatible = (
+    x: [PlayerId, PlayerId],
+    y: [PlayerId, PlayerId]
+  ): boolean => x[0] !== y[0] && x[1] !== y[1];
+
+  const drain = (pool: [PlayerId, PlayerId][]) => {
+    for (;;) {
+      let bi = -1;
+      let bj = -1;
+      let best = Infinity;
+      for (let i = 0; i < pool.length; i++)
+        for (let j = i + 1; j < pool.length; j++) {
+          if (!compatible(pool[i]!, pool[j]!)) continue;
+          const c = cost(pool[i]!, pool[j]!);
+          if (c < best) {
+            best = c;
+            bi = i;
+            bj = j;
+          }
+        }
+      if (bi < 0) break;
+      commit(pool[bi]!, pool[bj]!);
+      pool.splice(bj, 1);
+      pool.splice(bi, 1);
     }
-    if (e1 < 0) break;
-    const [m1, f1] = edges[e1]!;
-    let e2 = -1;
-    let best2 = Infinity;
-    for (let k = 0; k < edges.length; k++) {
-      if (used[k] || k === e1) continue;
-      const [m2, f2] = edges[k]!;
-      if (m2 === m1 || f2 === f1) continue; // pria & wanita harus beda
-      const s = play.get(m2)! + play.get(f2)!;
-      if (s < best2) {
-        best2 = s;
-        e2 = k;
-      }
-    }
-    if (e2 < 0) {
-      used[e1] = true; // tak ada pasangan pelengkap → pasangan ini absen
-      continue;
-    }
-    used[e1] = true;
-    used[e2] = true;
-    const [m2, f2] = edges[e2]!;
-    matches.push([m1, f1, m2, f2]);
-    for (const p of [m1, f1, m2, f2]) play.set(p, play.get(p)! + 1);
+  };
+
+  const pending: [PlayerId, PlayerId][] = [];
+  for (const wave of waves) {
+    const pool = [...wave, ...pending.splice(0)];
+    drain(pool);
+    pending.push(...pool);
   }
+  drain(pending);
 
   return packMatchesIntoRounds(matches, [...males, ...females], courts);
 }

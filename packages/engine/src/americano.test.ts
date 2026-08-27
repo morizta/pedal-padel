@@ -170,3 +170,53 @@ describe("generateAmericano — keadilan temporal (DEF-1: tak main beruntun)", (
     }
   });
 });
+
+describe("generateAmericano — lawan tak menumpuk (regresi PPL Week 3)", () => {
+  /** Berapa kali tiap pasang pemain saling BERHADAPAN. */
+  function opponentCounts(rounds: ReturnType<typeof generateAmericano>) {
+    const c = new Map<string, number>();
+    for (const r of rounds)
+      for (const m of r.matches)
+        for (const a of m.teamA)
+          for (const b of m.teamB) {
+            const key = [a, b].sort().join("-");
+            c.set(key, (c.get(key) ?? 0) + 1);
+          }
+    return c;
+  }
+
+  // Bug lama: generator memasangkan "edge" lebih dulu tanpa melihat lawan, jadi
+  // 6 pasang pemain saling berhadapan 10× dari 11 kali main (kejadian nyata di
+  // turnamen PPL Week 3, 12 pemain / 2 lapangan).
+  it("12 pemain: tak ada pasang yang berhadapan lebih dari 4×", () => {
+    for (const courts of [1, 2, 3]) {
+      const counts = opponentCounts(generateAmericano(players(12), { courts }));
+      expect(Math.max(...counts.values())).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("4–16 pemain: lawan berulang ≤ 4× (sebaran merata)", () => {
+    for (let n = 4; n <= 16; n++) {
+      const counts = opponentCounts(generateAmericano(players(n), { courts: 1 }));
+      expect(Math.max(...counts.values())).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("12 pemain / 3 lapangan: 11 ronde penuh, tak ada yang istirahat", () => {
+    const rounds = generateAmericano(players(12), { courts: 3 });
+    expect(rounds.length).toBe(11);
+    for (const r of rounds) {
+      expect(r.matches.length).toBe(3);
+      expect(r.resting).toHaveLength(0);
+    }
+  });
+
+  it("12 pemain / 2 lapangan: 17 ronde, hanya ronde terakhir yang tak penuh", () => {
+    const rounds = generateAmericano(players(12), { courts: 2 });
+    expect(rounds.length).toBe(17);
+    rounds.forEach((r, i) => {
+      if (i < rounds.length - 1) expect(r.matches.length).toBe(2);
+      else expect(r.matches.length).toBe(1);
+    });
+  });
+});

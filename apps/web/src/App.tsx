@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   useAuth,
@@ -5000,6 +5000,42 @@ function DateTimePicker({
 }
 
 /* Simulasi/preview jadwal: distribusi main + keadilan + matriks partner (FR-EV-10). */
+/** Satu blok bersegmen di dalam simulasi (kartu putih di atas latar abu). */
+function SimSection({
+  icon,
+  title,
+  meta,
+  children,
+}: {
+  icon: string;
+  title: string;
+  meta?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-sm">
+      <div className="flex items-center justify-between gap-2 border-b border-outline-variant/40 bg-surface-container-low px-3 py-2 sm:px-4">
+        <h4 className="flex items-center gap-1.5 font-label-caps text-label-caps text-on-secondary-fixed-variant">
+          <span className="material-symbols-outlined text-[16px] text-primary">
+            {icon}
+          </span>
+          {title}
+        </h4>
+        {meta}
+      </div>
+      <div className="p-3 sm:p-4">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * Simulasi jadwal: ronde dimunculkan SATU PER SATU (bukan langsung jadi),
+ * sementara statistik ikut terisi hidup-hidup. Bisa di-pause, di-scrub lewat
+ * slider, dilompati ke akhir, atau diulang.
+ *
+ * Susunan: dek kontrol (MENEMPEL di atas) -> pemain -> ronde (menggulir ke
+ * KANAN) -> peta pasangan.
+ */
 function ScheduleSimulation({
   names,
   format,
@@ -5011,49 +5047,113 @@ function ScheduleSimulation({
   courts: number;
   genders?: Record<string, "male" | "female">;
 }) {
-  if (names.length < 4) return null;
   const isStatic =
     format === "americano" ||
     format === "team_americano" ||
     format === "mix_americano";
 
-  let rounds: Round[] | null = null;
-  if (isStatic) {
+  // Kunci turunan supaya jadwal tak dihitung ulang tiap render (array/objek
+  // selalu dianggap "baru" sebagai dependency).
+  const namesKey = names.join(" ");
+  const genderKey = names.map((n) => genders[n] ?? "-").join(" ");
+
+  const rounds = useMemo<Round[] | null>(() => {
+    if (!isStatic || names.length < 4) return null;
     try {
-      if (format === "americano") {
-        rounds = generateAmericano(names, { courts });
-      } else if (format === "team_americano") {
-        rounds = generateTeamAmericano(pairUp(names), { courts });
-      } else {
-        // mix_americano: pisah by gender lalu jadwal campur penuh.
-        const males = names.filter((n) => genders[n] === "male");
-        const females = names.filter((n) => genders[n] === "female");
-        rounds = generateMixAmericano(males, females, { courts });
-      }
+      if (format === "americano") return generateAmericano(names, { courts });
+      if (format === "team_americano")
+        return generateTeamAmericano(pairUp(names), { courts });
+      const males = names.filter((n) => genders[n] === "male");
+      const females = names.filter((n) => genders[n] === "female");
+      return generateMixAmericano(males, females, { courts });
     } catch {
-      rounds = null;
+      return null;
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStatic, format, courts, namesKey, genderKey]);
+
+  const total = rounds?.length ?? 0;
+  const [shown, setShown] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  // Jadwal berubah -> mulai lagi dari nol dan jalan sendiri.
+  useEffect(() => {
+    setShown(0);
+    setPlaying(total > 0);
+  }, [rounds, total]);
+
+  // Detak simulasi: satu ronde per ~450 ms.
+  useEffect(() => {
+    if (!playing || shown >= total) return;
+    const t = setTimeout(
+      () => setShown((v) => Math.min(v + 1, total)),
+      shown === 0 ? 260 : 450
+    );
+    return () => clearTimeout(t);
+  }, [playing, shown, total]);
+
+  useEffect(() => {
+    if (total > 0 && shown >= total) setPlaying(false);
+  }, [shown, total]);
+
+  // Ronde terbaru selalu terlihat. Digeser lewat scrollLeft (bukan
+  // scrollIntoView) supaya panel di belakangnya tak ikut ter-scroll.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+  }, [shown]);
+
+  if (names.length < 4) return null;
 
   if (!isStatic) {
     return (
-      <Card title="Schedule simulation">
-        <p className="rounded-xl bg-surface-container-low px-3 py-4 text-sm text-on-surface-variant">
-          Preview is available for Americano & Team Americano. {FORMAT_LABEL[format]}{" "}
-          pairings are formed during play (balanced by results / gender each round).
-        </p>
-      </Card>
+      <p className="m-3 rounded-2xl bg-surface-container-lowest px-4 py-6 text-center text-sm text-on-surface-variant sm:m-4">
+        Preview is available for Americano, Team Americano &amp; Mix Americano.
+        <br />
+        <span className="text-outline">
+          {FORMAT_LABEL[format]} pairings are formed during play (balanced by
+          results / gender each round).
+        </span>
+      </p>
     );
   }
-  if (!rounds) return null;
+  if (!rounds) {
+    return (
+      <p className="m-3 rounded-2xl bg-surface-container-lowest px-4 py-6 text-center text-sm text-on-surface-variant sm:m-4">
+        Can&apos;t build a schedule with these players &amp; courts.
+      </p>
+    );
+  }
 
+  const visible = rounds.slice(0, shown);
+  const done = shown >= total;
+
+  /* Statistik dihitung dari ronde yang SUDAH tampil, jadi ikut terisi pelan. */
+  const pkey = (a: string, b: string) => [a, b].sort().join(" ");
   const games: Record<string, number> = {};
   for (const n of names) games[n] = 0;
+  const partnerCount: Record<string, number> = {};
+  let playedMatches = 0;
+  for (const r of visible)
+    for (const m of r.matches) {
+      playedMatches += 1;
+      for (const team of [m.teamA, m.teamB]) {
+        const k = pkey(team[0], team[1]);
+        partnerCount[k] = (partnerCount[k] ?? 0) + 1;
+      }
+      for (const p of [...m.teamA, ...m.teamB]) games[p] = (games[p] ?? 0) + 1;
+    }
+
+  // Skala bar dipatok ke hasil AKHIR supaya bar tumbuh maju terus, tak melompat.
+  const finalGames: Record<string, number> = {};
   for (const r of rounds)
     for (const m of r.matches)
-      for (const p of [...m.teamA, ...m.teamB]) games[p] = (games[p] ?? 0) + 1;
-  const ranked = [...names].sort((a, b) => (games[b] ?? 0) - (games[a] ?? 0));
-  const counts = ranked.map((n) => games[n] ?? 0);
+      for (const p of [...m.teamA, ...m.teamB])
+        finalGames[p] = (finalGames[p] ?? 0) + 1;
+  const finalMax = Math.max(1, ...Object.values(finalGames));
+
+  const counts = names.map((n) => games[n] ?? 0);
   const min = Math.min(...counts);
   const max = Math.max(...counts);
   const gap = max - min;
@@ -5062,125 +5162,378 @@ function ScheduleSimulation({
     gap === 0 ? "text-win-green" : gap === 1 ? "text-primary" : "text-error";
 
   const showPartners =
-    (format === "americano" || format === "mix_americano") &&
-    names.length <= 12;
-  const pkey = (a: string, b: string) => [a, b].sort().join(" ");
-  const partnerCount: Record<string, number> = {};
-  if (showPartners)
-    for (const r of rounds)
-      for (const m of r.matches)
-        for (const team of [m.teamA, m.teamB])
-          partnerCount[pkey(team[0], team[1])] =
-            (partnerCount[pkey(team[0], team[1])] ?? 0) + 1;
+    (format === "americano" || format === "mix_americano") && names.length <= 12;
+
+  const replay = () => {
+    setShown(0);
+    setPlaying(true);
+  };
+
+  const pad = (v: number) => String(v).padStart(2, "0");
 
   return (
-    <Card title="Schedule simulation">
-      <p className="-mt-1 mb-3 text-xs text-on-surface-variant">
-        {rounds.length} rounds · {courts} court{courts > 1 ? "s" : ""} — match
-        distribution & fairness
-      </p>
-
-      <div className="mb-1 font-label-caps text-label-caps text-on-surface-variant">
-        Games per player
-      </div>
-      <ul className="space-y-1">
-        {ranked.map((n, i) => (
-          <li key={n} className="flex items-center gap-2 text-sm">
-            <span className="w-5 text-right text-on-surface-variant">{i + 1}</span>
-            <span className="flex-1 truncate font-semibold">{n}</span>
-            <span className="font-data-mono font-bold tabular-nums">
-              {games[n] ?? 0}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-2 text-xs">
-        Fairness:{" "}
-        <span className={`font-semibold ${fairnessColor}`}>{fairness}</span>{" "}
-        <span className="text-on-surface-variant">
-          ({min === max ? `${min} each` : `${min}–${max}`})
-        </span>
-      </div>
-
-      {showPartners && (
-        <div className="mt-4">
-          <div className="mb-1 font-label-caps text-label-caps text-on-surface-variant">
-            Partners (times in same team)
-          </div>
-          <div className="overflow-x-auto">
-            <table className="text-center text-xs">
-              <thead>
-                <tr className="text-on-surface-variant">
-                  <th className="p-1"></th>
-                  {names.map((n) => (
-                    <th key={n} className="p-1 font-semibold">
-                      {n.slice(0, 3)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {names.map((a) => (
-                  <tr key={a}>
-                    <td className="p-1 text-left font-semibold text-on-surface-variant">
-                      {a.slice(0, 3)}
-                    </td>
-                    {names.map((b) => {
-                      if (a === b)
-                        return (
-                          <td key={b} className="p-1 text-outline">
-                            –
-                          </td>
-                        );
-                      const c = partnerCount[pkey(a, b)] ?? 0;
-                      return (
-                        <td
-                          key={b}
-                          className={`p-1 ${c > 0 ? "bg-win-green/15 text-on-surface" : "text-outline"}`}
-                        >
-                          {c}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-4">
-        <div className="mb-1 font-label-caps text-label-caps text-on-surface-variant">
-          Rounds ({rounds.length})
-        </div>
-        <ol className="space-y-1">
-          {rounds.map((r) => (
-            <li
-              key={r.index}
-              className="rounded-lg bg-surface-container-low px-2.5 py-1.5 text-xs"
-            >
-              <span className="mr-1 font-data-mono font-bold text-on-surface-variant">
-                R{r.index + 1}
+    <div>
+      {/* ── Dek kontrol: MENEMPEL di atas saat isi digulir ───────────
+          Gaya papan skor siaran (navy + lime + angka mono) — sengaja beda
+          dari panel putih di bawahnya supaya jadi "kepala" simulasi. */}
+      <div className="sticky top-0 z-10 bg-surface px-3 pb-3 pt-3 sm:px-4 sm:pt-4">
+        <div className="overflow-hidden rounded-2xl bg-navy text-white shadow-lg">
+          <div className="flex items-center justify-between gap-3 px-4 pt-3">
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-data-mono text-2xl font-bold leading-none tracking-tight text-primary-fixed">
+                R{pad(shown)}
               </span>
-              {r.matches.map((m, ci) => (
-                <span key={ci}>
-                  {ci > 0 && <span className="text-outline"> · </span>}
-                  <span className="font-medium">
-                    {m.teamA.join(" & ")} vs {m.teamB.join(" & ")}
-                  </span>
-                </span>
-              ))}
-              {r.resting.length > 0 && (
-                <span className="ml-1 text-outline">
-                  (rest: {r.resting.join(", ")})
+              <span className="font-data-mono text-sm text-white/50">
+                / {pad(total)}
+              </span>
+              {playing && (
+                <span className="ml-1.5 flex items-center gap-1 text-[10px] font-bold tracking-wider text-primary-fixed">
+                  <span className="sim-blink h-1.5 w-1.5 rounded-full bg-primary-fixed" />
+                  LIVE
                 </span>
               )}
-            </li>
-          ))}
-        </ol>
+            </div>
+            <div className="text-right text-[11px] leading-tight text-white/55">
+              <div className="font-data-mono text-sm font-bold text-white">
+                {playedMatches}
+              </div>
+              matches
+            </div>
+          </div>
+
+          <div className="mt-2.5 h-1 w-full bg-white/15">
+            <div
+              className="h-full bg-primary-fixed transition-[width] duration-300 ease-out"
+              style={{ width: `${total ? (shown / total) * 100 : 0}%` }}
+            />
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-3">
+            <button
+              onClick={replay}
+              title="Replay"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/25 text-white/80 transition hover:bg-white/10 active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                restart_alt
+              </span>
+            </button>
+            <button
+              onClick={() => (done ? replay() : setPlaying((v) => !v))}
+              className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary-fixed px-4 text-sm font-bold text-on-primary-fixed transition hover:bg-primary-fixed-dim active:scale-95"
+            >
+              <span className="material-symbols-outlined fill text-[18px]">
+                {done ? "replay" : playing ? "pause" : "play_arrow"}
+              </span>
+              {done ? "Replay" : playing ? "Pause" : "Play"}
+            </button>
+            <button
+              onClick={() => {
+                setPlaying(false);
+                setShown(total);
+              }}
+              disabled={done}
+              title="Skip to end"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/25 text-white/80 transition hover:bg-white/10 active:scale-95 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/25"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                last_page
+              </span>
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={total}
+              value={shown}
+              onChange={(e) => {
+                setPlaying(false);
+                setShown(+e.target.value);
+              }}
+              className="ml-1 min-w-0 flex-1 accent-primary-fixed"
+              aria-label="Scrub rounds"
+            />
+          </div>
+        </div>
       </div>
-    </Card>
+
+      <div className="space-y-3 px-3 pb-3 sm:px-4 sm:pb-4">
+        {/* ── 1. Pemain ─────────────────────────────────────────── */}
+        <SimSection
+          icon="sports_tennis"
+          title="Court time"
+          meta={
+            <span className="shrink-0 text-xs">
+              {done ? (
+                <>
+                  <span className={`font-bold ${fairnessColor}`}>
+                    {fairness}
+                  </span>{" "}
+                  <span className="text-on-surface-variant">
+                    ({min === max ? `${min} each` : `${min}-${max}`})
+                  </span>
+                </>
+              ) : (
+                <span className="font-data-mono text-on-surface-variant">
+                  {min === max ? `${min} each` : `${min}-${max}`}
+                </span>
+              )}
+            </span>
+          }
+        >
+          <ul className="grid grid-cols-1 gap-x-5 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+            {names.map((n) => {
+              const g = games[n] ?? 0;
+              return (
+                <li key={n} className="flex min-w-0 items-center gap-2">
+                  <span className="w-16 shrink-0 truncate text-sm font-semibold sm:w-20">
+                    {n}
+                  </span>
+                  <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-container-high">
+                    <span
+                      className="absolute inset-y-0 left-0 rounded-full bg-primary-fixed-dim transition-[width] duration-500 ease-out"
+                      style={{ width: `${(g / finalMax) * 100}%` }}
+                    />
+                  </span>
+                  <span className="w-5 shrink-0 text-right font-data-mono text-xs font-bold tabular-nums text-on-secondary-fixed">
+                    {g}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </SimSection>
+
+        {/* ── 2. Ronde: menggulir ke KANAN ──────────────────────── */}
+        <SimSection
+          icon="rotate_right"
+          title="Rotation"
+          meta={
+            <span className="shrink-0 font-data-mono text-[11px] text-outline">
+              swipe &rarr;
+            </span>
+          }
+        >
+          <div
+            ref={scrollerRef}
+            className="scrollbar-hide -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1"
+          >
+            {visible.map((r, i) => {
+              const newest = i === visible.length - 1;
+              return (
+                <article
+                  key={r.index}
+                  className={`sim-pop w-[78%] shrink-0 snap-start overflow-hidden rounded-xl border sm:w-56 ${
+                    newest
+                      ? "border-primary-fixed-dim"
+                      : "border-outline-variant/50"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center justify-between px-2.5 py-1.5 ${
+                      newest
+                        ? "bg-primary-fixed text-on-primary-fixed"
+                        : "bg-navy text-white"
+                    }`}
+                  >
+                    <span className="font-data-mono text-xs font-bold tracking-wide">
+                      R{pad(r.index + 1)}
+                    </span>
+                    <span
+                      className={`font-data-mono text-[10px] ${newest ? "text-on-primary-fixed/70" : "text-white/50"}`}
+                    >
+                      {r.matches.length}/{courts} CRT
+                    </span>
+                  </div>
+                  <div className="space-y-1 bg-surface-container-lowest p-2">
+                    {r.matches.map((m) => (
+                      <div
+                        key={m.court}
+                        className="rounded-lg bg-surface-container-low px-2 py-1.5"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="min-w-0 flex-1 text-[11px] font-semibold leading-snug">
+                            {m.teamA.join(" + ")}
+                          </span>
+                          <span className="h-4 w-px shrink-0 bg-primary-fixed-dim" />
+                          <span className="min-w-0 flex-1 text-right text-[11px] font-semibold leading-snug">
+                            {m.teamB.join(" + ")}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {r.resting.length > 0 && (
+                      <p className="line-clamp-2 px-0.5 pt-0.5 text-[10px] text-outline">
+                        rest &middot; {r.resting.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+            {visible.length === 0 && (
+              <div className="w-full rounded-xl border border-dashed border-outline-variant px-3 py-10 text-center text-sm text-outline">
+                Press Play to run the simulation
+              </div>
+            )}
+          </div>
+        </SimSection>
+
+        {/* ── 3. Peta pasangan ──────────────────────────────────── */}
+        {showPartners && (
+          <SimSection
+            icon="hub"
+            title="Pair coverage"
+            meta={
+              <span className="shrink-0 font-data-mono text-[11px] text-outline">
+                {Object.keys(partnerCount).length}/
+                {(names.length * (names.length - 1)) / 2}
+              </span>
+            }
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-max border-separate border-spacing-0.5 text-center text-[11px]">
+                <thead>
+                  <tr className="text-outline">
+                    <th className="p-0.5"></th>
+                    {names.map((n) => (
+                      <th key={n} className="p-0.5 font-semibold">
+                        {n.slice(0, 3)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {names.map((a) => (
+                    <tr key={a}>
+                      <td className="p-0.5 pr-1 text-right font-semibold text-outline">
+                        {a.slice(0, 3)}
+                      </td>
+                      {names.map((b) => {
+                        if (a === b)
+                          return (
+                            <td key={b} className="p-0.5">
+                              <span className="grid h-5 w-5 place-items-center rounded bg-surface-container text-outline">
+                                &middot;
+                              </span>
+                            </td>
+                          );
+                        const c = partnerCount[pkey(a, b)] ?? 0;
+                        return (
+                          <td key={b} className="p-0.5">
+                            <span
+                              className={`grid h-5 w-5 place-items-center rounded font-data-mono font-bold transition-colors duration-500 ${
+                                c > 1
+                                  ? "bg-error text-white"
+                                  : c > 0
+                                    ? "bg-primary-fixed text-on-primary-fixed"
+                                    : "bg-surface-container-high text-outline"
+                              }`}
+                            >
+                              {c > 1 ? c : c === 1 ? "1" : ""}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-outline">
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded bg-primary-fixed" /> paired once
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded bg-surface-container-high" /> not
+                yet
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded bg-error" /> paired twice
+              </span>
+            </p>
+          </SimSection>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Popup simulasi: bottom-sheet di HP, dialog lebar di layar besar.
+ * Header menempel supaya tombol tutup selalu terjangkau saat isi digulir.
+ */
+function SimulationModal({
+  names,
+  format,
+  courts,
+  genders,
+  onClose,
+}: {
+  names: string[];
+  format: Format;
+  courts: number;
+  genders?: Record<string, "male" | "female">;
+  onClose: () => void;
+}) {
+  // Esc menutup, dan halaman di belakang tak ikut ter-scroll.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="sim-fade-in fixed inset-0 z-[60] flex items-end justify-center bg-navy/70 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="sim-sheet-in flex max-h-[92vh] w-full max-w-none flex-col overflow-hidden rounded-t-3xl bg-surface shadow-2xl sm:max-h-[90vh] sm:max-w-3xl sm:rounded-3xl lg:max-w-4xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Pegangan geser, khas bottom-sheet di HP */}
+        <div className="shrink-0 bg-surface pt-2 sm:hidden">
+          <div className="mx-auto h-1 w-10 rounded-full bg-outline-variant" />
+        </div>
+
+        <div className="flex shrink-0 items-start justify-between gap-3 bg-surface px-4 pb-1 pt-3 sm:px-5 sm:pt-4">
+          <div className="min-w-0">
+            <h3 className="font-display text-lg font-bold leading-tight">
+              Schedule simulation
+            </h3>
+            <p className="truncate font-data-mono text-[11px] text-on-surface-variant">
+              {FORMAT_LABEL[format]} &middot; {names.length} players &middot;{" "}
+              {courts} court{courts > 1 ? "s" : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-on-surface-variant transition hover:bg-surface-container"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="pb-safe flex-1 overflow-y-auto">
+          <ScheduleSimulation
+            names={names}
+            format={format}
+            courts={courts}
+            genders={genders}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -5217,6 +5570,7 @@ function CreateScreen({
   const [courts, setCourts] = useState(1);
   const [standingsSort, setStandingsSort] = useState<SortBy>("points");
   const [tiebreak, setTiebreak] = useState<RankMode>("unique");
+  const [compensate, setCompensate] = useState(true); // poin +M
   const [scoringType, setScoringType] = useState<"point" | "normal">("point");
   const [points, setPoints] = useState(24);
   const [normalMode, setNormalMode] = useState<"first" | "total">("first");
@@ -5350,6 +5704,7 @@ function CreateScreen({
         scoring,
         standingsSort,
         tiebreak,
+        compensate,
         randomizeStart: randomize,
         participants: selected,
         teams: finalTeams
@@ -5552,6 +5907,20 @@ function CreateScreen({
           </p>
         </Field>
 
+        <Field label="Compensation points (+M)">
+          <Toggle
+            value={compensate}
+            onChange={setCompensate}
+            onLabel="On"
+            offLabel="Off"
+          />
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {compensate
+              ? "Players who play fewer matches get extra points \u2014 their own average per match \u00d7 matches missed \u2014 so a bye doesn't cost them the lead."
+              : "Players who play fewer matches than others will not receive extra compensation points to make up the difference. Standings use raw points only."}
+          </p>
+        </Field>
+
         <Field label="Scoring system">
           <Toggle
             value={scoringType === "point"}
@@ -5697,30 +6066,13 @@ function CreateScreen({
       </Card>
 
       {showSim && (
-        <div
-          className="fixed inset-0 z-[60] overflow-y-auto bg-black/50 p-4 backdrop-blur-sm"
-          onClick={() => setShowSim(false)}
-        >
-          <div
-            className="mx-auto mt-6 w-full max-w-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-2 flex justify-end">
-              <button
-                onClick={() => setShowSim(false)}
-                className="rounded-full bg-surface-container-lowest px-3 py-1.5 text-sm font-semibold text-on-surface shadow-lg hover:bg-surface-container"
-              >
-                Close ×
-              </button>
-            </div>
-            <ScheduleSimulation
-              names={names}
-              format={format}
-              courts={courtsClamped}
-              genders={simGenders}
-            />
-          </div>
-        </div>
+        <SimulationModal
+          names={names}
+          format={format}
+          courts={courtsClamped}
+          genders={simGenders}
+          onClose={() => setShowSim(false)}
+        />
       )}
 
       {/* Mobile: pilih pemain dulu (di atas), baru pengaturan + susun tim.
@@ -6160,6 +6512,7 @@ function SessionInner({
             session={session}
             sortBy={event.standingsSort}
             rankMode={event.tiebreak}
+            compensate={event.compensate}
           />
         </div>
         <div className={mobileTab === "rounds" ? "" : "hidden lg:block"}>
@@ -6752,10 +7105,13 @@ function Leaderboard({
   session,
   sortBy,
   rankMode,
+  compensate = true,
 }: {
   session: Session;
   sortBy: SortBy;
   rankMode: RankMode;
+  /** false = tanpa poin +M, klasemen memakai poin mentah. */
+  compensate?: boolean;
 }) {
   if (isTeamFormat(session.config.format)) {
     return (
@@ -6764,7 +7120,7 @@ function Leaderboard({
   }
   // Seed dengan SEMUA pemain (skor 0) supaya tabel tampil sejak awal.
   const byId = new Map(
-    computeStandings(session.results).map((s) => [s.playerId, s])
+    computeStandings(session.results, { compensate }).map((s) => [s.playerId, s])
   );
   const standings = session.players
     .map((p) => byId.get(p) ?? zeroStanding(p))
@@ -6789,9 +7145,11 @@ function Leaderboard({
                 <th className="pb-2 pr-2">#</th>
                 <th className="pb-2">Player</th>
                 <th className="pb-2 text-right">P</th>
-                <th className="pb-2 text-right" title="Compensation (+M)">
-                  +M
-                </th>
+                {compensate && (
+                  <th className="pb-2 text-right" title="Compensation (+M)">
+                    +M
+                  </th>
+                )}
                 <th className="pb-2 text-right" title="Wins-Losses-Ties">
                   W-L-T
                 </th>
@@ -6811,9 +7169,11 @@ function Leaderboard({
                   <td className="py-2 text-right font-data-mono font-bold tabular-nums">
                     {s.adjustedPoints}
                   </td>
-                  <td className="py-2 text-right text-win-green">
-                    {s.compensation > 0 ? `+${s.compensation}` : "–"}
-                  </td>
+                  {compensate && (
+                    <td className="py-2 text-right text-win-green">
+                      {s.compensation > 0 ? `+${s.compensation}` : "–"}
+                    </td>
+                  )}
                   <td className="py-2 text-right font-data-mono tabular-nums text-on-surface-variant">
                     {s.wins}-{s.losses}-{s.ties}
                   </td>
@@ -6831,8 +7191,15 @@ function Leaderboard({
       )}
       <Legend
         items={[
-          ["P", "Points (already includes +M)"],
-          ["+M", "Compensation points for playing fewer matches (bye)"],
+          ...(compensate
+            ? ([
+                ["P", "Points (already includes +M)"],
+                [
+                  "+M",
+                  "Compensation for missed matches: your average points per match \u00d7 matches missed",
+                ],
+              ] as [string, string][])
+            : ([["P", "Points scored (no compensation)"]] as [string, string][])),
           ["W-L-T", "Wins - Losses - Ties"],
           ["Played", "Matches played"],
           ["Diff", "Point difference (scored − conceded)"],
